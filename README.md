@@ -19,10 +19,11 @@ are documented placeholders. See [docs/architecture.md](docs/architecture.md).
 
 | Piece | State |
 | --- | --- |
-| `GET /api/health` | Working |
+| `GET /api/health` | Working — reports real index state |
 | Config, schemas, request-ID middleware, CORS | Working |
+| Ingestion: CSV validation, chunking, Chroma index | Working |
 | Lint, format, tests, CI | Working |
-| Chat / voice endpoints, agent, RAG, scraper | Not implemented |
+| Chat / voice endpoints, agent, retrieval, scraper | Not implemented |
 
 ## Requirements
 
@@ -55,6 +56,49 @@ uv run uvicorn app.main:app --reload
 
 - Health — <http://127.0.0.1:8000/api/health>
 - Interactive docs — <http://127.0.0.1:8000/docs>
+
+## Building the index
+
+The researchers export a Google Sheet to `data/knowledge/` with a dated filename
+(`scaspa_kb_2026-08-04.csv`). Point `KB_CSV_PATH` at it — a `latest.csv` symlink
+is fine, the build resolves it and records the real dated filename.
+
+```bash
+cd backend
+uv run python scripts/build_index.py --dry-run    # validate only, no API calls
+uv run python scripts/build_index.py              # build
+uv run python scripts/build_index.py --force      # rebuild an unchanged CSV
+uv run python scripts/build_index.py --csv ../data/knowledge/sample_kb.csv
+```
+
+The build prints a full report: totals, every rejected row with its line number
+and reason, counts by category / confidence / volatility, the oldest `as_of`, and
+what was withheld from the index.
+
+Two things worth knowing:
+
+- **Only `confidence == "confirmed"` rows are indexed.** `probable` and
+  `unverified` rows are counted and reported, never indexed.
+- **An unchanged CSV is not re-embedded.** The build hashes the file (SHA-256)
+  into `data/index_meta.json` and skips when it matches, because embedding costs
+  real money. `--force` overrides. `--dry-run` embeds nothing at all and needs no
+  API key.
+
+`/api/health` reads `data/index_meta.json`, so it reports what is actually
+indexed. With no index built it returns **200 with `status: "degraded"`** and an
+explanatory message — never a 500.
+
+### Fixture data
+
+`data/knowledge/sample_kb.csv` is **fixtures only — 12 rows of invented
+placeholder content**. Every time, fee, phone number and rule in it is fake, and
+every `source_url` points at `https://example.invalid/`, a reserved domain that
+cannot resolve. It exists so the test suite and local smoke tests have something
+to chew on.
+
+**Never index it for a demo or deployment.** Serving any of it to a user would be
+inventing a schedule, a fee or a rule, which CLAUDE.md rule 5 forbids. Replace it
+with a real researcher export first.
 
 ## Checks
 

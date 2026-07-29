@@ -3,7 +3,7 @@
 Pydantic v2 at every boundary — CLAUDE.md Style.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -12,16 +12,34 @@ from pydantic import BaseModel, Field
 
 
 class IndexStatus(BaseModel):
-    """State of the Chroma knowledge index backing the assistant."""
+    """State of the Chroma knowledge index backing the assistant.
+
+    Populated from `data/index_meta.json`, written by `scripts/build_index.py`.
+    When that file is absent the index has never been built: `ready` is false and
+    every detail is null rather than zero, so "unknown" is never mistaken for
+    "empty".
+    """
 
     ready: bool = Field(description="Whether the index can currently serve retrieval")
-    document_count: int | None = Field(
-        default=None, description="Indexed chunk count, or null if unknown"
+    kb_version: str | None = Field(
+        default=None, description="Knowledge-base version, usually the export date"
     )
-    collection: str | None = Field(default=None, description="Chroma collection name")
-    built_at: datetime | None = Field(
-        default=None, description="When the index was last rebuilt, or null if never"
+    kb_rows: int | None = Field(default=None, description="Confirmed rows indexed")
+    kb_rows_rejected: int | None = Field(
+        default=None, description="Rows rejected at the last build"
     )
+    kb_csv_filename: str | None = Field(
+        default=None, description="Resolved filename of the indexed CSV"
+    )
+    kb_updated_at: date | None = Field(
+        default=None, description="Newest as_of date among indexed rows"
+    )
+    index_built_at: datetime | None = Field(
+        default=None, description="When the index was last built"
+    )
+    embedding_model: str | None = Field(default=None, description="Model used to embed the index")
+    web_docs: int | None = Field(default=None, description="Scraped web chunks indexed")
+    message: str | None = Field(default=None, description="Explanation when the index is not ready")
 
 
 class HealthResponse(BaseModel):

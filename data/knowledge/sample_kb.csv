@@ -1,0 +1,25 @@
+# ============================================================================
+# FIXTURES ONLY — NOT REAL SCASPA INFORMATION. DO NOT INDEX FOR A DEMO.
+#
+# Every value in this file is invented placeholder content, used by the test
+# suite and for local smoke-testing of the ingestion pipeline. All times, fees,
+# phone numbers and rules are fake. All source_url values point at
+# https://example.invalid/, a reserved domain that can never resolve.
+#
+# Serving any of this to a user would be inventing a schedule, a fee or a rule,
+# which CLAUDE.md rule 5 forbids. Replace with a real researcher export
+# (scaspa_kb_YYYY-MM-DD.csv) before any demo or deployment.
+# ============================================================================
+id,category,subcategory,question,answer,keywords,audience,source_url,source_type,as_of,volatility,confidence,notes
+kb-001,cruise,arrivals,What time do cruise ships arrive at Port Zante?,"SAMPLE DATA — not a real schedule. Placeholder arrival window is 11:11 to 22:22, on placeholder days only.",cruise arrival|ship time|port zante schedule,cruise,https://example.invalid/port-zante/arrivals,official-site,2026-01-15,high,confirmed,FIXTURE ONLY — invented time window
+kb-002,cruise,facilities,Is there Wi-Fi at the Port Zante cruise terminal?,SAMPLE DATA — not a real facility description. Placeholder: a fictional network for XCD 111.11 per hour.,wifi|internet|wireless|connectivity,cruise,https://example.invalid/port-zante/facilities,official-site,2026-02-02,low,confirmed,FIXTURE ONLY — invented facility and fee
+kb-003,cruise,taxis,How much is a taxi from Port Zante to the airport?,SAMPLE DATA — not a real fare. Placeholder flat fare is XCD 222.22 for up to 2 passengers.,taxi|cab|fare|transfer,traveller,https://example.invalid/port-zante/ground-transport,client-interview,2025-11-30,medium,probable,FIXTURE ONLY — invented fare; also demonstrates a non-confirmed row being withheld
+kb-004,cargo,tariffs,What is the container handling charge at the Deep Water Harbour?,SAMPLE DATA — not a real tariff. Placeholder charge is XCD 333.33 per fictional twenty-foot unit.,container fee|handling charge|tariff|teu,cargo,https://example.invalid/deep-water-harbour/tariffs,official-pdf,2026-03-10,medium,confirmed,FIXTURE ONLY — invented tariff figure
+kb-005,cargo,hours,When is the cargo gate open at the Deep Water Harbour?,"SAMPLE DATA — not real operating hours. Placeholder gate hours are 01:01 to 23:23, fictional weekdays only.",gate hours|opening times|cargo gate|receiving,cargo,https://example.invalid/deep-water-harbour/hours,official-site,2026-03-10,medium,confirmed,FIXTURE ONLY — invented hours
+kb-006,cargo,customs,What documents are needed to clear cargo?,"SAMPLE DATA — not real customs guidance. Placeholder lists three invented forms: Form AAA-1, Form BBB-2, and Form CCC-3.",customs|clearance|paperwork|documents|import,business,https://example.invalid/deep-water-harbour/customs,regulator,2025-09-05,low,confirmed,FIXTURE ONLY — invented form names
+kb-007,ferry,schedule,What time does the ferry to Nevis leave Basseterre?,"SAMPLE DATA — not a real sailing time. Placeholder departures at 04:04 and 16:16, on fictional days only.",ferry time|sailing|nevis ferry|departure,traveller,https://example.invalid/ferry-terminal/schedule,official-site,2026-04-01,high,confirmed,FIXTURE ONLY — invented sailing times
+kb-008,ferry,fares,How much is a ferry ticket?,SAMPLE DATA — not a real fare. Placeholder one-way fare is XCD 44.44 for a fictional adult ticket.,ferry fare|ticket price|cost|one way,traveller,https://example.invalid/ferry-terminal/fares,official-site,2026-04-01,medium,confirmed,FIXTURE ONLY — invented fare
+kb-009,ferry,luggage,Is there a luggage limit on the ferry?,"SAMPLE DATA — not a real rule. Placeholder limit is 5 fictional bags, 55.5 kg in total.",luggage|baggage|bags|allowance|limit,traveller,https://example.invalid/ferry-terminal/luggage,client-interview,2025-08-20,low,unverified,FIXTURE ONLY — invented allowance; demonstrates an unverified row being withheld
+kb-010,airport,departures,How early should I arrive at RLB International Airport?,SAMPLE DATA — not real guidance. Placeholder advice is 7 fictional hours before a placeholder departure.,check in|arrive early|departure|how early,traveller,https://example.invalid/rlb-airport/departures,official-site,2026-05-12,low,confirmed,FIXTURE ONLY — invented guidance
+kb-011,airport,parking,What does parking cost at the airport?,SAMPLE DATA — not a real fee. Placeholder rate is XCD 66.66 per fictional day.,parking|car park|parking fee|rates,traveller,https://example.invalid/rlb-airport/parking,official-site,2026-05-12,medium,confirmed,FIXTURE ONLY — invented parking rate
+kb-012,general,contact,How do I contact SCASPA?,SAMPLE DATA — not real contact details. A placeholder desk answers on 555-0100 between 09:09 and 17:17.,contact|phone|email|reach|get in touch,all,https://example.invalid/contact,official-site,2026-06-01,low,confirmed,FIXTURE ONLY — invented contact details; 555-0100 is a reserved fictional number

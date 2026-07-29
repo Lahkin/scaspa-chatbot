@@ -32,35 +32,72 @@ Liveness and index readiness. Takes no parameters and requires no auth.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `status` | `"ok" \| "degraded"` | Overall service health |
+| `status` | `"ok" \| "degraded"` | `degraded` when the index is missing or empty |
 | `env` | `string` | From `ENV` |
 | `version` | `string` | Backend version |
 | `request_id` | `string` | Matches the `X-Request-ID` response header |
 | `index` | `IndexStatus` | Knowledge index state |
 
-`IndexStatus`:
+`IndexStatus` — read from `data/index_meta.json`, written by
+`scripts/build_index.py`:
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `ready` | `boolean` | Whether retrieval can be served |
-| `document_count` | `integer \| null` | Indexed chunks, null if unknown |
-| `collection` | `string \| null` | Chroma collection name |
-| `built_at` | `datetime \| null` | Last rebuild, null if never |
+| `kb_version` | `string \| null` | Knowledge-base version, usually the export date |
+| `kb_rows` | `integer \| null` | Confirmed rows indexed |
+| `kb_rows_rejected` | `integer \| null` | Rows rejected at the last build |
+| `kb_csv_filename` | `string \| null` | Resolved filename of the indexed CSV |
+| `kb_updated_at` | `date \| null` | Newest `as_of` among indexed rows |
+| `index_built_at` | `datetime \| null` | When the index was last built |
+| `embedding_model` | `string \| null` | Model used to embed the index |
+| `web_docs` | `integer \| null` | Scraped web chunks indexed |
+| `message` | `string \| null` | Why the index is not ready |
 
-Example:
+Healthy:
 
 ```json
 {
   "status": "ok",
   "env": "dev",
   "version": "0.1.0",
-  "request_id": "7a1c6f7e5b604b8095241ed8f7ed0964",
-  "index": { "ready": false, "document_count": null, "collection": null, "built_at": null }
+  "request_id": "ef85b7aa9f5e4892abd402d7460f4a41",
+  "index": {
+    "ready": true,
+    "kb_version": "2026-06-01",
+    "kb_rows": 10,
+    "kb_rows_rejected": 0,
+    "kb_csv_filename": "sample_kb.csv",
+    "kb_updated_at": "2026-06-01",
+    "index_built_at": "2026-07-29T17:20:01.373968Z",
+    "embedding_model": "text-embedding-3-large",
+    "web_docs": 0,
+    "message": null
+  }
 }
 ```
 
-> The `index` fields are placeholders while the RAG layer is unbuilt. They
-> report an unbuilt index rather than falsely claiming readiness.
+No index built yet — still **200**, never a 500:
+
+```json
+{
+  "status": "degraded",
+  "env": "dev",
+  "version": "0.1.0",
+  "request_id": "…",
+  "index": {
+    "ready": false,
+    "kb_version": null,
+    "kb_rows": null,
+    "kb_updated_at": null,
+    "index_built_at": null,
+    "message": "No index metadata at …/data/index_meta.json. The index has not been built — run scripts/build_index.py."
+  }
+}
+```
+
+> Unknown values are `null`, never `0`. A client must not read "never built" as
+> "built and empty".
 
 ---
 
