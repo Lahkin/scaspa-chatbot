@@ -25,9 +25,11 @@ are documented placeholders. See [docs/architecture.md](docs/architecture.md).
 | Config, schemas, request-ID middleware, CORS, errors | Working |
 | Ingestion: CSV validation, chunking, Chroma index | Working |
 | Retrieval + answer chain | Working |
+| Agent with five tools, capped tool loop | Working |
+| Tool events on the stream and in the response | Working |
 | Conversation memory (in-process, not persisted) | Working |
 | Lint, format, tests, CI | Working |
-| Voice endpoints, agent, tools, charts, scraper | Not implemented |
+| Voice endpoints, charts, scraper | Not implemented |
 
 The full API contract for the frontend team is
 [docs/api-contract.md](docs/api-contract.md).
@@ -106,6 +108,33 @@ to chew on.
 **Never index it for a demo or deployment.** Serving any of it to a user would be
 inventing a schedule, a fee or a rule, which CLAUDE.md rule 5 forbids. Replace it
 with a real researcher export first.
+
+## The agent
+
+The assistant is a real agent, not a search box: it chooses which tools to use
+and may chain several in one turn. Built with LangChain v1's `create_agent`.
+
+| Tool | Used for |
+| --- | --- |
+| `search_scaspa_knowledge` | Verified facts: ferry, cruise, cargo, tariffs, airport, contacts |
+| `search_site_content` | scaspa.com pages and PDFs — empty until the scraper runs |
+| `make_chart` | Port activity over time; values must come from retrieved rows |
+| `calculate` | Exact arithmetic on retrieved figures. AST whitelist, never `eval` |
+| `escalate_to_human` | SCASPA contact details |
+
+Guardrails that survive agency:
+
+- The **refusal gate runs before the agent is built**, so no tool sequence routes
+  around it.
+- The tool loop is capped at `AGENT_MAX_TOOL_CALLS`. On hitting the cap the turn
+  returns the no-answer message — never a partial answer, never the library's
+  raw internal string.
+- Citations are validated against the **union of every id every search tool
+  returned this turn**, so multi-tool answers are still fully verified.
+- Every turn logs tool count, tool names in order, token counts and latency.
+
+Deploying? Read [docs/deploy.md](docs/deploy.md) first — it explains why you must
+not deploy with the fixture knowledge base.
 
 ## Privacy: what this service stores
 

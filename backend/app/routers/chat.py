@@ -25,7 +25,7 @@ from app.config import Settings, get_settings
 from app.errors import AppError, ErrorCode, IndexMissingError, RetrievalEmptyError, log_app_error
 from app.rag.answer import AnswerResult, answer_question, astream_answer
 from app.rag.ingest import read_index_meta
-from app.schemas import ChatRequest, ChatResponse, Citation, ErrorEnvelope, ResponseMeta
+from app.schemas import ChatRequest, ChatResponse, Citation, ErrorEnvelope, ResponseMeta, ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +64,9 @@ def _to_response(
         refusal=result.refusal,
         refusal_category=result.refusal_category,
         citations=[Citation(**c.model_dump()) for c in result.citations],
-        # Declared and always empty until Prompts 5 and 8.
+        # chart stays null until Prompt 8.
         chart=None,
-        tool_calls=[],
+        tool_calls=[ToolCall(name=t.name, summary=t.summary, ms=t.ms) for t in result.tool_calls],
         meta=ResponseMeta(
             request_id=request_id,
             latency_ms=result.latency_ms,

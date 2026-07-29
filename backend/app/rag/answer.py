@@ -38,6 +38,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from app.agent.graph import AgentTurnResult, arun_agent, best_available_score, run_agent
 from app.agent.prompts import (
     CONTEXT_CHUNK_TEMPLATE,
     ESCALATION_BLOCK,
@@ -46,7 +47,7 @@ from app.agent.prompts import (
     render_system_prompt,
 )
 from app.config import Settings, get_settings
-from app.rag.retriever import RetrievedChunk, retrieve
+from app.rag.retriever import RetrievedChunk
 from app.upstream import call_with_retry
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,14 @@ class Citation(BaseModel):
     confidence: str = ""
 
 
+class ToolCallInfo(BaseModel):
+    """One tool the agent used, as shown to the client."""
+
+    name: str
+    summary: str = ""
+    ms: int = 0
+
+
 class AnswerResult(BaseModel):
     """Outcome of one question. Maps onto the eventual ChatResponse."""
 
@@ -103,6 +112,12 @@ class AnswerResult(BaseModel):
         default_factory=list,
         description="Money/time values in the answer found in no retrieved chunk (rule 10)",
     )
+    tool_calls: list[ToolCallInfo] = Field(
+        default_factory=list, description="Tools the agent used, in order"
+    )
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    hit_tool_limit: bool = False
     best_score: float = 0.0
     model: str | None = None
     latency_ms: int = 0
@@ -424,16 +439,8 @@ def answer_question(
         )
         return _refusal_result(refusal_category, elapsed)
 
-    chunks = retrieve(
-        query,
-        k=k,
-        category=category,
-        embeddings=embeddings,
-        settings=settings,
-    )
-    best_score = chunks[0].score if chunks else 0.0
-
-    # --- Short-circuit: too weak to answer from, so do not generate at all ---
+    # --- Pre-flight probe: nothing can answer this, so skip the agent entirely ---
+    best_score = best_available_score(query, settings, embeddings)
     if best_score < settings.RETRIEVAL_MIN_SCORE:
         elapsed = int((time.perf_counter() - started) * 1000)
         # Question text and latency are logged; no identifiers — rule 9.
@@ -444,17 +451,55 @@ def answer_question(
             settings.RETRIEVAL_MIN_SCORE,
             elapsed,
         )
-        return _no_answer_result(chunks, best_score, elapsed)
+        return _no_answer_result([], best_score, elapsed)
 
-    messages = build_messages(query, chunks, today)
-    model = chat_model or build_chat_model(settings)
-
-    # Timeout and bounded retry, retrying only 429/5xx — see app.upstream.
-    response = call_with_retry(lambda: model.invoke(messages), settings=settings)
-    raw_answer = response.content if isinstance(response.content, str) else str(response.content)
+    # --- The agent chooses its own tools from here ---
+    turn = call_with_retry(
+        lambda: run_agent(
+            query,
+            settings=settings,
+            chat_model=chat_model,
+            embeddings=embeddings,
+            today=today,
+        ),
+        settings=settings,
+    )
 
     elapsed = int((time.perf_counter() - started) * 1000)
-    return finalise_answer(raw_answer, query, chunks, best_score, elapsed, settings)
+    return _from_turn(turn, query, best_score, elapsed, settings)
+
+
+def _from_turn(
+    turn: AgentTurnResult,
+    query: str,
+    best_score: float,
+    elapsed_ms: int,
+    settings: Settings,
+) -> AnswerResult:
+    """Verify an agent turn's answer against everything its tools retrieved.
+
+    The validation rule is unchanged from the fixed chain. What changed is the
+    set it validates against: the **union of every id returned by every search
+    tool** during the turn, so a row found on the first call can still be cited
+    after the third.
+    """
+    chunks = list(turn.retrieved.values())
+    tool_calls = [ToolCallInfo(name=t.name, summary=t.summary, ms=t.ms) for t in turn.tool_calls]
+
+    if turn.hit_tool_limit:
+        # The middleware's internal string must never reach a user.
+        result = _no_answer_result(chunks, best_score, elapsed_ms)
+        result.hit_tool_limit = True
+        result.tool_calls = tool_calls
+        result.prompt_tokens = turn.prompt_tokens
+        result.completion_tokens = turn.completion_tokens
+        return result
+
+    result = finalise_answer(turn.answer, query, chunks, best_score, elapsed_ms, settings)
+    result.tool_calls = tool_calls
+    result.prompt_tokens = turn.prompt_tokens
+    result.completion_tokens = turn.completion_tokens
+    return result
 
 
 # ---------------------------------------------------------------- streaming
@@ -512,9 +557,7 @@ async def astream_answer(
         yield "done", _done_payload(result, settings)
         return
 
-    chunks = retrieve(query, k=k, category=category, embeddings=embeddings, settings=settings)
-    best_score = chunks[0].score if chunks else 0.0
-
+    best_score = best_available_score(query, settings, embeddings)
     if best_score < settings.RETRIEVAL_MIN_SCORE:
         elapsed = int((time.perf_counter() - started) * 1000)
         logger.info(
@@ -524,28 +567,38 @@ async def astream_answer(
             settings.RETRIEVAL_MIN_SCORE,
             elapsed,
         )
-        result = _no_answer_result(chunks, best_score, elapsed)
+        result = _no_answer_result([], best_score, elapsed)
         yield "token", {"text": result.answer}
         yield "citations", {"citations": []}
         yield "done", _done_payload(result, settings)
         return
 
-    messages = build_messages(query, chunks, today)
-    model = chat_model or build_chat_model(settings)
-
-    pieces: list[str] = []
-    async for piece in model.astream(messages):
+    turn: AgentTurnResult | None = None
+    async for event, data in arun_agent(
+        query,
+        settings=settings,
+        chat_model=chat_model,
+        embeddings=embeddings,
+        today=today,
+    ):
         if await disconnected():
-            logger.info("client_disconnected question=%r tokens_so_far=%d", query, len(pieces))
+            logger.info("client_disconnected question=%r", query)
             return
-        text = piece.content if isinstance(piece.content, str) else str(piece.content)
-        if not text:
+        if event == "_result":
+            turn = data["result"]
             continue
-        pieces.append(text)
-        yield "token", {"text": text}
+        # tool_start, tool_end and token pass straight through to the client.
+        yield event, data
 
     elapsed = int((time.perf_counter() - started) * 1000)
-    result = finalise_answer("".join(pieces), query, chunks, best_score, elapsed, settings)
+    if turn is None:  # pragma: no cover — arun_agent always finishes with _result
+        turn = AgentTurnResult(answer="")
+    result = _from_turn(turn, query, best_score, elapsed, settings)
+
+    if result.hit_tool_limit:
+        # Tokens streamed so far were the middleware's internal message. Tell the
+        # client to discard them and show the no-answer message instead.
+        yield "replace", {"text": result.answer}
 
     yield "citations", {"citations": [c.model_dump() for c in result.citations]}
     yield "done", _done_payload(result, settings)

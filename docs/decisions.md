@@ -542,3 +542,94 @@ Once the response has begun, the status code is fixed at 200. A mid-stream
 failure emits an `error` frame and closes. It never hangs the connection and
 never leaks the underlying exception; tests assert the exception type and
 message do not appear in the body.
+
+
+---
+
+## 0010 — A real agent, and where agency leaks
+
+**Date:** 2026-07-29
+**Status:** Accepted
+
+### Verified API, not a remembered one
+
+`create_agent(model, tools, *, system_prompt, middleware, ...) -> CompiledStateGraph`,
+confirmed against the installed `langchain==1.3.14` rather than a tutorial. The
+reasoning loop is **not** hand-rolled; `create_agent` owns it.
+
+The tool-call cap uses the built-in `ToolCallLimitMiddleware(run_limit=...,
+exit_behavior="end")`. Writing our own counter would have meant reimplementing
+the loop to hook it.
+
+### Two things measured, not assumed
+
+**1. The cap emits a raw internal string.** At the limit the final message is
+`"Tool call limit reached: run limit exceeded (4/3 calls)."` — which would have
+gone straight to a user as their answer. It is detected and replaced with
+`NO_ANSWER_MESSAGE`. `tests/test_agent.py` pins that exact string against the
+real library, so an upstream rewording fails a test instead of leaking to a
+traveller.
+
+**2. `stream_mode="messages"` also emits tool output.** Streaming without
+filtering on `langgraph_node == "model"` would have streamed each tool's raw
+return value — chunk headers, `[kb-xxx]` labels and all — to the user as if it
+were the answer. Filtered, with a regression test asserting no chunk header
+appears in the streamed text.
+
+### Citation validation across multiple tools
+
+Unchanged in rule, changed in scope. A `TurnContext` in a `ContextVar`
+accumulates the union of every id returned by every `search_*` call in the turn,
+and the final answer is validated against that union — so a row found on the
+first tool call is still citable after the third. The context is deliberately
+**not** part of the model's state: the model must not be able to influence what
+it is allowed to cite.
+
+A tool called outside a turn raises rather than silently failing to record, since
+unrecorded retrieval means unvalidatable citations.
+
+### Refusals under agency
+
+Agency is where guardrails leak, so the deterministic refusal gate runs **before
+the agent is constructed**. No sequence of tool calls can route around it, which
+`test_agency_cannot_route_around_the_refusal_gate` asserts directly.
+
+The low-confidence short-circuit survives as a pre-flight probe over **both**
+collections. Probing only the knowledge base would wrongly refuse questions about
+press releases once the scraper fills `scaspa_web` in Prompt 6.
+
+All six attacks were re-tested against a maximally badly-behaved scripted model:
+
+| Attack | Outcome under agency |
+| --- | --- |
+| A2 out of scope | Short-circuits; agent never runs |
+| A3 specific shipment | Refusal gate; agent never runs |
+| A6 safety / radio frequency | Refusal gate; agent never runs |
+| A4 invented duty figure | Flagged ungrounded (rule 10) |
+| A5 capitulation under pressure | Flagged ungrounded (rule 10) |
+| **A1 false premise** | **Still passes — documented limitation** |
+
+A1 is pinned by `test_a1_false_premise_remains_a_known_gap`, which asserts the
+gap explicitly and says so in its docstring. If a claim-level entailment check
+ever closes it, that test fails — and that failure is the good news.
+
+### `calculate` is not `eval`
+
+An AST walk against a whitelist: numbers, `+ - * / // % **`, and `abs`, `round`,
+`min`, `max`, `sum`. Anything not explicitly handled is rejected, so
+`__import__`, attribute access, subscripting, lambdas, comprehensions and walrus
+assignments are all out by construction rather than by blacklist. An exponent cap
+stops `9**9**9` hanging the process. Nineteen hostile expressions are tested,
+plus a check that a rejected expression had no side effect first.
+
+### Alternatives considered
+
+- **Hand-rolled loop with our own counter.** Rejected: it means owning
+  tool-calling, retries and message threading that `create_agent` already
+  handles, and the built-in middleware does exactly the job.
+- **More than five tools** (separate tariff/schedule/contact search). Rejected:
+  each extra tool widens the choice, and a wrong choice costs a round trip before
+  it starts being wrong. One well-described search tool beats three narrow ones.
+- **Letting the agent retrieve without recording ids.** Rejected outright: it
+  would make citations unverifiable, which is the one thing this product cannot
+  give up.

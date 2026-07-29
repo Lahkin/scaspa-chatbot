@@ -104,7 +104,7 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 | `refusal_category` | `string \| null` | `vessel_or_aircraft_operations`, `personal_record`, or null |
 | `citations` | `Citation[]` | Verified sources, built from stored metadata |
 | `chart` | `ChartSpec \| null` | **Always null today.** Arriving in Prompt 8 |
-| `tool_calls` | `ToolCall[]` | **Always empty today.** Arriving in Prompt 5 |
+| `tool_calls` | `ToolCall[]` | Tools the agent used this turn, in order |
 | `meta` | `ResponseMeta` | Diagnostics |
 
 `Citation`: `kb_id`, `category`, `subcategory`, `source_url`, `source_type`,
@@ -116,7 +116,8 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 `ChartSpec` (declared, not yet emitted): `kind` (`bar`|`line`|`pie`), `title`,
 `labels[]`, `series[]`, `source_ids[]`.
 
-`ToolCall` (declared, not yet emitted): `name`, `summary`, `ms`.
+`ToolCall`: `name`, `summary`, `ms`. `summary` is written to be rendered
+directly, e.g. `"Searching SCASPA knowledge base — ferry fares"`.
 
 > ### What `grounded` actually means
 >
@@ -149,7 +150,13 @@ curl -X POST http://127.0.0.1:8000/api/chat \
     }
   ],
   "chart": null,
-  "tool_calls": [],
+  "tool_calls": [
+    {
+      "name": "search_scaspa_knowledge",
+      "summary": "Searching SCASPA knowledge base — ferry fares",
+      "ms": 2
+    }
+  ],
   "meta": {
     "request_id": "ec970bed4d2b4a178f84a2f7a3619985",
     "latency_ms": 3,
@@ -242,14 +249,50 @@ defeat the point).
 
 ```
 event: meta        → { "conversation_id": "..." }
+event: tool_start  → { "name", "summary" }
+event: tool_end    → { "name", "summary", "ms" }
 event: token       → { "text": "..." }              (repeated)
-event: tool_start  → { "name", "summary", "ms" }    (not emitted yet — Prompt 5)
-event: tool_end    → { "name", "summary", "ms" }    (not emitted yet — Prompt 5)
+event: replace     → { "text": "..." }              (rare — see below)
 event: citations   → { "citations": [ Citation ] }
 event: chart       → ChartSpec                      (not emitted yet — Prompt 8)
 event: done        → { "latency_ms", "grounded", "refusal", "kb_version" }
 event: error       → { "code", "message", "request_id" }
 ```
+
+### Tool events
+
+The agent decides which tools to use, so `tool_start` / `tool_end` pairs appear
+before and between tokens, and there may be several. `summary` is written to be
+**rendered directly** — no formatting needed:
+
+```
+event: tool_start
+data: {"name":"search_scaspa_knowledge","summary":"Searching SCASPA knowledge base — ferry fares"}
+
+event: tool_end
+data: {"name":"search_scaspa_knowledge","summary":"Searching SCASPA knowledge base — ferry fares","ms":2}
+```
+
+Match a `tool_end` to its `tool_start` by `name` plus order. `ms` is the measured
+duration. Show these as they arrive — it is the only visible sign the assistant
+is doing research rather than stalling.
+
+The five tools, so you can pick an icon per `name`:
+
+| `name` | What it means |
+| --- | --- |
+| `search_scaspa_knowledge` | Searching the verified knowledge base |
+| `search_site_content` | Searching scaspa.com pages and PDFs |
+| `make_chart` | Building a chart |
+| `calculate` | Doing arithmetic on retrieved figures |
+| `escalate_to_human` | Fetching SCASPA contact details |
+
+### The `replace` event
+
+Rare. If the agent hits its tool-call cap, the tokens already streamed were an
+internal message, not an answer. `replace` carries the text to show **instead**:
+discard everything accumulated from `token` so far and render `replace.text`.
+`done` will report `refusal: true`.
 
 Guarantees:
 

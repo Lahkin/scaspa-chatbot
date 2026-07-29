@@ -21,27 +21,21 @@ from app.rag.answer import (
 )
 from app.rag.ingest import build_kb_index
 from app.rag.retriever import RetrievedChunk
+from tests.scripted_model import ExplodingModel, searches_then_says
 
 # --------------------------------------------------------------------- stubs
 
 
-class StubModel:
-    """Returns a canned answer and records what it was asked."""
-
-    def __init__(self, reply: str) -> None:
-        self.reply = reply
-        self.calls: list[list] = []
-
-    def invoke(self, messages):
-        self.calls.append(messages)
-        return type("Msg", (), {"content": self.reply})()
-
-
-class ExplodingModel:
-    """Fails the test if it is ever called."""
-
-    def invoke(self, messages):  # noqa: ARG002
-        raise AssertionError("the model must not be called on a low-confidence question")
+# The agent needs a real BaseChatModel (create_agent calls bind_tools), so the
+# doubles live in tests/scripted_model.py. StubModel keeps the old name and the
+# old intent: produce this answer, then let the backend verify it.
+#
+# The search query is "ferry" deliberately. The fake embeddings put every
+# document on a topic axis, and an off-axis query leaves all distances tied at
+# 1.0 — so which rows come back is decided by Chroma's arbitrary tie-break, and
+# the test flakes. A query on a real axis makes retrieval deterministic.
+def StubModel(reply: str):  # noqa: N802 — kept as a name for readability
+    return searches_then_says(reply, query="ferry")
 
 
 def chunk(kb_id: str, text: str = "Answer: placeholder.", score: float = 0.9) -> RetrievedChunk:
@@ -269,8 +263,8 @@ def test_context_reaches_the_model_with_real_ids(indexed, fake_embeddings) -> No
 
     system_prompt = model.calls[0][0].content
     assert "CONTEXT:" in system_prompt
-    assert "[kb-" in system_prompt
     assert "SCASPA" in system_prompt
+    assert "search_scaspa_knowledge" in system_prompt, "the agent is told to search first"
 
 
 def test_todays_date_is_injected(indexed, fake_embeddings) -> None:

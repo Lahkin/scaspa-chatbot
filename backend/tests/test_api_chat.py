@@ -8,32 +8,27 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.language_models import BaseChatModel
 
+from app.agent import graph as graph_module
 from app.agent.memory import ConversationStore, get_conversation_store
 from app.agent.prompts import NO_ANSWER_MESSAGE, REFUSAL_MESSAGE
 from app.config import get_settings
 from app.main import create_app
 from app.rag import answer as answer_module
 from app.rag.ingest import build_kb_index
+from tests.scripted_model import searches_then_says
 
 ANSWER = "The placeholder one-way fare is XCD 44.44 for an adult ticket [kb-008]."
 
 
-class FakeLLM:
-    """Returns a canned answer, and streams it in small pieces."""
+def FakeLLM(reply: str = ANSWER):  # noqa: N802 — kept as a name for readability
+    """A model that searches the knowledge base, then answers.
 
-    def __init__(self, reply: str = ANSWER) -> None:
-        self.reply = reply
-
-    def invoke(self, messages):  # noqa: ARG002
-        return type("Msg", (), {"content": self.reply})()
-
-    async def astream(self, messages):  # noqa: ARG002
-        # Deliberately split mid-marker so the test proves the client must
-        # reassemble rather than parse per-frame.
-        size = 7
-        for start in range(0, len(self.reply), size):
-            yield type("Chunk", (), {"content": self.reply[start : start + size]})()
+    The agent needs a real BaseChatModel, and it must actually call the search
+    tool or its citation would be unverifiable.
+    """
+    return searches_then_says(reply, query="ferry fares")
 
 
 @pytest.fixture
@@ -47,6 +42,9 @@ def api(tmp_settings, sample_csv, fake_embeddings, monkeypatch):
     )
 
     monkeypatch.setattr(answer_module, "build_chat_model", lambda settings=None: FakeLLM())
+    monkeypatch.setattr(
+        graph_module, "build_chat_model", lambda settings=None: FakeLLM(), raising=False
+    )
     monkeypatch.setattr(
         answer_module, "build_embeddings", lambda settings=None: fake_embeddings, raising=False
     )
@@ -75,13 +73,23 @@ def test_happy_path_returns_citations(api) -> None:
     assert body["citations"][0]["source_url"].startswith("https://example.invalid/")
 
 
-def test_chart_and_tool_calls_are_present_but_empty(api) -> None:
-    """The frontend must be able to code against the final shape today."""
+def test_chart_is_declared_but_still_null(api) -> None:
+    """chart arrives in Prompt 8; the field exists now so the shape is final."""
     body = api.post("/api/chat", json={"message": "How much is a ferry ticket?"}).json()
 
     assert "chart" in body
     assert body["chart"] is None
-    assert body["tool_calls"] == []
+
+
+def test_tool_calls_are_reported_with_readable_summaries(api) -> None:
+    """Task 4 — the frontend renders these directly."""
+    body = api.post("/api/chat", json={"message": "How much is a ferry ticket?"}).json()
+
+    assert len(body["tool_calls"]) == 1
+    call = body["tool_calls"][0]
+    assert call["name"] == "search_scaspa_knowledge"
+    assert call["summary"] == "Searching SCASPA knowledge base — ferry fares"
+    assert call["ms"] >= 0
 
 
 def test_meta_carries_diagnostics_but_not_the_model_name(api) -> None:
@@ -273,14 +281,26 @@ def test_stream_done_payload(api) -> None:
     assert done["latency_ms"] >= 0
 
 
-def test_stream_emits_no_tool_events_yet(api) -> None:
+def test_stream_emits_tool_events_in_order(api) -> None:
+    """Task 4 — the visible part of an otherwise invisible achievement."""
     events = read_events(
         api.post("/api/chat/stream", json={"message": "How much is a ferry ticket?"})
     )
-    names = {name for name, _ in events}
+    names = [name for name, _ in events]
 
-    assert "tool_start" not in names
-    assert "tool_end" not in names
+    assert "tool_start" in names
+    assert "tool_end" in names
+    assert names.index("meta") < names.index("tool_start") < names.index("tool_end")
+    assert names.index("tool_end") < names.index("citations")
+
+    _, start = next((n, d) for n, d in events if n == "tool_start")
+    assert start["name"] == "search_scaspa_knowledge"
+    assert start["summary"] == "Searching SCASPA knowledge base — ferry fares"
+
+    _, end = next((n, d) for n, d in events if n == "tool_end")
+    assert end["ms"] >= 0
+
+    # chart still arrives in Prompt 8.
     assert "chart" not in names
 
 
@@ -302,11 +322,17 @@ def test_stream_validation_error_is_a_normal_422(api) -> None:
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-class ExplodingLLM(FakeLLM):
-    """Streams a little, then fails — the mid-stream failure case."""
+class ExplodingLLM(BaseChatModel):
+    """Fails while generating — the mid-stream failure case."""
 
-    async def astream(self, messages):  # noqa: ARG002
-        yield type("Chunk", (), {"content": "The placeholder fare "})()
+    @property
+    def _llm_type(self) -> str:
+        return "exploding-mid-stream"
+
+    def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ARG002
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ARG002
         raise RuntimeError("upstream died mid-generation")
 
 
@@ -327,10 +353,16 @@ def test_mid_stream_error_emits_an_error_frame_and_closes(api, monkeypatch) -> N
     assert "upstream died" not in response.text
 
 
-class RateLimitedLLM(FakeLLM):
-    async def astream(self, messages):  # noqa: ARG002
+class RateLimitedLLM(BaseChatModel):
+    @property
+    def _llm_type(self) -> str:
+        return "rate-limited"
+
+    def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ARG002
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ARG002
         raise _RateLimited()
-        yield  # pragma: no cover — makes this an async generator
 
 
 class _RateLimited(Exception):
