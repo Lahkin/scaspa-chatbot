@@ -136,6 +136,50 @@ Guardrails that survive agency:
 Deploying? Read [docs/deploy.md](docs/deploy.md) first — it explains why you must
 not deploy with the fixture knowledge base.
 
+## Scraping scaspa.com
+
+**Absolute rule: `pay.scaspa.com` is never fetched, tested against, or linked
+to.** It is a live payment portal. Any URL matching `SCRAPER_BLOCKLIST` raises
+`BlockedURLError` — it is **not** quietly skipped, because a skip is a decision
+the code makes silently and an exception is one a person has to look at. This is
+CLAUDE.md rule 3 and it is enforced at every fetch entry point and covered by
+tests in `tests/test_scraper.py`.
+
+```bash
+cd backend
+uv run python scripts/crawl_site.py              # crawl + PDFs
+uv run python scripts/crawl_site.py --limit 5    # a quick look
+uv run python scripts/build_index.py --web       # index into scaspa_web
+uv run python scripts/build_index.py --all       # knowledge base + web
+uv run python scripts/reconcile.py               # site vs CSV disagreements
+```
+
+The crawl reads robots.txt first and honours it, prefers the sitemap, identifies
+itself with `SCRAPER_USER_AGENT`, and rate-limits to about one request a second.
+`portzante.com` is **out of scope** by default (handbook open question 17) — it
+is a separate operator's site.
+
+### What the crawler refuses to store
+
+Two things on the site are actively quarantined into
+`data/scraped/flagged_for_client.md` and never indexed:
+
+- **The homepage statistics.** Vessel Calls, Flights, Cruise Passengers and
+  Tonnes of Cargo are JavaScript counters. Fetched over HTTP they are literally
+  `0`. Each is replaced with `[FIGURE UNAVAILABLE — CONFIRM WITH CLIENT]`. The
+  real figures must come from the annual reports or from SCASPA and be entered
+  as knowledge-base rows with a source and a date.
+- **Email addresses.** Cloudflare-obfuscated. Not decoded, not stored; replaced
+  with `[EMAIL — CONFIRM WITH CLIENT]`.
+
+Each crawl also writes `diff_YYYY-MM-DD.md` — pages added, removed and changed,
+with excerpts — so a new travel advisory is something the system notices.
+
+`scripts/reconcile.py` reports where the site and the researchers' CSV disagree
+on a fee, a time or a phone number. **It never resolves a conflict.** The site
+being authoritative is guidance for a researcher, not a licence for code to
+overwrite a verified row.
+
 ## Privacy: what this service stores
 
 **Nothing is persisted about a user. Not one thing.**

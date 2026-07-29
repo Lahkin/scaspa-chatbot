@@ -633,3 +633,160 @@ plus a check that a rejected expression had no side effect first.
 - **Letting the agent retrieve without recording ids.** Rejected outright: it
   would make citations unverifiable, which is the one thing this product cannot
   give up.
+
+
+---
+
+## 0011 — PDF extraction: pdfplumber, chosen by measurement
+
+**Date:** 2026-07-29
+**Status:** Accepted
+
+### Method
+
+`scripts/pdf_bakeoff.py` downloaded a real SCASPA document — the 2024 audited
+financial statements — and extracted it with all three candidates. The
+comparison is in `data/scraped/pdf_bakeoff/comparison.md`. The criterion was
+never character count: a library can extract every character and still scramble
+which figure belongs to which row, and a scrambled tariff is a wrong number.
+
+### Evidence
+
+The same row, `Depreciation / note 9 / 2024 / 2023`, on the statement of cash flows:
+
+| Library | Output | Verdict |
+| --- | --- | --- |
+| **pdfplumber** | `Depreciation 9 12,407,059 12,688,243` (36 chars) | Row intact and compact |
+| pypdf | `Depreciation` + ~80 spaces + `9 12,407,059  12,688,243` (118 chars) | Row intact, heavily padded |
+| PyMuPDF | `12,407,059` and `12,688,243` **on separate lines** | Row destroyed |
+
+Structural signals for that page:
+
+| Library | multi-column lines | lone-number lines |
+| --- | --- | --- |
+| pdfplumber | 31 | 1 |
+| pypdf | 31 | 1 |
+| PyMuPDF | **1** | **35** |
+
+One correction worth recording, because it nearly became the decision: pypdf
+*appeared* to truncate figures (`Interest expense 21 10,7`). It does not — that
+was a display truncation in the comparison script, confirmed by reading the raw
+118-character line. pypdf is accurate; it is merely padded.
+
+### Decision
+
+**pdfplumber**, used in `app/scraper/pdfs.py`.
+
+- PyMuPDF is disqualified outright. Putting every cell on its own line means a
+  fee can be attributed to the wrong service, which is the exact failure this
+  project cannot have.
+- pypdf is correct but pads rows with up to ~80 spaces. With 800-character
+  chunks that spends a large share of each chunk on whitespace, and it makes the
+  rule-10 verbatim figure check noisier than it needs to be.
+- pdfplumber needs no post-processing, and additionally offers `extract_tables()`
+  for explicit table extraction if tariff pages later need it.
+
+Cost: pdfplumber is the slowest of the three. Irrelevant — this is an offline
+batch job, not a request path. 478 pages across 15 PDFs extracted in well under
+a minute.
+
+### Alternatives considered
+
+- **PyMuPDF for speed.** Rejected on the evidence above.
+- **Two libraries, pypdf for prose and pdfplumber for tables.** Rejected: it
+  doubles the failure surface for a benefit that has not been shown to exist,
+  and deciding per page which is "a table" is its own guessing problem.
+
+---
+
+## 0012 — Scraping scaspa.com: three traps, and two bugs the traps hid
+
+**Date:** 2026-07-29
+**Status:** Accepted
+
+All three traps were confirmed against the live site, not assumed.
+
+### Trap 1 — the homepage statistics are zero
+
+The homepage shows "Annual Statistics Based on 2025" with four counters —
+Vessel Calls, Flights, Cruise Passengers, Tonnes of Cargo. They animate upward
+in a browser. A plain HTTP fetch reads all four as literal `0`.
+
+**Detection alone was not enough.** The first implementation flagged them and
+left them in the text; they only disappeared from the stored page because that
+block happened to sit inside a container the boilerplate stripper removed. That
+is luck, and the failure mode is an assistant telling someone SCASPA handled
+zero cruise passengers. Each zero is now **replaced in the DOM** with
+`[FIGURE UNAVAILABLE — CONFIRM WITH CLIENT]` before any text is extracted, so no
+later step can store it. The label is kept; only the false figure goes.
+
+A second bug hid inside this one. The label lookup checked the *preceding* line
+first, but on this site the label *follows* the number — so each zero was
+attached to the previous counter's label. The report listed "Vessel Calls" twice
+and **omitted "Tonnes of Cargo" entirely**, meaning nobody would have known to
+chase the cargo figure. Fixed and pinned by a test asserting all four labels.
+
+### Trap 2 — emails are Cloudflare-obfuscated
+
+Confirmed: `data-cfemail` attributes on the contact pages. The encoding is
+trivially reversible and we deliberately do not reverse it — SCASPA obfuscated
+the address on purpose, and a scraped address is unverified anyway. Both the
+element and the literal `[email protected]` text are replaced with
+`[EMAIL — CONFIRM WITH CLIENT]`, and the page is flagged. Verified on the real
+crawl: 6 placeholders, **0 leaked addresses**.
+
+### Trap 3 — the real content is in PDFs
+
+Confirmed: the Port Act and ten audited financial statements are PDFs totalling
+478 pages. An HTML-only scraper gets none of it. See entry 0011.
+
+### The extraction bug the traps distracted from
+
+The first crawl "succeeded" — 57 pages, 0 errors — and produced pages of **20
+characters**. Two over-matches in the boilerplate stripper:
+
+1. `<body class="header-page …">` — the body tag itself matched a `header`
+   pattern, decomposing the entire document.
+2. Weebly's main content wrapper is `wsite-elements wsite-not-footer`. A
+   substring match on "footer" deleted the article. The container is named for
+   what it is **not**.
+
+Fixed by matching whole tokens, never substrings; treating anything containing
+`not-` as content; protecting `html`/`body`/`main`/`article`; and refusing to
+decompose any element holding more than half the page's text. Median page is now
+398 characters, richest 6,084.
+
+The lesson recorded for next time: "0 errors" is not "it worked". The crawl
+reported success while storing nothing.
+
+### robots.txt
+
+Fetched first and honoured. The site publishes a sitemap, which is preferred —
+but the **sitemap also lists robots-disallowed URLs** (`ferry-admin.html`,
+`cruise-admin-old.html`, `cargo-security-testing.html`), so every sitemap entry
+is still filtered through robots. Preferring the sitemap without that filter
+would crawl four pages the site asked us not to.
+
+None of the pages this project needs are disallowed, so the crawl proceeds. If
+that ever changes, `RobotsDisallowedError` stops the run and names the pages —
+that is a conversation with SCASPA, not something to route around.
+
+### The blocklist is an exception, not a filter
+
+`pay.scaspa.com` raises `BlockedURLError` at every entry point — `fetch()`,
+`download_pdf()`, and the bake-off downloader. A skip is a decision code makes
+silently; an exception is one a human has to look at. Five URL shapes are
+tested, including a mixed-case host.
+
+### Known gap — web content is retrievable but not citable
+
+Knowledge-base rows carry `kb-xxx` ids, and the citation validator only accepts
+that shape. Chunks from scraped pages and PDFs get Chroma-generated UUIDs, so
+the agent can *retrieve* them but cannot cite them in a form the backend will
+verify — any answer resting on web content is therefore marked `grounded: false`.
+
+That fails closed, which is the right direction, but it makes
+`search_site_content` much less useful than it looks. Giving web chunks stable
+`web-xxxx` ids and widening the citation pattern touches the safety-critical
+validator, so it is deliberately **not** bundled into a scraping change. It is
+the first thing to do next.

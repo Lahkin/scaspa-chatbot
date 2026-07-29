@@ -44,7 +44,72 @@ def parse_args(argv=None):
         action="store_true",
         help="Validate and report only. Embeds nothing and writes no metadata.",
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Build the scaspa_web index from the latest crawl and downloaded PDFs.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Build both the knowledge base and the web index.",
+    )
     return parser.parse_args(argv)
+
+
+def build_web(settings, echo=print) -> int:
+    """Build the scaspa_web collection. Returns chunks indexed."""
+    from datetime import UTC, datetime
+
+    from app.rag.ingest import read_index_meta, write_index_meta
+    from app.rag.web_ingest import build_web_documents, ingest_web
+    from app.scraper.pdfs import PdfDocument, extract_pages, pdf_dir
+
+    echo("")
+    echo("=" * 66)
+    echo("Web index (scaspa_web)")
+    echo("=" * 66)
+
+    jsonl = sorted(settings.scraped_path.glob("scaspa_*.jsonl"))
+    if not jsonl:
+        echo("  No crawl output found. Run scripts/crawl_site.py first.")
+        return 0
+    echo(f"  pages from {jsonl[-1].name}")
+
+    pdfs: list[PdfDocument] = []
+    for path in sorted(pdf_dir(settings).glob("*.pdf")):
+        import hashlib
+
+        data = path.read_bytes()
+        document = PdfDocument(
+            url=f"https://www.scaspa.com/uploads/{path.name}",
+            path=path,
+            content_hash=hashlib.sha256(data).hexdigest(),
+            fetched_at=datetime.now(UTC).isoformat(),
+            title=path.stem.replace("_", " ").replace("-", " "),
+        )
+        try:
+            document.pages = extract_pages(path)
+        except Exception as exc:  # noqa: BLE001 — one bad PDF must not stop the build
+            echo(f"    skipping {path.name}: {type(exc).__name__}")
+            continue
+        pdfs.append(document)
+    echo(f"  {len(pdfs)} PDFs, {sum(d.page_count for d in pdfs)} pages")
+
+    documents = build_web_documents(jsonl[-1], pdfs, settings)
+    echo(f"  {len(documents)} chunks to index")
+
+    indexed = ingest_web(documents, settings=settings, echo=echo)
+
+    meta = read_index_meta(settings)
+    if meta is not None:
+        meta.web_docs = indexed
+        meta.web_built_at = datetime.now(UTC)
+        write_index_meta(meta, settings)
+        echo(f"  updated index_meta.json (web_docs={indexed})")
+    else:
+        echo("  no index_meta.json yet — build the knowledge base to record web_docs")
+    return indexed
 
 
 def main(argv=None) -> int:
@@ -55,6 +120,11 @@ def main(argv=None) -> int:
         print("error: OPENAI_API_KEY is not set — embedding would fail.", file=sys.stderr)
         print("       Set it in backend/.env, or use --dry-run to validate only.", file=sys.stderr)
         return 1
+
+    # --web on its own skips the knowledge base entirely.
+    if args.web and not args.all:
+        build_web(settings)
+        return 0
 
     try:
         result = build_kb_index(
@@ -81,6 +151,9 @@ def main(argv=None) -> int:
     if not result.skipped and not result.dry_run and result.indexed_rows == 0:
         print("error: nothing was indexed. The assistant would have no knowledge.", file=sys.stderr)
         return 2
+
+    if args.all and not args.dry_run:
+        build_web(settings)
 
     return 0
 

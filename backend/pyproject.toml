@@ -28,6 +28,13 @@ dependencies = [
     # Scraper + HTTP client
     "httpx==0.28.1",
     "beautifulsoup4==4.15.0",
+    "lxml==6.1.1",
+    # PDF extraction. All three are installed so scripts/pdf_bakeoff.py can
+    # compare them; app/scraper/pdfs.py uses only the one chosen in
+    # docs/decisions.md 0011.
+    "pypdf==6.14.2",
+    "pdfplumber==0.11.10",
+    "pymupdf==1.28.0",
 ]
 
 [dependency-groups]

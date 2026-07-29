@@ -51,6 +51,7 @@ class IndexMeta(BaseModel):
     index_built_at: datetime
     embedding_model: str
     web_docs: int
+    web_built_at: datetime | None = None
 
 
 class BuildResult(BaseModel):
@@ -222,7 +223,10 @@ def build_kb_index(
         kb_updated_at=max((r.as_of for r in indexable), default=None),
         index_built_at=datetime.now(UTC),
         embedding_model=settings.OPENAI_EMBEDDING_MODEL,
+        # Carry the web side through untouched — a knowledge-base rebuild must
+        # not appear to have wiped the scraped index.
         web_docs=count(web_store),
+        web_built_at=(previous.web_built_at if previous else None),
     )
     path = write_index_meta(meta, settings)
     echo("")

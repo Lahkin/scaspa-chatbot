@@ -125,11 +125,26 @@ def _format_chunks(chunks: list[RetrievedChunk]) -> str:
     """Render retrieved rows for the model, each labelled with its citable id."""
     if not chunks:
         return "No matching rows were found. Do not invent an answer; say you do not have it."
-    return "\n\n".join(
-        f"[{c.id}] (verified {c.metadata.get('as_of', '?')}, "
-        f"source {c.metadata.get('source_url', '?')})\n{c.text}"
-        for c in chunks
-    )
+    return "\n\n".join(f"[{c.id}] ({_provenance(c)})\n{c.text}" for c in chunks)
+
+
+def _provenance(chunk: RetrievedChunk) -> str:
+    """One line describing where a chunk came from and how fresh it is.
+
+    Knowledge-base rows carry `as_of` (when a researcher verified the fact).
+    Scraped pages and PDFs carry `fetched_at` instead, plus a page number for
+    PDFs, so "page 34 of the Port Act" is something a person can check.
+    """
+    meta = chunk.metadata
+    parts: list[str] = []
+    if meta.get("as_of"):
+        parts.append(f"verified {meta['as_of']}")
+    elif meta.get("fetched_at"):
+        parts.append(f"fetched {meta['fetched_at']}")
+    if meta.get("page"):
+        parts.append(f"page {meta['page']}")
+    parts.append(f"source {meta.get('source_url', '?')}")
+    return ", ".join(parts)
 
 
 # --------------------------------------------------------------------- 1 of 5
