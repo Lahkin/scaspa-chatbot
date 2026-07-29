@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     MAX_OUTPUT_TOKENS: int = Field(default=700, gt=0)
     AGENT_MAX_TOOL_CALLS: int = Field(default=6, gt=0)
 
+    # --- Upstream resilience ----------------------------------------------
+    # A stranded traveller would rather see an honest error in 20 seconds than
+    # a spinner for two minutes.
+    OPENAI_TIMEOUT_SECONDS: float = Field(default=20.0, gt=0)
+    OPENAI_MAX_ATTEMPTS: int = Field(default=3, ge=1)
+    OPENAI_BACKOFF_BASE_SECONDS: float = Field(default=0.5, ge=0)
+
+    # --- Request limits ----------------------------------------------------
+    MAX_MESSAGE_CHARS: int = Field(default=1000, gt=0)
+
     # --- Retrieval --------------------------------------------------------
     RETRIEVAL_TOP_K: int = Field(default=5, gt=0)
     RETRIEVAL_FETCH_K: int = Field(default=20, gt=0)

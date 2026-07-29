@@ -414,3 +414,131 @@ and is not a correctness measure.
 | Vessel/aircraft ops, personal records | Refusal gate, model never called | Yes |
 | **False claim citing a real row** | **Prompt only** | **No** |
 | **Wrong-but-adjacent row clears the floor** | **Prompt only** | **No** |
+
+---
+
+## 0008 — Conversation memory is in-process only, and that is the product position
+
+**Date:** 2026-07-29
+**Status:** Accepted
+
+### Context
+
+The assistant needs conversation continuity. The default reflex is Redis or
+Postgres keyed by a session cookie. For this product that default is wrong.
+
+The users are largely visitors passing through a port or an airport. They are
+asking about ferries, fees and flights. A stored transcript tied to a session,
+an IP address or a device is a record of where a specific person was, when, and
+what they were about to do. That is a meaningful privacy exposure for a
+statutory authority to hold, and it buys very little: the questions are almost
+all one-shot.
+
+### Decision
+
+Conversation state lives in the serving process's memory and nowhere else.
+
+- Keyed by a **random UUID** minted server-side and returned to the client. It
+  is opaque and derived from nothing.
+- Holds **question text, answer text and a timestamp**. Nothing else.
+- Holds **no** IP address, user agent, cookie, account, name or device
+  identifier. There is no join key to any other system, because there is no
+  other system.
+- Capped at `MAX_HISTORY_TURNS`; expires `CONVERSATION_TTL_MINUTES` after last
+  use.
+- **Never written to disk.** A restart erases everything. This is a feature.
+
+This is stated in `README.md` and `docs/api-contract.md` so the presenters can
+say it out loud, and it is enforced by tests: `test_memory.py` asserts the
+dataclasses carry no other fields and that exercising the store creates no
+files.
+
+### Accepted costs
+
+- **Losing the id loses the conversation.** No recovery. That is the trade.
+- **Multiple workers do not share state.** A request landing on another worker
+  sees no history. Fixing that means external storage, which would break the
+  position above, so history is best-effort until someone decides otherwise
+  *and records it here*.
+- **No analytics on conversation flow.** Aggregate question text and latency are
+  logged (CLAUDE.md rule 9 permits both); nothing links two questions to one
+  person.
+
+### Alternatives considered
+
+- **Redis with a TTL.** Solves multi-worker and survives restarts. Rejected: it
+  makes transcripts durable and centrally readable, which is exactly the
+  exposure being avoided, and it adds infrastructure for a demo that does not
+  need it.
+- **Client-side history in the request body.** No server state at all, which is
+  even stronger on privacy. Rejected for now: it lets a client forge history and
+  thereby steer the model, which is a grounding risk. Worth revisiting if
+  history is ever fed into the prompt.
+- **A signed cookie.** Rejected: a cookie is a durable device identifier by
+  another name.
+
+### Note on scope
+
+History is currently **stored but not used**. Answers are generated from the
+current question alone, because the HTTP prompt was explicitly plumbing and
+answer behaviour had to stay identical. Feeding history into the prompt changes
+grounding behaviour and must be its own change, with measurement.
+
+---
+
+## 0009 — Streaming: raw markers, and how disconnect is really detected
+
+**Date:** 2026-07-29
+**Status:** Accepted
+
+### Citation markers stream raw
+
+Citation validation needs the finished text, so it cannot run mid-stream.
+Stripping markers as tokens arrive is not merely awkward but incorrect: a frame
+boundary can fall inside `[kb-014]`, giving `...[kb-0` then `08]...`, and any
+per-frame filter would corrupt it.
+
+**Decision:** tokens stream verbatim, markers included. The `citations` event
+after the last token is the authority, and the client reconciles against it.
+
+**Accepted cost, stated plainly:** a marker the server later rejects can be
+briefly visible during streaming. `POST /api/chat` does not have this property —
+its text is fully verified before it is sent. Surfaces that cannot tolerate a
+momentarily-visible bad marker should use the non-streaming endpoint. This is
+documented in the API contract rather than hidden.
+
+### Disconnect detection: the obvious implementation does not work
+
+The first implementation polled `request.is_disconnected()` between tokens. A
+live test — open a stream, read two frames, hang up — showed the log line never
+fired.
+
+The cause: Starlette's `StreamingResponse` already runs its own
+`listen_for_disconnect` coroutine consuming the ASGI receive channel.
+`request.is_disconnected()` consumes the *same* channel. Two consumers compete
+for one `http.disconnect` message, so the poll is not just useless, it can make
+Starlette itself miss the disconnect.
+
+Generation *was* still being abandoned, via Starlette cancelling the task — so
+the bug was invisible in behaviour and only visible in the missing log line.
+Polling would have looked correct forever.
+
+**Decision:** rely on cancellation, and make it observable.
+
+- The router wraps the generator in `contextlib.aclosing`, so cancellation runs
+  `aclose()`, which propagates `GeneratorExit` into `astream_answer` and closes
+  the upstream stream.
+- `asyncio.CancelledError` / `GeneratorExit` are caught, logged as
+  `client_disconnected` with the token count, and re-raised.
+- `request.is_disconnected()` is **not** called from the streaming path.
+
+Verified live: hanging up after two token frames now logs
+`client_disconnected ... token_frames=2`, and no `answered` line follows —
+generation was abandoned.
+
+### Errors after headers are sent
+
+Once the response has begun, the status code is fixed at 200. A mid-stream
+failure emits an `error` frame and closes. It never hangs the connection and
+never leaks the underlying exception; tests assert the exception type and
+message do not appear in the body.

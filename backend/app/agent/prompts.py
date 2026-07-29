@@ -17,8 +17,10 @@ post-processing as the guarantee.
 # transcribed here rather than guessed. Inventing a plausible address would be
 # inventing a fact — CLAUDE.md rule 5. Add it here once the client confirms it.
 # --------------------------------------------------------------------------
-ESCALATION_BLOCK = """You can reach SCASPA directly:
-  Telephone: 869-465-8121 / 2 / 3
+SCASPA_PHONE = "869-465-8121 / 2 / 3"
+
+ESCALATION_BLOCK = f"""You can reach SCASPA directly:
+  Telephone: {SCASPA_PHONE}
   Post: P.O. Box 963, Bird Rock, Basseterre, St. Kitts"""
 
 

@@ -29,6 +29,7 @@ verified against a retrieved knowledge-base row.
 import logging
 import re
 import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date
 
 from langchain_core.embeddings import Embeddings
@@ -46,6 +47,7 @@ from app.agent.prompts import (
 )
 from app.config import Settings, get_settings
 from app.rag.retriever import RetrievedChunk, retrieve
+from app.upstream import call_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +284,116 @@ def build_chat_model(settings: Settings | None = None) -> BaseChatModel:
         temperature=settings.CHAT_TEMPERATURE,
         max_tokens=settings.MAX_OUTPUT_TOKENS,
         api_key=settings.OPENAI_API_KEY or None,
+        timeout=settings.OPENAI_TIMEOUT_SECONDS,
+        # Retries are handled by app.upstream so the policy is ours, uniform
+        # across chat and embeddings, and testable.
+        max_retries=0,
+    )
+
+
+def build_messages(
+    query: str,
+    chunks: list[RetrievedChunk],
+    today: date | None = None,
+) -> list[SystemMessage | HumanMessage]:
+    """Build the message list sent upstream. Shared by both response paths."""
+    system_prompt = render_system_prompt(
+        context=format_context(chunks),
+        current_date=(today or date.today()).isoformat(),
+    )
+    return [SystemMessage(content=system_prompt), HumanMessage(content=query)]
+
+
+def _refusal_result(category: str, elapsed_ms: int) -> AnswerResult:
+    """The deterministic refusal, identical on both paths."""
+    return AnswerResult(
+        answer=REFUSAL_MESSAGE,
+        grounded=False,
+        refusal=True,
+        refusal_category=category,
+        best_score=0.0,
+        model=None,
+        latency_ms=elapsed_ms,
+    )
+
+
+def _no_answer_result(
+    chunks: list[RetrievedChunk], best_score: float, elapsed_ms: int
+) -> AnswerResult:
+    """The low-confidence short-circuit, identical on both paths."""
+    return AnswerResult(
+        answer=NO_ANSWER_MESSAGE,
+        grounded=False,
+        refusal=True,
+        citations=[],
+        retrieved=chunks,
+        best_score=best_score,
+        model=None,
+        latency_ms=elapsed_ms,
+    )
+
+
+def finalise_answer(
+    raw_answer: str,
+    query: str,
+    chunks: list[RetrievedChunk],
+    best_score: float,
+    elapsed_ms: int,
+    settings: Settings,
+) -> AnswerResult:
+    """Verify a completed answer. The single verification path.
+
+    Both `answer_question` and the streaming path funnel through this, so the
+    two can never drift apart on what counts as grounded.
+    """
+    retrieved_ids = {chunk.id for chunk in chunks}
+    clean_answer, verified_ids, hallucinated = verify_citations(raw_answer, retrieved_ids)
+
+    for kb_id in hallucinated:
+        logger.warning(
+            "hallucinated_citation id=%s question=%r retrieved=%s",
+            kb_id,
+            query,
+            sorted(retrieved_ids),
+        )
+
+    citations = build_citations(chunks, verified_ids)
+
+    unverified_figures = find_unverified_figures(clean_answer, chunks)
+    for value in unverified_figures:
+        logger.warning(
+            "unverified_figure value=%r question=%r retrieved=%s",
+            value,
+            query,
+            sorted(retrieved_ids),
+        )
+
+    grounded = bool(verified_ids) and not hallucinated and not unverified_figures
+
+    if not verified_ids:
+        logger.warning("uncited_answer question=%r retrieved=%s", query, sorted(retrieved_ids))
+
+    logger.info(
+        "answered question=%r best_score=%.3f grounded=%s cited=%s latency_ms=%d",
+        query,
+        best_score,
+        grounded,
+        verified_ids,
+        elapsed_ms,
+    )
+
+    return AnswerResult(
+        answer=clean_answer,
+        grounded=grounded,
+        refusal=False,
+        citations=citations,
+        retrieved=chunks,
+        cited_ids=verified_ids,
+        hallucinated_citations=hallucinated,
+        unverified_figures=unverified_figures,
+        best_score=best_score,
+        model=settings.OPENAI_CHAT_MODEL,
+        latency_ms=elapsed_ms,
     )
 
 
@@ -310,15 +422,7 @@ def answer_question(
         logger.info(
             "refused question=%r category=%s latency_ms=%d", query, refusal_category, elapsed
         )
-        return AnswerResult(
-            answer=REFUSAL_MESSAGE,
-            grounded=False,
-            refusal=True,
-            refusal_category=refusal_category,
-            best_score=0.0,
-            model=None,
-            latency_ms=elapsed,
-        )
+        return _refusal_result(refusal_category, elapsed)
 
     chunks = retrieve(
         query,
@@ -340,81 +444,124 @@ def answer_question(
             settings.RETRIEVAL_MIN_SCORE,
             elapsed,
         )
-        return AnswerResult(
-            answer=NO_ANSWER_MESSAGE,
-            grounded=False,
-            refusal=True,
-            citations=[],
-            retrieved=chunks,
-            best_score=best_score,
-            model=None,
-            latency_ms=elapsed,
-        )
+        return _no_answer_result(chunks, best_score, elapsed)
 
-    context = format_context(chunks)
-    system_prompt = render_system_prompt(
-        context=context,
-        current_date=(today or date.today()).isoformat(),
-    )
-
+    messages = build_messages(query, chunks, today)
     model = chat_model or build_chat_model(settings)
-    response = model.invoke([SystemMessage(content=system_prompt), HumanMessage(content=query)])
+
+    # Timeout and bounded retry, retrying only 429/5xx — see app.upstream.
+    response = call_with_retry(lambda: model.invoke(messages), settings=settings)
     raw_answer = response.content if isinstance(response.content, str) else str(response.content)
 
-    retrieved_ids = {chunk.id for chunk in chunks}
-    clean_answer, verified_ids, hallucinated = verify_citations(raw_answer, retrieved_ids)
+    elapsed = int((time.perf_counter() - started) * 1000)
+    return finalise_answer(raw_answer, query, chunks, best_score, elapsed, settings)
 
-    for kb_id in hallucinated:
-        logger.warning(
-            "hallucinated_citation id=%s question=%r retrieved=%s",
-            kb_id,
-            query,
-            sorted(retrieved_ids),
+
+# ---------------------------------------------------------------- streaming
+
+
+async def astream_answer(
+    query: str,
+    *,
+    k: int | None = None,
+    category: str | None = None,
+    today: date | None = None,
+    chat_model: BaseChatModel | None = None,
+    embeddings: Embeddings | None = None,
+    settings: Settings | None = None,
+    is_disconnected: Callable[[], Awaitable[bool]] | None = None,
+) -> AsyncIterator[tuple[str, dict]]:
+    """Stream an answer as `(event_name, payload)` pairs.
+
+    Content is identical to `answer_question` — both share `finalise_answer`, so
+    grounding and citations cannot drift between the two endpoints.
+
+    Two things follow from citation validation needing the *finished* text:
+
+    * Tokens stream **raw**, markers and all. A chunk boundary can fall inside
+      `[kb-014]`, so stripping mid-stream would corrupt the marker. The client
+      renders markers inline and reconciles them when `citations` arrives.
+    * `citations` and `done` are emitted only after generation completes.
+
+    Cancellation is the disconnect mechanism. When the caller closes this
+    generator (see `contextlib.aclosing` in the router), `GeneratorExit`
+    propagates into the `async for` below and the upstream stream is closed, so a
+    user shutting a tab stops costing tokens.
+
+    `is_disconnected` is an optional extra poll for non-HTTP callers. The HTTP
+    router does **not** pass it: `StreamingResponse` already consumes the ASGI
+    receive channel to watch for disconnects, and a second consumer competes for
+    those messages.
+    """
+    settings = settings or get_settings()
+    started = time.perf_counter()
+
+    async def disconnected() -> bool:
+        return bool(is_disconnected and await is_disconnected())
+
+    # --- Deterministic refusal: no generation, but still streamed for shape ---
+    refusal_category = match_refusal_category(query)
+    if refusal_category is not None:
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "refused question=%r category=%s latency_ms=%d", query, refusal_category, elapsed
         )
+        result = _refusal_result(refusal_category, elapsed)
+        yield "token", {"text": result.answer}
+        yield "citations", {"citations": []}
+        yield "done", _done_payload(result, settings)
+        return
 
-    citations = build_citations(chunks, verified_ids)
+    chunks = retrieve(query, k=k, category=category, embeddings=embeddings, settings=settings)
+    best_score = chunks[0].score if chunks else 0.0
 
-    # A correct citation proves the row exists, not that the figure came from
-    # it. Rule 10 closes that gap.
-    unverified_figures = find_unverified_figures(clean_answer, chunks)
-    for value in unverified_figures:
-        logger.warning(
-            "unverified_figure value=%r question=%r retrieved=%s",
-            value,
+    if best_score < settings.RETRIEVAL_MIN_SCORE:
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "low_confidence_refusal question=%r best_score=%.3f threshold=%.3f latency_ms=%d",
             query,
-            sorted(retrieved_ids),
+            best_score,
+            settings.RETRIEVAL_MIN_SCORE,
+            elapsed,
         )
+        result = _no_answer_result(chunks, best_score, elapsed)
+        yield "token", {"text": result.answer}
+        yield "citations", {"citations": []}
+        yield "done", _done_payload(result, settings)
+        return
 
-    # Conservative: an answer with no verifiable citation is not grounded, even
-    # if nothing was obviously fabricated. Silence is not evidence.
-    grounded = bool(verified_ids) and not hallucinated and not unverified_figures
+    messages = build_messages(query, chunks, today)
+    model = chat_model or build_chat_model(settings)
 
-    if not verified_ids:
-        logger.warning("uncited_answer question=%r retrieved=%s", query, sorted(retrieved_ids))
+    pieces: list[str] = []
+    async for piece in model.astream(messages):
+        if await disconnected():
+            logger.info("client_disconnected question=%r tokens_so_far=%d", query, len(pieces))
+            return
+        text = piece.content if isinstance(piece.content, str) else str(piece.content)
+        if not text:
+            continue
+        pieces.append(text)
+        yield "token", {"text": text}
 
     elapsed = int((time.perf_counter() - started) * 1000)
-    logger.info(
-        "answered question=%r best_score=%.3f grounded=%s cited=%s latency_ms=%d",
-        query,
-        best_score,
-        grounded,
-        verified_ids,
-        elapsed,
-    )
+    result = finalise_answer("".join(pieces), query, chunks, best_score, elapsed, settings)
 
-    return AnswerResult(
-        answer=clean_answer,
-        grounded=grounded,
-        refusal=False,
-        citations=citations,
-        retrieved=chunks,
-        cited_ids=verified_ids,
-        hallucinated_citations=hallucinated,
-        unverified_figures=unverified_figures,
-        best_score=best_score,
-        model=settings.OPENAI_CHAT_MODEL,
-        latency_ms=elapsed,
-    )
+    yield "citations", {"citations": [c.model_dump() for c in result.citations]}
+    yield "done", _done_payload(result, settings)
+
+
+def _done_payload(result: AnswerResult, settings: Settings) -> dict:
+    """The `done` frame. Deliberately excludes the model name — see errors.py."""
+    from app.rag.ingest import read_index_meta
+
+    meta = read_index_meta(settings)
+    return {
+        "latency_ms": result.latency_ms,
+        "grounded": result.grounded,
+        "refusal": result.refusal,
+        "kb_version": meta.kb_version if meta else None,
+    }
 
 
 __all__ = [

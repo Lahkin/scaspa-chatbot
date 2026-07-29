@@ -19,12 +19,18 @@ are documented placeholders. See [docs/architecture.md](docs/architecture.md).
 
 | Piece | State |
 | --- | --- |
-| `GET /api/health` | Working — reports real index state |
-| Config, schemas, request-ID middleware, CORS | Working |
+| `GET /api/health` | Working — index state, models, uptime |
+| `POST /api/chat` | Working |
+| `POST /api/chat/stream` | Working — Server-Sent Events |
+| Config, schemas, request-ID middleware, CORS, errors | Working |
 | Ingestion: CSV validation, chunking, Chroma index | Working |
-| Retrieval + answer chain (CLI only) | Working |
+| Retrieval + answer chain | Working |
+| Conversation memory (in-process, not persisted) | Working |
 | Lint, format, tests, CI | Working |
-| Chat / voice endpoints, agent, streaming, scraper | Not implemented |
+| Voice endpoints, agent, tools, charts, scraper | Not implemented |
+
+The full API contract for the frontend team is
+[docs/api-contract.md](docs/api-contract.md).
 
 ## Requirements
 
@@ -101,10 +107,57 @@ to chew on.
 inventing a schedule, a fee or a rule, which CLAUDE.md rule 5 forbids. Replace it
 with a real researcher export first.
 
+## Privacy: what this service stores
+
+**Nothing is persisted about a user. Not one thing.**
+
+Conversation history lives in the serving process's memory and nowhere else. It
+is never written to disk, never put in a database, and does not survive a
+restart. It holds question text, answer text and a timestamp — and no IP
+address, user agent, cookie, account, name or device identifier. A
+`conversation_id` is a random UUID that is derived from nothing and links to
+nothing.
+
+History is capped at `MAX_HISTORY_TURNS` and expires after
+`CONVERSATION_TTL_MINUTES` of inactivity.
+
+The trade is deliberate: lose the id and you lose the conversation, and with
+multiple workers history is best-effort. That is preferred to holding a durable
+record of which traveller asked what, and when. Reasoning in
+[docs/decisions.md](docs/decisions.md) 0008; enforced by tests in
+`tests/test_memory.py`.
+
+Server logs record question text and latency, never identifiers (CLAUDE.md
+rule 9).
+
+## Asking questions (HTTP)
+
+```bash
+cd backend
+uv run uvicorn app.main:app --reload
+
+# One JSON response
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "How much is a ferry ticket?"}'
+
+# The same answer, streamed
+uv run python scripts/stream_demo.py "How much is a ferry ticket?"
+```
+
+`/api/chat` and `/api/chat/stream` return identical content — streaming changes
+when you see the answer, not what it says. Streaming exists because time to
+first token is what makes a six-second answer feel acceptable on venue wifi;
+measured locally at ~100ms to first token against ~790ms total.
+
+See [docs/api-contract.md](docs/api-contract.md) for every field, all three
+response shapes (cited answer, refusal, no-answer), the error codes, and the
+rule that streamed `[kb-xxx]` markers must be reconciled against the `citations`
+event.
+
 ## Asking questions (CLI)
 
-There is no HTTP chat endpoint yet — deliberately. The answer path is a fixed
-chain exercised through two scripts.
+The same chain, without HTTP.
 
 ```bash
 cd backend

@@ -2,17 +2,31 @@
 
 Thin router: read the index metadata, map it to the schema, return — CLAUDE.md
 rule 7.
+
+This is the one client-facing place model names appear. It is an operator
+endpoint, and Prompt 4 Task 6 requires it. Model names never appear in a chat
+response or an error — see `app/errors.py`.
 """
 
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 
 from app.config import Settings, get_settings
 from app.rag.ingest import index_meta_path, read_index_meta
-from app.schemas import HealthResponse, IndexStatus
+from app.schemas import HealthResponse, IndexStatus, ModelNames
 
 router = APIRouter(tags=["health"])
+
+
+def _models(settings: Settings) -> ModelNames:
+    return ModelNames(
+        chat=settings.OPENAI_CHAT_MODEL,
+        embedding=settings.OPENAI_EMBEDDING_MODEL,
+        transcribe=settings.OPENAI_TRANSCRIBE_MODEL,
+        tts=settings.OPENAI_TTS_MODEL,
+    )
 
 
 @router.get("/health", response_model=HealthResponse, summary="Service health")
@@ -25,6 +39,9 @@ async def get_health(
     A missing `index_meta.json` is a normal, expected state on a fresh checkout —
     it reports `degraded` with an actionable message, never a 500.
     """
+    from app.main import STARTED_AT
+
+    uptime_s = round(time.monotonic() - STARTED_AT, 3)
     meta = read_index_meta(settings)
 
     if meta is None:
@@ -39,7 +56,9 @@ async def get_health(
             status="degraded",
             env=settings.ENV,
             version=request.app.version,
+            uptime_s=uptime_s,
             request_id=getattr(request.state, "request_id", "-"),
+            models=_models(settings),
             index=index,
         )
 
@@ -60,6 +79,8 @@ async def get_health(
         status="ok" if ready else "degraded",
         env=settings.ENV,
         version=request.app.version,
+        uptime_s=uptime_s,
         request_id=getattr(request.state, "request_id", "-"),
+        models=_models(settings),
         index=index,
     )
