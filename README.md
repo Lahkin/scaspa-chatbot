@@ -22,8 +22,9 @@ are documented placeholders. See [docs/architecture.md](docs/architecture.md).
 | `GET /api/health` | Working — reports real index state |
 | Config, schemas, request-ID middleware, CORS | Working |
 | Ingestion: CSV validation, chunking, Chroma index | Working |
+| Retrieval + answer chain (CLI only) | Working |
 | Lint, format, tests, CI | Working |
-| Chat / voice endpoints, agent, retrieval, scraper | Not implemented |
+| Chat / voice endpoints, agent, streaming, scraper | Not implemented |
 
 ## Requirements
 
@@ -99,6 +100,64 @@ to chew on.
 **Never index it for a demo or deployment.** Serving any of it to a user would be
 inventing a schedule, a fee or a rule, which CLAUDE.md rule 5 forbids. Replace it
 with a real researcher export first.
+
+## Asking questions (CLI)
+
+There is no HTTP chat endpoint yet — deliberately. The answer path is a fixed
+chain exercised through two scripts.
+
+```bash
+cd backend
+
+# Retrieval only. No model call, no API key needed for the retrieval itself.
+uv run python scripts/search.py "how much is a ferry ticket?"
+uv run python scripts/search.py --k 3 --file questions.txt
+
+# Full chain: retrieve -> model -> verify. Needs OPENAI_API_KEY.
+uv run python scripts/chat_repl.py
+uv run python scripts/chat_repl.py --ask "how much is a ferry ticket?"
+```
+
+`chat_repl.py` prints the answer, then every chunk it considered with scores,
+then exactly which rows were cited:
+
+```
+ANSWER
+The placeholder one-way fare is XCD 44.44 for an adult ticket [kb-008]. That was
+verified on 2026-04-01, so please confirm with SCASPA before you travel.
+
+RETRIEVAL — every chunk considered
+  kb id     score   cited   conf       category
+  kb-008    0.577   YES     confirmed  ferry
+  kb-007    0.273   no      confirmed  ferry (below floor)
+
+ROWS USED (verified citations, built from stored metadata)
+  [kb-008] verified 2026-04-01 — https://example.invalid/ferry-terminal/fares
+```
+
+### What the backend guarantees, and what it does not
+
+Guaranteed in code, and tested:
+
+- **A cited id that was never retrieved is stripped** from the answer, logged as
+  `hallucinated_citation`, and the response is marked `grounded: false`.
+- **Citations are built from stored row metadata**, never from the model's text.
+- **Money and time values must appear verbatim** in a retrieved chunk
+  (CLAUDE.md rule 10). A rounded fee or reformatted time is flagged.
+- **Weak retrieval never reaches the model.** Below `RETRIEVAL_MIN_SCORE` the
+  chain returns `NO_ANSWER_MESSAGE` without generating anything.
+- **Vessel/aircraft operations and personal-record questions never reach the
+  model**, via a deterministic refusal gate.
+
+Not guaranteed — prompt-only, and **unverified**:
+
+- A **false claim carrying a valid citation**. The validator proves the row
+  exists, not that the sentence follows from it.
+- A **topically-adjacent but wrong row** clearing the score floor.
+
+Both are documented with evidence in [docs/decisions.md](docs/decisions.md)
+entry 0007. Do not read `grounded: true` as "this answer is correct" — read it
+as "every id and figure in this answer traces to a retrieved row".
 
 ## Checks
 

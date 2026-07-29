@@ -115,13 +115,16 @@ def search(
     query: str,
     k: int,
     min_score: float = 0.0,
+    where: dict | None = None,
 ) -> list[ScoredDocument]:
     """Search, returning documents scored 0–1 with higher meaning more relevant.
 
     This is the only search entry point the rest of the codebase should use.
     Results are sorted best-first and filtered to `score >= min_score`.
+
+    `where` is a Chroma metadata filter, applied before scoring.
     """
-    hits = store.similarity_search_with_score(query, k=k)
+    hits = store.similarity_search_with_score(query, k=k, filter=where)
 
     scored = [
         ScoredDocument(

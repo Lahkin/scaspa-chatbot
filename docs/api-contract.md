@@ -104,6 +104,33 @@ No index built yet — still **200**, never a 500:
 ## Not yet implemented
 
 `POST /api/chat` and the voice endpoints are planned but intentionally absent.
-Their routers exist as placeholders and are not registered. This section will
-carry their full contract when they land — do not build a client against a
-shape guessed from the placeholder files.
+Their routers exist as placeholders and are not registered. Do not build a
+client against a shape guessed from the placeholder files.
+
+### Planned `ChatResponse` shape
+
+The answer chain already exists as library code (`app.rag.answer.AnswerResult`)
+and is exercised through `scripts/chat_repl.py`. The eventual `ChatResponse`
+will map onto it directly, so the shape is recorded here in advance:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `answer` | `string` | Post-processed. Unverifiable citation markers already stripped |
+| `grounded` | `boolean` | Every id **and** figure traces to a retrieved row |
+| `refusal` | `boolean` | True when the chain declined without calling the model |
+| `refusal_category` | `string \| null` | Which deterministic gate fired |
+| `citations` | `Citation[]` | Built from stored metadata, never from model text |
+| `cited_ids` | `string[]` | Verified ids only |
+| `hallucinated_citations` | `string[]` | Ids the model invented; stripped from `answer` |
+| `unverified_figures` | `string[]` | Money/time values found in no retrieved chunk |
+| `best_score` | `number` | Top retrieval similarity, 0–1 |
+| `model` | `string \| null` | Null when the model was never called |
+| `latency_ms` | `integer` | |
+
+`Citation`: `kb_id`, `category`, `subcategory`, `source_url`, `source_type`,
+`as_of`, `confidence`.
+
+> `grounded: true` means every id and figure in the answer traces to a retrieved
+> row. It does **not** mean the answer is correct — a false claim carrying a
+> valid citation still passes. See `docs/decisions.md` 0007. A client should not
+> present `grounded: true` to a user as a correctness guarantee.

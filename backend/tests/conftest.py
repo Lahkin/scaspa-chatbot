@@ -20,11 +20,28 @@ class AxisEmbeddings(Embeddings):
 
     Each text is mapped to a unit vector on one axis by topic. Same topic means
     an identical vector (cosine distance 0); different topics mean orthogonal
-    vectors (cosine distance 1). That makes score *direction* assertable without
-    depending on a real embedding model.
+    vectors (cosine distance 1). That makes score *direction* and the
+    low-confidence short-circuit assertable without an embedding model.
+
+    The off-topic axes matter as much as the on-topic ones: without a `beach`
+    axis, "which beach should I visit?" collapsed onto the same catch-all axis
+    as the contact row and scored a perfect 1.0. A fake this crude cannot say
+    anything about real retrieval *quality* — it only exercises the mechanics.
     """
 
-    _AXES = ("ferry", "cargo", "cruise", "airport")
+    # On-topic axes first, then off-topic ones a stress test will probe.
+    _AXES = (
+        "ferry",
+        "cargo",
+        "cruise",
+        "airport",
+        "contact",
+        "beach",
+        "hotel",
+        "restaurant",
+        "duty",
+        "radio",
+    )
 
     def _vector(self, text: str) -> list[float]:
         lowered = text.lower()
