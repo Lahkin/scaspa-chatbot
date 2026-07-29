@@ -1,0 +1,31 @@
+# ---- Secrets: never commit ----
+.env
+.env.*
+!.env.example
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+# uv.lock IS committed — CI installs from it for reproducible builds.
+
+# ---- Tooling caches ----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ---- Generated data ----
+# Vector index and scraped pages are build artifacts, not source.
+data/chroma/*
+!data/chroma/.gitkeep
+data/scraped/*
+!data/scraped/.gitkeep
+
+# ---- OS / editor ----
+.DS_Store
+.idea/
+.vscode/

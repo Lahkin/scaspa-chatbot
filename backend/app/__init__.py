@@ -1,0 +1,1 @@
+"""SCASPA assistant backend."""
