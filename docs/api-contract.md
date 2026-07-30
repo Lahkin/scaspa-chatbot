@@ -106,7 +106,7 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 | `refusal` | `boolean` | True when the assistant declined |
 | `refusal_category` | `string \| null` | `vessel_or_aircraft_operations`, `personal_record`, or null |
 | `citations` | `Citation[]` | Verified sources, built from stored metadata |
-| `chart` | `ChartSpec \| null` | **Always null today.** Arriving in Prompt 8 |
+| `chart` | `ChartSpec \| null` | A chart to render, or null. Usually null |
 | `tool_calls` | `ToolCall[]` | Tools the agent used this turn, in order |
 | `meta` | `ResponseMeta` | Diagnostics |
 
@@ -116,8 +116,53 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 `ResponseMeta`: `request_id`, `latency_ms`, `retrieved_count`, `best_score`,
 `cited_ids`, `hallucinated_citations`, `unverified_figures`, `kb_version`.
 
-`ChartSpec` (declared, not yet emitted): `kind` (`bar`|`line`|`pie`), `title`,
-`labels[]`, `series[]`, `source_ids[]`.
+`ChartSpec`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `type` | `"line" \| "bar" \| "area"` | Nothing else is supported |
+| `title` | `string` | Short, factual |
+| `x_label` | `string` | X axis label |
+| `y_label` | `string` | Y axis label, including units |
+| `series` | `ChartSeries[]` | 1–4 series |
+| `caption` | `string` | **Always present.** States whether figures are official or illustrative |
+| `source` | `string` | The single `kb-xxx` row every figure came from |
+
+`ChartSeries`: `name`, `points[]`. `ChartPoint`: `x` (`string \| number`), `y`
+(`number`). Maximum 40 points per series — beyond that it is unreadable on a
+phone, which is where the users are.
+
+**Render the `caption`.** It is mandatory server-side and it is the only way a
+reader can tell a published tariff from an illustration. A chart is believed more
+readily than a sentence, so a chart without its caption is worse than no chart.
+
+Every numeric value in `series` has been checked against the text of the `source`
+row before this object was built. The model describes a chart; it never draws one
+and it cannot put a number in one that the knowledge base does not contain. See
+`docs/decisions.md` 0014.
+
+Example:
+
+```json
+{
+  "type": "bar",
+  "title": "Monthly cruise passengers",
+  "x_label": "Month",
+  "y_label": "Passengers",
+  "series": [
+    {
+      "name": "Cruise passengers",
+      "points": [
+        { "x": "January", "y": 1111 },
+        { "x": "February", "y": 2222 },
+        { "x": "March", "y": 3333 }
+      ]
+    }
+  ],
+  "caption": "Illustrative sample figures, not official SCASPA statistics.",
+  "source": "kb-101"
+}
+```
 
 `ToolCall`: `name`, `summary`, `ms`. `summary` is written to be rendered
 directly, e.g. `"Searching SCASPA knowledge base — ferry fares"`.
@@ -257,7 +302,7 @@ event: tool_end    → { "name", "summary", "ms" }
 event: token       → { "text": "..." }              (repeated)
 event: replace     → { "text": "..." }              (rare — see below)
 event: citations   → { "citations": [ Citation ] }
-event: chart       → ChartSpec                      (not emitted yet — Prompt 8)
+event: chart       → ChartSpec                      (only when there is a chart)
 event: done        → { "latency_ms", "grounded", "refusal", "kb_version" }
 event: error       → { "code", "message", "request_id" }
 ```
@@ -289,6 +334,12 @@ The five tools, so you can pick an icon per `name`:
 | `make_chart` | Building a chart |
 | `calculate` | Doing arithmetic on retrieved figures |
 | `escalate_to_human` | Fetching SCASPA contact details |
+
+### The `chart` event
+
+Sent after `citations` and **always before `done`**, and only when the agent built
+a chart. The payload is a complete `ChartSpec` — same shape as the `chart` field
+on `POST /api/chat`. Most turns have no chart and no such event.
 
 ### The `replace` event
 

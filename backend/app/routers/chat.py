@@ -64,8 +64,7 @@ def _to_response(
         refusal=result.refusal,
         refusal_category=result.refusal_category,
         citations=[Citation(**c.model_dump()) for c in result.citations],
-        # chart stays null until Prompt 8.
-        chart=None,
+        chart=result.chart,
         tool_calls=[ToolCall(name=t.name, summary=t.summary, ms=t.ms) for t in result.tool_calls],
         meta=ResponseMeta(
             request_id=request_id,

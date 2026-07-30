@@ -48,6 +48,7 @@ from app.agent.prompts import (
 )
 from app.config import Settings, get_settings
 from app.rag.retriever import RetrievedChunk
+from app.schemas import ChartSpec
 from app.upstream import call_with_retry
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,9 @@ class AnswerResult(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     hit_tool_limit: bool = False
+    chart: ChartSpec | None = Field(
+        default=None, description="Validated chart spec, or None. Never built from model text"
+    )
     best_score: float = 0.0
     model: str | None = None
     latency_ms: int = 0
@@ -499,6 +503,7 @@ def _from_turn(
     result.tool_calls = tool_calls
     result.prompt_tokens = turn.prompt_tokens
     result.completion_tokens = turn.completion_tokens
+    result.chart = turn.chart
     return result
 
 
@@ -601,6 +606,10 @@ async def astream_answer(
         yield "replace", {"text": result.answer}
 
     yield "citations", {"citations": [c.model_dump() for c in result.citations]}
+    # A chart, if make_chart validated one. Always before `done` so a client can
+    # render it in the same frame as the finished answer.
+    if result.chart is not None:
+        yield "chart", result.chart.model_dump()
     yield "done", _done_payload(result, settings)
 
 

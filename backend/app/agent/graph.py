@@ -52,6 +52,7 @@ from app.agent.prompts import render_system_prompt
 from app.agent.tools import ALL_TOOLS, RetrievedChunk, ToolCallRecord, TurnContext, turn_context
 from app.config import Settings, get_settings
 from app.rag.store import KB_COLLECTION, WEB_COLLECTION, get_store, search
+from app.schemas import ChartSpec
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class AgentTurnResult:
     completion_tokens: int = 0
     model_calls: int = 0
     hit_tool_limit: bool = False
+    chart: ChartSpec | None = None
 
 
 def build_agent(
@@ -177,6 +179,9 @@ def _finish(context: TurnContext, answer: str, result: AgentTurnResult) -> Agent
     """Copy turn state onto the result and apply the cap substitution."""
     result.tool_calls = list(context.tool_calls)
     result.retrieved = dict(context.retrieved)
+    # Taken from the turn, not from model output: make_chart already validated
+    # every figure against a retrieved row.
+    result.chart = context.chart
     if answer.startswith(TOOL_LIMIT_MARKER):
         result.hit_tool_limit = True
         result.answer = ""

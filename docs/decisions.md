@@ -877,3 +877,99 @@ isolation fixture.
   the text that produces it.
 - **Caching in memory only.** Rejected: it would be paid for again after every
   restart, and restarts during rehearsal are frequent.
+
+
+---
+
+## 0014 — Charts: the model describes, the frontend draws, and the numbers are checked
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+### The separation
+
+`make_chart` returns a specification, not a picture. The frontend renders it.
+That keeps charts on-brand and consistent, and it means a model cannot draw
+nonsense — it can only *describe* a chart, and every number in the description is
+verified before the object exists.
+
+Field names mirror the frontend types exactly (`type`, `title`, `x_label`,
+`y_label`, `series[].points[]`, `caption`, `source`) and a test pins the field set
+so a rename fails here rather than silently breaking rendering.
+
+### Grounding is in code, not in the prompt
+
+Two checks, both inside the tool:
+
+1. **`source_kb_id` must be among the rows retrieved this turn.** If not, the tool
+   returns an error naming the rows that *were* retrieved and telling the agent to
+   search first.
+2. **Every numeric value must appear in that row's text.** Not just `y` values —
+   a year on the x axis is a figure too. A value that is not in the row is
+   rejected with an explicit instruction not to calculate, convert, round or
+   estimate one.
+
+The reason for the strictness, from the handbook: an invented tariff rendered as a
+confident bar chart is the single most dangerous output this product could
+produce, because someone will budget against it. A wrong sentence gets questioned;
+a wrong chart gets screenshotted.
+
+Number matching reuses the lesson from the rule-10 verbatim check. `44` is a
+substring of `44.44`, so a plain substring test would let a chart understate a
+fare by a factor of a thousand. Lookarounds require a complete figure. Equally,
+`12,407,059` and `12407059` are the same number, so several written forms are
+accepted — refusing a figure that genuinely is in the row would push the agent
+toward not charting at all, which is a different failure.
+
+### Captions are a validator, not a request
+
+`ChartSpec` will not validate without a caption, and the caption must contain a
+provenance word — official, published, audited, illustrative, estimated, sample.
+"Monthly passengers at Port Zante" is rejected: it tells a reader nothing about
+whether the numbers are real.
+
+Additionally, if the **source row** reads as illustrative (it says SAMPLE DATA,
+placeholder, estimated, approximate), the caption must say so too. So a chart
+drawn from the current fixture rows can never claim to be official — which is the
+correct behaviour while the real statistics are still outstanding.
+
+The empty-caption case is checked *before* the illustrative rule. Initially it was
+not, and an agent that omitted the caption entirely was told to "mention that the
+figures are illustrative" — correct rejection, useless guidance.
+
+### Caps
+
+`line`, `bar`, `area` only. At most 4 series and 40 points. The users are on a
+phone on a pier; a 12-series chart is not a chart there.
+
+### The chart object never passes through model output
+
+`make_chart` stores the validated `ChartSpec` on the per-turn context. The router
+reads it from there. The tool returns only a short confirmation string to the
+model, so the model cannot edit a chart after its figures have been checked — the
+same reason citations are built from stored metadata rather than from answer text.
+
+### On the data
+
+The handbook's chart subjects — cruise passenger arrivals by month, vessel calls
+per year, cargo tonnage over time, flights per month through RLB, a tariff
+comparison by container size, and a cruise-call timeline — need **real rows built
+with the researchers**, each with a source and an `as_of` date. They were not
+invented here.
+
+`data/knowledge/sample_charts_kb.csv` holds five fixture rows covering those
+subjects with deliberately implausible figures (1111, 2222, 111.11) so the
+chart path can be tested. Its header says plainly that real rows must come from
+the annual reports or the published tariff schedule. It is a separate file from
+`sample_kb.csv` so adding it did not churn the existing fixture assertions.
+
+### Alternatives considered
+
+- **Multiple source rows per chart.** Rejected for now: with one row, "does this
+  number appear in the source" is a question with a definite answer. Across
+  several rows a figure could be verified against a row that has nothing to do
+  with the series it sits in. Revisit only with a per-series source.
+- **Allowing pie charts.** Rejected: they are hard to read on a phone and easy to
+  mislead with, and three types are enough for every subject on the handbook list.
+- **Letting the model pass a pre-built ChartSpec as JSON.** Rejected: it puts the
+  chart in model output, which is exactly where it cannot be trusted.

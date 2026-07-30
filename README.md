@@ -30,7 +30,7 @@ are documented placeholders. See [docs/architecture.md](docs/architecture.md).
 | Conversation memory (in-process, not persisted) | Working |
 | Lint, format, tests, CI | Working |
 | Voice: `POST /api/stt`, `POST /api/tts` | Working |
-| Charts | Not implemented |
+| Charts (`make_chart` -> `ChartSpec`) | Working |
 
 The full API contract for the frontend team is
 [docs/api-contract.md](docs/api-contract.md).
@@ -119,7 +119,7 @@ and may chain several in one turn. Built with LangChain v1's `create_agent`.
 | --- | --- |
 | `search_scaspa_knowledge` | Verified facts: ferry, cruise, cargo, tariffs, airport, contacts |
 | `search_site_content` | scaspa.com pages and PDFs — empty until the scraper runs |
-| `make_chart` | Port activity over time; values must come from retrieved rows |
+| `make_chart` | A ChartSpec the frontend renders. Every figure checked against the source row |
 | `calculate` | Exact arithmetic on retrieved figures. AST whitelist, never `eval` |
 | `escalate_to_human` | SCASPA contact details |
 
@@ -133,6 +133,30 @@ Guardrails that survive agency:
 - Citations are validated against the **union of every id every search tool
   returned this turn**, so multi-tool answers are still fully verified.
 - Every turn logs tool count, tool names in order, token counts and latency.
+
+### Charts
+
+The model never draws a chart — it describes one, and the frontend renders it.
+`make_chart` enforces two rules in code, not in the prompt:
+
+1. The `source_kb_id` must be a row retrieved during that turn.
+2. **Every number** in the chart must appear in that row's text — y values and
+   numeric x values alike. A calculated total, a rounded fare or a converted
+   figure is rejected with an instruction to say "I don't have the data" instead.
+
+Captions are mandatory and must state whether the figures are official or
+illustrative, enforced by a Pydantic validator. If the source row itself reads as
+illustrative, the caption must say so — so a chart from the fixture rows can never
+claim to be official.
+
+An invented tariff drawn as a confident bar chart is the most dangerous thing this
+product could emit: a wrong sentence gets questioned, a wrong chart gets
+screenshotted and budgeted against. Details in
+[docs/decisions.md](docs/decisions.md) 0014.
+
+The handbook's chart subjects need **real knowledge-base rows built with the
+researchers**. `data/knowledge/sample_charts_kb.csv` holds fixture rows with
+obviously-fake figures so the path can be tested; it is not demo data.
 
 Deploying? Read [docs/deploy.md](docs/deploy.md) first — it explains why you must
 not deploy with the fixture knowledge base.

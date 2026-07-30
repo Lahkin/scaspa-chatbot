@@ -129,44 +129,8 @@ def test_calculate_refuses_an_attack_without_raising(tmp_settings) -> None:
 
 
 # ------------------------------------------------------------- make_chart tool
-
-
-def test_make_chart_rejects_ids_that_were_not_retrieved(tmp_settings) -> None:
-    """Chart numbers must come from rows the agent actually looked up."""
-    from app.agent.tools import make_chart
-
-    with turn_context(settings=tmp_settings):
-        out = make_chart.invoke(
-            {
-                "kind": "bar",
-                "title": "Invented figures",
-                "labels": ["2024", "2025"],
-                "series_name": "Cruise calls",
-                "values": [10.0, 20.0],
-                "source_ids": ["kb-999"],
-            }
-        )
-
-    assert "Rejected" in out
-    assert "kb-999" in out
-
-
-def test_make_chart_rejects_mismatched_lengths(tmp_settings) -> None:
-    from app.agent.tools import make_chart
-
-    with turn_context(settings=tmp_settings):
-        out = make_chart.invoke(
-            {
-                "kind": "bar",
-                "title": "Wrong shape",
-                "labels": ["2024", "2025"],
-                "series_name": "Calls",
-                "values": [10.0],
-                "source_ids": [],
-            }
-        )
-
-    assert "Rejected" in out
+# make_chart has its own suite in tests/test_charts.py, where the grounding rules
+# and the four negative cases are covered in full.
 
 
 # ------------------------------------------------------------- turn context

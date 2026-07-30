@@ -36,20 +36,94 @@ class Citation(BaseModel):
     confidence: str = Field(default="", description="Always 'confirmed' for indexed rows")
 
 
-class ChartSpec(BaseModel):
-    """A chart the frontend should render.
+ChartType = Literal["line", "bar", "area"]
 
-    **Always `null` today.** Declared so the response shape is final. Arriving in
-    Prompt 8.
+MAX_SERIES = 4
+MAX_POINTS = 40
+
+# A caption must say where the figures came from. Without one, a reader cannot
+# tell a published tariff from an illustration — and a chart is believed far more
+# readily than a sentence.
+PROVENANCE_WORDS = (
+    "official",
+    "published",
+    "audited",
+    "illustrative",
+    "illustration",
+    "estimate",
+    "estimated",
+    "approximate",
+    "sample",
+    "placeholder",
+    "not real",
+)
+
+
+class ChartPoint(BaseModel):
+    """One point. `x` is a label or a number; `y` is always numeric."""
+
+    x: str | float = Field(description="Category or position on the x axis")
+    y: float = Field(description="The value. Must appear in the source knowledge-base row")
+
+
+class ChartSeries(BaseModel):
+    """One named line, bar group or band."""
+
+    name: str = Field(min_length=1, description="Series label shown in the legend")
+    points: list[ChartPoint] = Field(
+        min_length=1,
+        max_length=MAX_POINTS,
+        description=f"1–{MAX_POINTS} points. Beyond that it is unreadable on a phone",
+    )
+
+
+class ChartSpec(BaseModel):
+    """A chart specification. The model never draws; the frontend renders this.
+
+    That separation is why charts stay on-brand and consistent, and why a model
+    cannot hallucinate a chart into nonsense — it can only describe one, and every
+    number it describes is checked against a retrieved knowledge-base row before
+    this object is ever built.
+
+    Field names mirror the frontend types exactly. Do not rename one.
     """
 
-    kind: Literal["bar", "line", "pie"] = Field(description="Chart type to render")
-    title: str = Field(description="Human-readable chart title")
-    labels: list[str] = Field(default_factory=list, description="Category axis labels")
-    series: list[dict] = Field(default_factory=list, description="Named series of values")
-    source_ids: list[str] = Field(
-        default_factory=list, description="kb ids the chart data was built from"
+    type: ChartType = Field(description="line, bar or area. Nothing else is supported")
+    title: str = Field(min_length=1, description="Short, factual chart title")
+    x_label: str = Field(min_length=1, description="X axis label")
+    y_label: str = Field(min_length=1, description="Y axis label, including units")
+    series: list[ChartSeries] = Field(
+        min_length=1, max_length=MAX_SERIES, description=f"1–{MAX_SERIES} series"
     )
+    caption: str = Field(
+        min_length=1,
+        description=(
+            "Mandatory. Must state whether the figures are official/published or "
+            "illustrative/estimated."
+        ),
+    )
+    source: str = Field(
+        min_length=1, description="The knowledge-base row id the figures came from, e.g. kb-014"
+    )
+
+    @field_validator("caption")
+    @classmethod
+    def _caption_states_provenance(cls, v: str) -> str:
+        """A caption that does not say where the numbers came from is not enough.
+
+        Enforced here rather than asked for in the prompt, because a chart is
+        believed more readily than a sentence and this is the one thing a reader
+        cannot infer from the picture.
+        """
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("caption is required")
+        if not any(word in stripped.lower() for word in PROVENANCE_WORDS):
+            raise ValueError(
+                "caption must say whether the figures are official/published or "
+                "illustrative/estimated — a reader cannot tell from the chart alone"
+            )
+        return stripped
 
 
 class ToolCall(BaseModel):

@@ -1,0 +1,22 @@
+# ============================================================================
+# FIXTURES ONLY — NOT REAL SCASPA STATISTICS. DO NOT INDEX FOR A DEMO.
+#
+# Time-series and comparison rows used to exercise make_chart. Every figure here
+# is invented and deliberately implausible (1111, 2222, 111.11). All source_url
+# values point at https://example.invalid/.
+#
+# The handbook lists these chart subjects — cruise passenger arrivals, vessel
+# calls per year, cargo tonnage, flights per month, a tariff comparison by
+# container size, and a cruise-call timeline. Real rows for them must be built
+# WITH THE RESEARCHERS from the annual reports or the published tariff schedule,
+# each with a source and an as_of date. Do not invent them.
+#
+# Note every answer says "illustrative", so make_chart requires the caption to
+# say so too. A chart drawn from these rows can never claim to be official.
+# ============================================================================
+id,category,subcategory,question,answer,keywords,audience,source_url,source_type,as_of,volatility,confidence,notes
+kb-101,cruise,statistics,How many cruise passengers arrive each month?,"SAMPLE DATA — illustrative figures, not real. Placeholder monthly cruise passengers: January 1111, February 2222, March 3333, April 4444, May 555, June 666.",cruise passengers|arrivals by month|passenger numbers|season,business,https://example.invalid/statistics/cruise-passengers,official-pdf,2026-06-01,low,confirmed,FIXTURE ONLY — invented monthly series for chart testing
+kb-102,cargo,statistics,How many vessel calls does SCASPA handle per year?,"SAMPLE DATA — illustrative figures, not real. Placeholder vessel calls per year: 2022 111, 2023 222, 2024 333, 2025 444.",vessel calls|ship calls per year|port traffic,business,https://example.invalid/statistics/vessel-calls,official-pdf,2026-06-01,low,confirmed,FIXTURE ONLY — invented annual series
+kb-103,cargo,statistics,What is the annual cargo tonnage at the Deep Water Harbour?,"SAMPLE DATA — illustrative figures, not real. Placeholder cargo tonnage: 2022 11111, 2023 22222, 2024 33333.",cargo tonnage|tonnes handled|freight volume,business,https://example.invalid/statistics/cargo-tonnage,official-pdf,2026-06-01,low,confirmed,FIXTURE ONLY — invented tonnage series
+kb-104,airport,statistics,How many flights pass through RLB each month?,"SAMPLE DATA — illustrative figures, not real. Placeholder flights per month: January 77, February 88, March 99.",flights per month|air traffic|rlb movements,business,https://example.invalid/statistics/flights,official-pdf,2026-06-01,low,confirmed,FIXTURE ONLY — invented flight counts
+kb-105,cargo,tariffs,What does container handling cost by container size?,"SAMPLE DATA — illustrative figures, not real. Placeholder handling charges by size: 20 foot XCD 111.11, 40 foot XCD 222.22, 45 foot XCD 333.33.",container tariff|handling by size|teu charge|40 foot,cargo,https://example.invalid/tariffs/containers,official-pdf,2026-06-01,medium,confirmed,FIXTURE ONLY — invented tariff comparison

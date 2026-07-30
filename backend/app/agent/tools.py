@@ -21,6 +21,7 @@ every id recorded here.
 import ast
 import logging
 import operator
+import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -30,12 +31,13 @@ from typing import Annotated, Any
 
 from langchain.tools import tool
 from langchain_core.embeddings import Embeddings
-from pydantic import BaseModel, Field
+from pydantic import ValidationError
 
 from app.agent.prompts import ESCALATION_BLOCK
 from app.config import Settings, get_settings
 from app.rag.retriever import RetrievedChunk, retrieve
 from app.rag.store import WEB_COLLECTION, get_store, search
+from app.schemas import ChartPoint, ChartSeries, ChartSpec
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,9 @@ class TurnContext:
     embeddings: Embeddings | None = None
     retrieved: dict[str, RetrievedChunk] = field(default_factory=dict)
     tool_calls: list[ToolCallRecord] = field(default_factory=list)
+    # Set by make_chart after validation. The model never sees or edits this
+    # object, so it cannot alter a chart once the figures have been checked.
+    chart: "ChartSpec | None" = None
 
     def record_chunks(self, chunks: list[RetrievedChunk]) -> None:
         """Accumulate retrieved rows across every search in this turn.
@@ -238,76 +243,190 @@ def search_site_content(
 # --------------------------------------------------------------------- 3 of 5
 
 
-class ChartSeries(BaseModel):
-    """One named series of numbers."""
+# Wording in a source row that means the figures are not authoritative. If the
+# row says this, the caption must say it too.
+_ILLUSTRATIVE_MARKERS = (
+    "sample data",
+    "placeholder",
+    "illustrative",
+    "estimate",
+    "estimated",
+    "approx",
+    "not real",
+    "fictional",
+    "example only",
+)
+_ILLUSTRATIVE_CAPTION_WORDS = (
+    "illustrative",
+    "illustration",
+    "estimate",
+    "estimated",
+    "approximate",
+    "sample",
+    "placeholder",
+    "not real",
+)
 
-    name: str
-    values: list[float]
+
+def number_forms(value: float) -> list[str]:
+    """Every way a figure might legitimately be written in a row.
+
+    `12407059` could appear as `12407059` or `12,407,059`; `44.0` as `44` or
+    `44.0`. Checking only one spelling would reject figures that really are in
+    the source, which would push the agent toward not charting at all.
+    """
+    forms: list[str] = []
+    if value == int(value):
+        whole = int(value)
+        forms += [str(whole), f"{whole:,}", f"{whole}.0", f"{whole:,}.0"]
+    else:
+        text = f"{value:g}"
+        forms.append(text)
+        forms.append(f"{value:,.2f}")
+        forms.append(f"{value:.2f}")
+        if "." in text:
+            integer_part, decimal_part = text.split(".", 1)
+            forms.append(f"{int(integer_part):,}.{decimal_part}")
+    # Longest first, so 44.44 is tried before 44.
+    return sorted(dict.fromkeys(forms), key=len, reverse=True)
 
 
-class ChartSpecModel(BaseModel):
-    """Validated chart specification returned by make_chart."""
+def figure_in_text(value: float, text: str) -> bool:
+    """Whether `value` appears in `text` as a complete figure.
 
-    kind: str = Field(pattern="^(bar|line|pie)$")
-    title: str = Field(min_length=1)
-    labels: list[str] = Field(min_length=1)
-    series: list[ChartSeries] = Field(min_length=1)
-    source_ids: list[str] = Field(min_length=1)
+    Lookarounds, not a substring test. `44` is a substring of `44.44`, and
+    accepting that would let a chart claim a fare of 44 from a row that says
+    44.44 — the same trap the rule-10 verbatim check hit.
+    """
+    for form in number_forms(value):
+        if re.search(rf"(?<![\d.,]){re.escape(form)}(?![\d.,]?\d)", text):
+            return True
+    return False
 
 
 @tool
 def make_chart(
-    kind: Annotated[str, "One of: bar, line, pie."],
+    chart_type: Annotated[str, "One of: line, bar, area. Nothing else is supported."],
     title: Annotated[str, "A short, factual chart title."],
-    labels: Annotated[list[str], "Category labels, e.g. months or years."],
-    series_name: Annotated[str, "What the numbers measure, e.g. 'Cruise calls'."],
-    values: Annotated[list[float], "The numbers, one per label. Must come from retrieved rows."],
-    source_ids: Annotated[list[str], "The [kb-xxx] ids these numbers were taken from."],
+    x_label: Annotated[str, "X axis label, e.g. 'Month' or 'Container size'."],
+    y_label: Annotated[str, "Y axis label including units, e.g. 'Passengers' or 'XCD'."],
+    series_name: Annotated[str, "What the numbers measure, e.g. 'Cruise passengers'."],
+    x_values: Annotated[list[str], "Category labels, one per number. Max 40."],
+    y_values: Annotated[list[float], "The figures. Each MUST appear in the source row."],
+    caption: Annotated[
+        str,
+        "Required. Must say whether the figures are official/published or illustrative/estimated.",
+    ],
+    source_kb_id: Annotated[str, "The single [kb-xxx] row these figures came from."],
 ) -> str:
-    """Chart SCASPA port activity over time — cruise calls, cargo volumes, passengers by period.
+    """Describe a chart of SCASPA activity over time — passengers, vessel calls, tonnage, tariffs.
 
-    Use this ONLY when the user asks to see a trend or a comparison over time, and only
-    after you have already retrieved the numbers with search_scaspa_knowledge.
+    You do not draw the chart. You describe it, and the interface renders it.
 
-    Every value you pass must appear in a row you actually retrieved this turn, and every
-    id in source_ids must be one of those rows. Numbers you worked out yourself, estimated,
-    or remembered are not allowed and will be rejected. If you do not have the figures,
-    do not call this tool — say you do not have the data.
+    Use this ONLY when the user asks to see a trend or a comparison, and ONLY after
+    search_scaspa_knowledge has returned a row that actually contains the figures.
+
+    Every number you pass is checked against the text of the row you name in
+    source_kb_id. A figure that is not in that row is rejected — including one you
+    worked out, converted, rounded or remembered. There is no way to chart a number
+    the knowledge base does not contain, and that is deliberate: an invented tariff
+    drawn as a confident bar chart is the most dangerous thing this assistant could
+    produce, because someone will budget against it.
+
+    If you do not have the figures, do not call this tool. Say you do not have the data.
     """
     context = current_turn()
     summary = f"Building chart — {title[:60]}"
     with _timed("make_chart", summary):
-        if len(values) != len(labels):
+        if len(y_values) != len(x_values):
             return (
-                f"Rejected: {len(values)} values for {len(labels)} labels. "
+                f"Rejected: {len(y_values)} values for {len(x_values)} labels. "
                 "Provide exactly one value per label."
             )
 
-        # Every figure must be traceable to a row retrieved this turn.
-        unknown = [i for i in source_ids if i not in context.retrieved_ids]
-        if unknown:
+        # --- 1. the source row must have been retrieved this turn ---
+        chunk = context.retrieved.get(source_kb_id)
+        if chunk is None:
+            available = ", ".join(sorted(context.retrieved_ids)) or "nothing yet"
             return (
-                f"Rejected: {', '.join(unknown)} was not retrieved this turn. "
-                "Chart data must come from rows you have actually looked up. "
-                "Search first, then chart."
+                f"Rejected: {source_kb_id} was not retrieved this turn. "
+                f"Search first with search_scaspa_knowledge, then chart from a row it "
+                f"returned. Rows retrieved so far: {available}."
+            )
+
+        # --- 2. every figure must appear in that row's text ---
+        missing = [v for v in y_values if not figure_in_text(v, chunk.text)]
+        # A numeric x value is a figure too.
+        for raw in x_values:
+            try:
+                numeric = float(str(raw).replace(",", ""))
+            except ValueError:
+                continue
+            if not figure_in_text(numeric, chunk.text):
+                missing.append(numeric)
+
+        if missing:
+            shown = ", ".join(f"{v:g}" for v in dict.fromkeys(missing))
+            logger.warning("chart_rejected_ungrounded source=%s missing=%s", source_kb_id, shown)
+            return (
+                f"Rejected: {shown} does not appear in {source_kb_id}. You may only chart "
+                f"figures that are present in the knowledge base. Do not calculate, convert, "
+                f"round or estimate a value for a chart — if the figure is not in a retrieved "
+                f"row, say you do not have the data instead."
+            )
+
+        # --- 3. a caption is mandatory ---
+        # Checked before the illustrative rule so an empty caption is told it is
+        # missing, rather than being told to mention "illustrative".
+        if not caption.strip():
+            return (
+                "Rejected: a caption is required. It must state whether the figures are "
+                "official/published or illustrative/estimated — a reader cannot tell from "
+                "the chart alone."
+            )
+
+        # --- 4. an illustrative source needs an illustrative caption ---
+        row_text = chunk.text.lower()
+        if any(marker in row_text for marker in _ILLUSTRATIVE_MARKERS) and not any(
+            word in caption.lower() for word in _ILLUSTRATIVE_CAPTION_WORDS
+        ):
+            return (
+                f"Rejected: {source_kb_id} contains illustrative or estimated figures, so the "
+                "caption must say so. Rewrite the caption to state that the figures are "
+                "illustrative, not official."
             )
 
         try:
-            spec = ChartSpecModel(
-                kind=kind,
+            spec = ChartSpec(
+                type=chart_type,
                 title=title,
-                labels=labels,
-                series=[ChartSeries(name=series_name, values=values)],
-                source_ids=source_ids,
+                x_label=x_label,
+                y_label=y_label,
+                series=[
+                    ChartSeries(
+                        name=series_name,
+                        points=[
+                            ChartPoint(x=x, y=y) for x, y in zip(x_values, y_values, strict=True)
+                        ],
+                    )
+                ],
+                caption=caption,
+                source=source_kb_id,
             )
-        except ValueError as exc:
-            return f"Rejected: {exc}"
+        except ValidationError as exc:
+            reasons = "; ".join(
+                f"{'.'.join(str(p) for p in e['loc'])}: {e['msg'].removeprefix('Value error, ')}"
+                for e in exc.errors()
+            )
+            return f"Rejected: {reasons}"
 
-        # Prompt 8 attaches this to the response; for now it is validated and
-        # reported back so the model knows it succeeded.
+        # Held on the turn, not returned as text. The router attaches it to the
+        # response, so the model cannot alter it after validation.
+        context.chart = spec
         return (
-            f"Chart specification accepted: {spec.kind} chart "
-            f"'{spec.title}' with {len(labels)} points."
+            f"Chart accepted: {spec.type} chart '{spec.title}' with "
+            f"{len(spec.series[0].points)} points from {source_kb_id}. "
+            "It will be rendered for the user; describe it briefly in your answer."
         )
 
 
@@ -462,7 +581,7 @@ ALL_TOOLS = [
 
 __all__ = [
     "ALL_TOOLS",
-    "ChartSpecModel",
+    "ChartSpec",
     "ToolCallRecord",
     "TurnContext",
     "UnsafeExpressionError",
