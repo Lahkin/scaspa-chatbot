@@ -212,6 +212,14 @@ export interface HealthResponse {
 
 /** Switch on `code`, never on `message`. */
 export type ErrorCode =
+  /**
+   * ⚠️ **Not in `docs/api-contract.md`.** The backend emits it (429, per-IP client
+   * rate limiting, `app/errors.py`) and the contract documents only
+   * `UPSTREAM_RATE_LIMITED`, which is a different thing — the model provider
+   * throttling *us*, on a 503. Verified against the running backend; see
+   * `docs/backend-issues.md` #1.
+   */
+  | 'RATE_LIMITED'
   | 'VALIDATION_ERROR'
   | 'INDEX_MISSING'
   | 'RETRIEVAL_EMPTY'

@@ -55,6 +55,16 @@ export const ERROR_COPY: Record<FailureKind, ErrorCopy> = {
     showContact: false,
   },
 
+  RATE_LIMITED: {
+    // The *user* (or their venue's shared IP) has sent a lot of questions. In a
+    // demo where several judges hit the same URL from the same venue IP, this is
+    // the path that fires — so it has to read as deliberate, not broken.
+    title: 'One moment',
+    body: 'A lot of questions have come from this connection just now. The countdown on the Send button shows when you can ask again.',
+    retryable: false,
+    showContact: false,
+  },
+
   UPSTREAM_RATE_LIMITED: {
     title: 'Busy right now',
     // The server has already retried with backoff by the time this arrives, so

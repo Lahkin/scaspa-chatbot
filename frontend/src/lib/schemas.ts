@@ -87,6 +87,8 @@ export const chatResponseSchema = z.object({
 
 export const apiErrorSchema = z.object({
   code: z.enum([
+    // Emitted by the backend, absent from the contract — see lib/types.ts.
+    'RATE_LIMITED',
     'VALIDATION_ERROR',
     'INDEX_MISSING',
     'RETRIEVAL_EMPTY',

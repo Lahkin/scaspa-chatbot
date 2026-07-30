@@ -29,6 +29,7 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
   // A schema mismatch is a contract bug. Retrying re-fetches the same wrong shape.
   if (error.status === 0) return error.offline;
 
+  if (error.code === 'RATE_LIMITED') return false;
   if (error.code === 'UPSTREAM_RATE_LIMITED') return false;
   if (error.code === 'VALIDATION_ERROR') return false;
   if (error.status === 429) return false;

@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { reconcile, type CitationEntry } from './citations';
 import { useChatSession } from './useChatSession';
 import type { ChatMachineState } from './reducer';
@@ -20,6 +28,8 @@ interface ChatSessionValue {
   state: ChatMachineState;
   /** `thinking` or `streaming`. The composer disables and offers Stop. */
   busy: boolean;
+  /** True when the browser says there is no connection. */
+  offline: boolean;
   send: (text: string) => Promise<void>;
   stop: () => void;
   dismissError: () => void;
@@ -56,8 +66,30 @@ export function useChatSessionContext(): ChatSessionValue {
   return value;
 }
 
+/**
+ * `navigator.onLine`, as a store.
+ *
+ * Conclusive only when false. True proves nothing — a captive portal answers DNS
+ * and drops the rest — which is why a failed fetch is the other half of the
+ * signal and is treated as authoritative in `useChatSession`.
+ */
+function subscribeToOnline(onChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener('online', onChange);
+  window.addEventListener('offline', onChange);
+  return () => {
+    window.removeEventListener('online', onChange);
+    window.removeEventListener('offline', onChange);
+  };
+}
+
 export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const session = useChatSession();
+  const online = useSyncExternalStore(
+    subscribeToOnline,
+    () => (typeof navigator === 'undefined' ? true : navigator.onLine),
+    () => true
+  );
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [scrollTo, setScrollTo] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -94,6 +126,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     () => ({
       ...session,
       busy: session.state.status === 'thinking' || session.state.status === 'streaming',
+      offline: !online,
       entries,
       highlighted,
       setHighlighted,
@@ -103,7 +136,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       openSource,
       thinkingSince,
     }),
-    [session, entries, highlighted, scrollTo, panelOpen, openSource, thinkingSince]
+    [session, online, entries, highlighted, scrollTo, panelOpen, openSource, thinkingSince]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

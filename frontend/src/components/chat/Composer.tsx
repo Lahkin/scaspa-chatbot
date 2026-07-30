@@ -12,6 +12,10 @@ interface ComposerProps {
   onSend: (text: string) => void;
   onStop: () => void;
   busy: boolean;
+  /** Seconds until another question may be sent, from `Retry-After`. */
+  cooldownS?: number | null | undefined;
+  /** The browser reports no connection. */
+  offline?: boolean | undefined;
 }
 
 /** The contract rejects anything longer, so the cap is enforced before the round trip. */
@@ -46,7 +50,13 @@ export const COUNTER_VISIBLE_FROM = 900;
  * real keyboard, and treating it as a phone would break Enter-to-send for someone
  * who just resized their browser.
  */
-export function Composer({ onSend, onStop, busy }: ComposerProps) {
+export function Composer({
+  onSend,
+  onStop,
+  busy,
+  cooldownS = null,
+  offline = false,
+}: ComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const draft = useSyncExternalStore(subscribeToDraft, getDraft, getDraftServerSnapshot);
   const coarsePointer = useCoarsePointer();
@@ -64,7 +74,8 @@ export function Composer({ onSend, onStop, busy }: ComposerProps) {
   const trimmed = draft.trim();
   const overCap = draft.length > MAX_LENGTH;
   const empty = trimmed.length === 0;
-  const canSend = !busy && !empty && !overCap;
+  const rateLimited = cooldownS !== null && cooldownS > 0;
+  const canSend = !busy && !empty && !overCap && !rateLimited && !offline;
 
   const submit = () => {
     if (!canSend) return;
@@ -93,8 +104,14 @@ export function Composer({ onSend, onStop, busy }: ComposerProps) {
             placeholder="Ask about ferries, cruise, cargo or the airport"
             value={draft}
             maxRows={6}
-            // Disabled while a request is in flight: a second question sent
-            // mid-answer either races the first or silently replaces it.
+            /*
+             * Disabled only while a request is in flight.
+             *
+             * NOT disabled when offline or rate-limited: someone who is typing a
+             * question on a dead connection should be able to finish the
+             * sentence, and losing a half-written question to a dropped signal is
+             * the most annoying possible outcome. Only *sending* is blocked.
+             */
             disabled={busy}
             aria-describedby={showCounter ? 'composer-counter' : undefined}
             onChange={(event) => setDraft(event.target.value)}
@@ -120,16 +137,25 @@ export function Composer({ onSend, onStop, busy }: ComposerProps) {
           </Button>
         ) : (
           <Button type="submit" disabled={!canSend}>
-            Send
+            {/*
+              The countdown lives on the button because that is what the user is
+              reaching for. A number beside a dismissed error, with an enabled
+              Send next to it, is an invitation to make the rate limit worse.
+            */}
+            {rateLimited ? `Wait ${cooldownS}s` : 'Send'}
           </Button>
         )}
       </div>
 
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-caption text-ink-subtle">
-          {coarsePointer
-            ? 'Tap Send when you are ready.'
-            : 'Enter to send, Shift + Enter for a new line.'}
+          {offline
+            ? 'You are offline. Keep typing — your question is safe and will send when you are back.'
+            : rateLimited
+              ? 'The assistant is busy right now. You can keep typing.'
+              : coarsePointer
+                ? 'Tap Send when you are ready.'
+                : 'Enter to send, Shift + Enter for a new line.'}
         </p>
 
         {showCounter && (

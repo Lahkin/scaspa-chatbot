@@ -109,6 +109,27 @@ const FALLBACK_MESSAGE =
 export async function normaliseError(response: Response): Promise<ApiError> {
   const retryAfter = parseRetryAfter(response.headers.get('Retry-After'));
   const status = response.status;
+
+  /*
+   * `Retry-After` is not a CORS-safelisted response header.
+   *
+   * Cross-origin, JavaScript cannot read it unless the server sends
+   * `Access-Control-Expose-Headers: Retry-After`. When it cannot, the countdown
+   * falls back to a fixed guess and looks exactly like a working one — which is
+   * why this warns rather than staying quiet.
+   *
+   * Measured against the running backend: it exposes only `X-Request-ID`, so the
+   * real 45-second wait arrived as a 30-second guess. Filed as
+   * `docs/backend-issues.md` #5. Not worked around here: guessing better would
+   * hide the bug.
+   */
+  if (import.meta.env.DEV && (status === 429 || status === 503) && retryAfter === null) {
+    console.warn(
+      '[api] a rate-limit response carried no readable Retry-After. If the server ' +
+        'sent one, it is not in Access-Control-Expose-Headers and the browser is ' +
+        'hiding it — the countdown is a guess. Fix is in the backend CORS config.'
+    );
+  }
   const contentType = response.headers.get('Content-Type') ?? '';
 
   const fallback = () =>
@@ -163,7 +184,10 @@ export function parseRetryAfter(header: string | null): number | null {
 function statusToCode(status: number): ErrorCode {
   if (status === 404) return 'NOT_FOUND';
   if (status === 422) return 'VALIDATION_ERROR';
-  if (status === 429 || status === 503) return 'UPSTREAM_RATE_LIMITED';
+  // 429 is the client being limited; 503 is the model provider throttling the
+  // backend. Different causes, different copy.
+  if (status === 429) return 'RATE_LIMITED';
+  if (status === 503) return 'UPSTREAM_RATE_LIMITED';
   if (status === 504) return 'UPSTREAM_TIMEOUT';
   return 'INTERNAL';
 }

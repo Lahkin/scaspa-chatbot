@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import { RouteErrorBoundary } from '@/components/shells/RouteErrorBoundary';
 import { createRootRoute, HeadContent, Link, Outlet, useRouterState } from '@tanstack/react-router';
 
 /**
@@ -70,7 +71,12 @@ function RootLayout() {
     return (
       <>
         <HeadContent />
-        <Outlet />
+        {/* Keyed on the path so navigating away from a crashed route clears the
+            boundary — otherwise the error screen would follow the user to a page
+            that works. */}
+        <RouteErrorBoundary key={pathname} routeName={pathname}>
+          <Outlet />
+        </RouteErrorBoundary>
         <DevMockControls />
       </>
     );
@@ -106,7 +112,9 @@ function RootLayout() {
       </header>
 
       <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
-        <Outlet />
+        <RouteErrorBoundary key={pathname} routeName={pathname}>
+          <Outlet />
+        </RouteErrorBoundary>
       </main>
 
       <footer className="border-t border-border px-4 py-4 text-center text-small text-ink-muted">

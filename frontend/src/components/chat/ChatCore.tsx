@@ -17,7 +17,7 @@ import { ThinkingIndicator } from './ThinkingIndicator';
  * That is why both shells mount this unmodified.
  */
 export function ChatCore() {
-  const { state, busy, send, stop, dismissError, openSource, thinkingSince } =
+  const { state, busy, offline, send, stop, dismissError, openSource, thinkingSince } =
     useChatSessionContext();
 
   const idle = !busy && state.messages.length > 0;
@@ -68,6 +68,8 @@ export function ChatCore() {
             onSend={(text) => void send(text)}
             onStop={stop}
             busy={busy}
+            cooldownS={state.cooldownS}
+            offline={offline}
           />
 
           {/* Below the composer once there is something to follow up on. */}

@@ -39,6 +39,15 @@ export interface ChatMachineState {
    */
   heldText: string;
   transport: Transport | null;
+  /**
+   * Seconds remaining before another question may be sent, or null.
+   *
+   * Set from `Retry-After` on a 429/503. Held in state rather than in the error
+   * panel because it has to disable the *composer* — a countdown next to a
+   * dismissed error, with an enabled send button beside it, is an invitation to
+   * make the rate limit worse.
+   */
+  cooldownS: number | null;
 }
 
 export const initialMachineState: ChatMachineState = {
@@ -50,6 +59,7 @@ export const initialMachineState: ChatMachineState = {
   conversationId: null,
   heldText: '',
   transport: null,
+  cooldownS: null,
 };
 
 export type ChatAction =
@@ -85,6 +95,8 @@ export type ChatAction =
       toolCalls: { name: ToolName; summary: string; ms: number }[];
       conversationId: string;
     }
+  /** One second of the rate-limit cooldown elapsed. Ticked by the hook. */
+  | { type: 'COOLDOWN_TICK' }
   | { type: 'ABORT' }
   | { type: 'DISMISS_ERROR' }
   | { type: 'RESET' };
@@ -235,9 +247,20 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
       return { ...patched, status: 'idle', streamingMessageId: null, heldText: '' };
     }
 
+    case 'COOLDOWN_TICK': {
+      if (state.cooldownS === null) return state;
+      const next = state.cooldownS - 1;
+      return { ...state, cooldownS: next > 0 ? next : null };
+    }
+
     case 'REQUEST_FAILED': {
       const index = state.messages.findIndex((m) => m.id === state.streamingMessageId);
       const streaming = index === -1 ? null : (state.messages[index] as Message);
+      // A rate limit is the one failure that must stop the next attempt too.
+      const cooldownS =
+        action.failure.kind === 'RATE_LIMITED' || action.failure.kind === 'UPSTREAM_RATE_LIMITED'
+          ? (action.failure.retryAfterS ?? 30)
+          : state.cooldownS;
 
       // Nothing arrived, so there is no answer to keep. Drop the empty bubble and
       // report at conversation level rather than leaving a blank one on screen.
@@ -251,6 +274,7 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
           status: 'error',
           error: action.failure,
           heldText: '',
+          cooldownS,
         };
       }
 
@@ -265,7 +289,7 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
           request_id: action.failure.requestId ?? 'client-side',
         },
       }));
-      return { ...patched, status: 'idle', streamingMessageId: null, heldText: '' };
+      return { ...patched, status: 'idle', streamingMessageId: null, heldText: '', cooldownS };
     }
 
     case 'FALLBACK_ANSWER': {

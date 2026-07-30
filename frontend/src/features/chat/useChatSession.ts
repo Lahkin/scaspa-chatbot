@@ -6,6 +6,7 @@ import { clearConversationId, readConversationId, writeConversationId } from './
 import { setDraft } from './draft';
 import { OFFLINE, isNoAnswerCode, type FailureKind } from './errorCopy';
 import { chatReducer, initialMachineState, type Transport } from './reducer';
+import { logTurn, startTurn } from './telemetry';
 import type { ChatFailure } from './types';
 
 /**
@@ -48,6 +49,18 @@ export function useChatSession() {
 
   const abort = useRef<AbortController | null>(null);
   const mounted = useRef(true);
+  /**
+   * Task 3's guard, and it is a ref rather than state on purpose.
+   *
+   * A double tap fires two `onClick`s in the same tick, before React has
+   * re-rendered with `busy: true` — so a check against rendered state would let
+   * the second through. A ref is written synchronously and is therefore the only
+   * thing that can see the first send from inside the second.
+   *
+   * The disabled button is the visible half; this is the half that actually
+   * holds.
+   */
+  const inFlight = useRef(false);
 
   /**
    * Abort on unmount, which covers a route change too.
@@ -63,6 +76,22 @@ export function useChatSession() {
       abort.current?.abort();
     };
   }, []);
+
+  /**
+   * Tick the rate-limit cooldown down to zero.
+   *
+   * In the hook rather than the reducer because a reducer that reads a clock is
+   * no longer replayable, and the replay tests are the insurance on this file.
+   */
+  // Depends on *whether* a cooldown is running, not on its value: depending on
+  // the number would tear down and rebuild the interval on every tick, so each
+  // second would be slightly longer than the last.
+  const cooling = state.cooldownS !== null;
+  useEffect(() => {
+    if (!cooling) return undefined;
+    const timer = setInterval(() => dispatch({ type: 'COOLDOWN_TICK' }), 1000);
+    return () => clearInterval(timer);
+  }, [cooling]);
 
   const toFailure = useCallback((thrown: unknown, question: string): ChatFailure => {
     const api = thrown instanceof ApiError ? thrown : null;
@@ -100,7 +129,7 @@ export function useChatSession() {
     async (question: string, signal: AbortSignal, why: 'configured' | 'fallback') => {
       const answer = await sendMessage(question, readConversationId(), { signal });
       writeConversationId(answer.conversation_id);
-      if (!mounted.current) return;
+      if (!mounted.current) return null;
 
       if (why === 'fallback') {
         // Logged, not shown. Which path answered is the first thing worth knowing
@@ -122,6 +151,7 @@ export function useChatSession() {
         toolCalls: answer.tool_calls,
         conversationId: answer.conversation_id,
       });
+      return answer;
     },
     []
   );
@@ -130,6 +160,12 @@ export function useChatSession() {
     async (text: string) => {
       const question = text.trim();
       if (!question) return;
+      // Double-tap, an Enter held down, a click landing on a re-rendered button.
+      if (inFlight.current) return;
+      // A rate limit stops the next attempt too — retrying one is how you extend
+      // one, and the countdown is meaningless if the send still goes through.
+      if (state.cooldownS !== null) return;
+      inFlight.current = true;
 
       abort.current?.abort();
       const controller = new AbortController();
@@ -145,13 +181,26 @@ export function useChatSession() {
         transport,
       });
 
+      const turn = startTurn();
+
       if (!config.useStreaming) {
         try {
-          await runFetch(question, controller.signal, 'configured');
+          const answer = await runFetch(question, controller.signal, 'configured');
+          if (answer) {
+            logTurn(
+              turn.finish(
+                'fetch',
+                answer.tool_calls.map((tool) => ({ name: tool.name, ms: tool.ms })),
+                answer.answer.length
+              )
+            );
+          }
         } catch (thrown) {
           if (controller.signal.aborted || !mounted.current) return;
           setDraft(question);
           dispatch({ type: 'REQUEST_FAILED', failure: toFailure(thrown, question) });
+        } finally {
+          inFlight.current = false;
         }
         return;
       }
@@ -179,6 +228,10 @@ export function useChatSession() {
       // Nothing has arrived yet, so the shorter deadline applies.
       arm(META_DEADLINE_MS);
 
+      // Collected for the dev log only. Never sent anywhere.
+      const tools: { name: string; ms: number | null }[] = [];
+      let answerChars = 0;
+
       try {
         await streamMessage(
           { message: question, conversationId: readConversationId() },
@@ -190,6 +243,8 @@ export function useChatSession() {
               arm(config.streamTimeoutMs);
             },
             onToken: (data) => {
+              turn.markFirstToken();
+              answerChars += data.text.length;
               arm(config.streamTimeoutMs);
               dispatch({ type: 'TOKEN', text: data.text });
             },
@@ -199,6 +254,7 @@ export function useChatSession() {
             },
             onToolEnd: (data) => {
               arm(config.streamTimeoutMs);
+              tools.push({ name: data.name, ms: data.ms });
               dispatch({ type: 'TOOL_END', name: data.name, summary: data.summary, ms: data.ms });
             },
             onCitations: (data) => dispatch({ type: 'CITATIONS', citations: data.citations }),
@@ -207,6 +263,7 @@ export function useChatSession() {
             onDone: (data) => {
               disarm();
               dispatch({ type: 'DONE', grounded: data.grounded, refusal: data.refusal });
+              logTurn(turn.finish('stream', tools, answerChars));
             },
             onError: (data) => {
               disarm();
@@ -230,7 +287,16 @@ export function useChatSession() {
           const retry = new AbortController();
           abort.current = retry;
           try {
-            await runFetch(question, retry.signal, 'fallback');
+            const answer = await runFetch(question, retry.signal, 'fallback');
+            if (answer) {
+              logTurn(
+                turn.finish(
+                  'fetch',
+                  answer.tool_calls.map((tool) => ({ name: tool.name, ms: tool.ms })),
+                  answer.answer.length
+                )
+              );
+            }
           } catch (fallbackError) {
             if (retry.signal.aborted || !mounted.current) return;
             setDraft(question);
@@ -263,9 +329,10 @@ export function useChatSession() {
         dispatch({ type: 'REQUEST_FAILED', failure: toFailure(thrown, question) });
       } finally {
         disarm();
+        inFlight.current = false;
       }
     },
-    [runFetch, toFailure]
+    [runFetch, toFailure, state.cooldownS]
   );
 
   /** The visible stop control while streaming. */

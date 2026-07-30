@@ -1054,3 +1054,113 @@ Each of these is a real failure with a silent symptom, and each has a test:
 Disabling the marker guard, parsing per chunk instead of buffering, using `trim()`
 instead of stripping one space, and dropping the held tail on `done` each make a
 test fail.
+
+---
+
+## F009 — Surviving a bad network, a stressed backend and a judge
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+### The disabled button is not the guard
+
+A double tap fires two `onClick`s in the same tick, before React has re-rendered
+with `busy: true` — so a check against rendered state lets the second through.
+**Mutation-tested: removing the in-flight ref produces two requests.** The disabled
+button is the visible half; a ref, written synchronously, is the half that holds.
+
+### Integration day found two real mismatches
+
+**The backend emits `RATE_LIMITED` (429) and the contract does not document it.**
+`app/errors.py` defines it distinctly from `UPSTREAM_RATE_LIMITED` (503, the model
+provider throttling _us_) and only the latter reached the contract. The code
+failed the frontend's zod enum, the envelope was rejected, and the generic
+fallback message was rendered for a completely ordinary condition. The layer at
+fault is the **contract**, so the frontend now accepts the code with its own
+approved copy; filed as `backend-issues.md` #1.
+
+**`Retry-After` is not exposed to cross-origin JavaScript.** It is not a
+CORS-safelisted response header, and the backend's
+`Access-Control-Expose-Headers` lists only `X-Request-ID`. Measured in a browser:
+the server sent `Retry-After: 45` and the UI counted down from **30**, the
+frontend's fallback. The countdown looked entirely normal while being a guess.
+
+That one is a **backend** fix and is not worked around here — guessing a better
+number would hide it. A dev-console warning now names the cause. It is also
+**invisible to server-side testing**: `check:integration` reads the header without
+trouble because Node does not enforce CORS, which is the F007 trap arriving from a
+new direction.
+
+### Slow 3G, measured
+
+|         | first content | CLS    | overflow |
+| ------- | ------------- | ------ | -------- |
+| `/`     | 5.3s          | 0.0000 | none     |
+| `/chat` | 6.2s          | 0.0000 | none     |
+
+Zero layout shift is the number worth having: on a fast connection everything
+arrives together and CLS is invisible, but on Slow 3G the CSS, font and JS land
+seconds apart and content jumping under a thumb is how someone taps the wrong
+thing.
+
+`/chat` costs ~1s more than `/` because of the 75kB markdown chunk. **F004 deferred
+that decision pending a measurement; this is the measurement, and the answer is to
+leave it.** 6.2s clears the bar, deferring it risks a Suspense stall exactly when
+the first token lands, and the real floor is the 97kB entry bundle rather than the
+chunk. Splitting the vendor bundle is the change that would actually move it, and
+that is a bigger one than this prompt should make. Recorded rather than done.
+
+### The rate-limit path had to look deliberate
+
+Several judges on one venue IP will trip a 15/minute limit, so this path fires in
+the demo. The countdown is **on the Send button**, not beside a dismissed error: a
+number in a panel with an enabled Send next to it is an invitation to make the
+rate limit worse. Proven end to end against the live backend — real 429, button
+reading "Wait 30s", ticking 30 → 28, disabled, composer still typable, no code or
+status on screen.
+
+The guard is enforced in the hook as well as the button, because the button can be
+bypassed by a stale render or a keyboard Enter. That guard was **initially
+untested** — a mutation removing it passed, because the disabled button masked it —
+so a `renderHook` test now drives the hook directly and the mutation fails.
+
+### The error boundary resets the chat, not just itself
+
+Offering only "reload the page" is the common shape and wrong twice: a reload on
+venue wifi is ten seconds of white, and it usually does not help, because the
+state that caused the crash is frequently the conversation — and a reload restores
+the `conversation_id` from sessionStorage and walks straight back into it. So
+"Start a new conversation" clears the id and the draft before remounting. Reload
+is offered second.
+
+It is keyed on the pathname so navigating away from a crashed route clears the
+boundary; otherwise the error screen follows the user to a page that works.
+
+### The offline story promises nothing
+
+Send is disabled; **the textarea is not**. Someone typing a question on a dead
+connection should be able to finish the sentence, and losing a half-written
+question to a dropped signal is the most annoying possible outcome. There is no
+queue, no "will retry", no offline mode — asserted by a test that greps the
+rendered text for those words. The assistant cannot function without the backend
+and saying so beats a spinner that never resolves.
+
+### Instrumentation that can be described truthfully
+
+Time to first token, total latency, tool names and durations, and which transport
+answered — to the **dev console only**, behind `import.meta.env.DEV`, so none of it
+is in the production bundle. Nothing leaves the browser: no beacon, no cookie, no
+fingerprint, no analytics dependency. Four tests assert that, including a grep of
+every source file for cookie writes and analytics hostnames.
+
+The answer's **length** is logged, never its text. That is what lets `privacy.tsx`
+say truthfully that the frontend collects nothing, and it keeps the backend's
+anonymised question log as the single sanctioned source if SCASPA later wants
+usage insight.
+
+### Two of my own test regexes matched prose, not code
+
+`plausible` matched the English word in a fixture ("a plausible tariff"), and
+`analytics` matched `telemetry.ts`'s own documentation explaining that it uses no
+analytics. Both were tightened to hostnames and API calls. A test that fails on
+its own explanation is a test people delete.
