@@ -268,3 +268,143 @@ makes the title test fail rather than silently inheriting the root default. So w
 One test was rewritten because it was a tautology: it set `document.documentElement.lang`
 and then asserted it. For a client-rendered app `<html lang>` can only come from the
 static shell, so it now reads `index.html` from disk.
+
+---
+
+## F003 — Contract types, an honest mock, and the two shells
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+The point of this prompt was that Phases 1 and 2 can be built with no backend. So
+the mock is treated as production code and tested like it.
+
+### Field names are the contract's
+
+`lib/types.ts` is transcribed from `docs/api-contract.md` verbatim. `x_label`
+stays `x_label`, `uptime_s` stays `uptime_s`. Every rename would be a mapping, and
+every mapping is a place the two sides drift — invisibly, until integration day,
+where it presents as an `undefined` in a component nobody touched.
+
+**Two things raised rather than worked around:**
+
+1. **`replace` is in the contract and was not in this prompt's event list.** It is
+   in the union anyway. Omitting it would not stop the server sending it; it would
+   make the client render an internal tool-cap control message to a user as though
+   it were the answer. The contract says to discard accumulated tokens and render
+   `replace.text` instead.
+2. **`refusal_category` is inconsistent in the contract itself.** The response
+   table lists it; the no-answer sample at line 264 omits the key entirely. Typed
+   optional so a missing key cannot throw. Worth a one-line fix in the contract.
+
+### The mock is deliberately hostile
+
+Two things it does that a convenient mock never would, both from the contract:
+
+- **A frame is split across two chunks**, cut mid-JSON. A parser that assumes one
+  chunk is one frame fails on the very first token.
+- **A `[kb-014]` marker is split across two `token` events** — `...44.44 [kb-0`
+  then `14].`. The answer carries the marker twice and only the first is split, so
+  a client meets both cases in one stream.
+
+Both are mutation-tested: removing either makes a test fail. Timing is real
+(`tool_start` at ~150ms, tokens 20–40ms apart, measured at 151/301ms in a real
+browser); tests set `timeScale = 0`, which removes the sleeps and **keeps the
+splitting**, because the splits are what break parsers and the sleeps only make
+the suite slow.
+
+### Measured limitation: stream cancellation is untestable under MSW-node
+
+Under MSW's Node interceptor, `response.body.cancel()` returns a promise that
+**never settles**, and `AbortController.abort()` does **not** reject a read that is
+already pending. Both work in a real browser and in dev through the service
+worker, so this is the test environment, not the mock.
+
+The consequence is concrete for Phase 2: **do not implement the stream timeout as
+"abort and wait for the read to reject."** Race the read against a timer, stop
+consuming when the timer wins, and abort as cleanup rather than as the mechanism.
+The `stream_stall` scenario exists to keep that honest.
+
+### The failure toggles
+
+Nine scenarios, on a floating dev control and in the gallery. A failure you have
+to edit a file to reproduce is a failure nobody reproduces, and every one of these
+is a state a passenger on hotel wifi will actually hit. Error bodies are the real
+envelope and every message ends with the phone number, because the real ones do —
+a mock that returns a bare "Internal error" trains the UI to render something the
+server never sends.
+
+### `dvh`, and why the composer is not sticky
+
+`h-dvh`, never `h-screen`. On iOS Safari `100vh` is the viewport height _with the
+toolbar hidden_, which is taller than what is visible — so a `100vh` column puts
+the composer behind the browser chrome. It looks correct on desktop and on
+Android and fails for every cruise passenger on an iPhone.
+
+The composer needs no `position: sticky`: the document never scrolls. The shell is
+a fixed `dvh` flex column and only the transcript scrolls. `min-h-0` on the flex
+row is load-bearing — without it the child never shrinks, `overflow-y-auto` never
+engages, and the composer is pushed off screen.
+
+That is also the whole layout contract for `ChatCore`: **it fills its parent, and
+the parent must be a fixed-height flex box.** Which is why both shells mount it
+unchanged — 100dvh minus a header in one, 600px minus a header in the other, and
+neither difference reaches the component.
+
+### `/chat` and `/widget` opt out of the root chrome
+
+Both are application shells, not documents. Wrapped in the marketing chrome they
+would have two `<main>` landmarks and two `id="main"` elements — so the skip link
+jumps to whichever the browser finds first — plus a document-level scroll that
+undoes the `dvh` layout.
+
+### ⚠️ Framing policy cannot be set from a `<meta>` tag
+
+This prompt asked for "X-Frame-Options-friendly meta". There is no such thing:
+`X-Frame-Options` has never been supported as a `<meta>` element, and CSP's
+`frame-ancestors` is **explicitly ignored** when delivered by `<meta>`.
+
+A tag would have looked like a control and enforced nothing — worse than none,
+because it closes the checklist item while leaving the site framable by any
+phishing page that wants to wrap a real SCASPA assistant in a fake SCASPA layout.
+
+So `index.html` carries a comment where the tag would go, and `docs/embedding.md`
+has the actual headers, per-platform config, and the `curl` that verifies them.
+The widget's close message posts to `config.embedAllowedOrigin` and **never
+`'*'`** — asserted in a test.
+
+### Responsive verification is done in a real browser
+
+jsdom does no layout: every element is zero-width there, so "nothing overflows at
+320px" is not a claim it can check, and asserting it in jsdom would produce a
+passing test that measures nothing.
+
+`scripts/responsive-check.mjs` drives headless Chromium against the production
+build at 320/390/768/1024/1440 for both routes, and names the offending element
+rather than just reporting that something overflowed. It found one real defect:
+**at 320px the phone-call link was flex-shrunk to 43×44 (chat) and 41×44
+(widget)** — `size-touch-min` sets a width, and flexbox is free to shrink it
+below. Fixed with `shrink-0`.
+
+It is a separate script, not part of `npm test`, because CI has no browser. Run
+`npm run build && npm run check:responsive` before shipping a layout change.
+**Not yet checked on a physical phone with a software keyboard open** — the `dvh`
+reasoning is sound and Chromium agrees, but that is the one test a real device
+gives you and this has not had one.
+
+### The gallery no longer ships, which also closed an F002 trade-off
+
+`tests/mocks-not-in-production.test.ts` greps the built assets, and it caught a
+real leak: the gallery's scenario picker pulled mock scenario labels into the
+deployed `dev.gallery` chunk.
+
+F002 had accepted that chunk as a known cost because excluding it via
+`routeFileIgnorePattern` breaks `npm run build` (it typechecks before generating
+the route tree). The fix was the pattern already used for `MockControls`: the
+route file is now a stub, and the gallery body lives in `src/dev/Gallery.tsx`
+behind `import.meta.env.DEV ? lazy(() => import(...)) : null`. `DEV` is a
+build-time literal, so the branch folds and Rollup never follows the import.
+
+**The chunk went from 19.2KB to 152 bytes and every mock string is gone.** Both
+guards are mutation-tested: a static `@/mocks/*` import in production code fails
+the test.

@@ -1,14 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { PlaceholderPanel } from '@/components/shells/PlaceholderPanel';
+import { FullPageShell } from '@/components/shells/FullPageShell';
 
-/** Full-page chat. The conversation UI itself arrives in a later prompt. */
+/**
+ * Full-page chat.
+ *
+ * The route is deliberately empty of chat logic: it mounts the shell and nothing
+ * else. `FullPageShell` owns the layout and mounts a `ChatCore` placeholder; the
+ * conversation, streaming and citations arrive in a later prompt without this file
+ * changing.
+ */
 function ChatRoute() {
-  return (
-    <PlaceholderPanel
-      title="Chat"
-      note="The conversation view renders here. Streaming, citations and the composer are built in later prompts."
-    />
-  );
+  return <FullPageShell />;
 }
 
 export const Route = createFileRoute('/chat')({

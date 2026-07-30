@@ -1,4 +1,5 @@
-import { createRootRoute, HeadContent, Link, Outlet } from '@tanstack/react-router';
+import { Suspense, lazy } from 'react';
+import { createRootRoute, HeadContent, Link, Outlet, useRouterState } from '@tanstack/react-router';
 
 /**
  * Root layout and the accessibility baseline for every page.
@@ -20,8 +21,61 @@ import { createRootRoute, HeadContent, Link, Outlet } from '@tanstack/react-rout
  * 5. **The phone number is in the footer of every page.** When the assistant cannot
  *    help, the fallback must already be on screen rather than something to go and
  *    find.
+ *
+ * ### Two routes opt out of the chrome
+ *
+ * `/chat` and `/widget` are application shells, not documents: each is a `dvh`
+ * (or fixed 600px) flex column that owns its own header, its own `<main>` and its
+ * own scrolling. Wrapping them in the marketing chrome would give the page two
+ * `<main>` landmarks and two elements with `id="main"` — so the skip link would
+ * jump to whichever the browser found first — and would add a document-level
+ * scroll that puts the composer off screen, which is the exact failure the `dvh`
+ * layout exists to avoid.
+ *
+ * So the root renders a bare `<Outlet />` for those two and the full chrome for
+ * everything else. `<HeadContent />` stays in both branches: every route still
+ * needs its title.
  */
+const SELF_CHROMED_ROUTES = ['/chat', '/widget'];
+
+/**
+ * Dev-only mock controls.
+ *
+ * `import.meta.env.DEV` is a build-time literal, so in a production build this
+ * whole expression folds to `null` and Rollup never follows the dynamic import —
+ * keeping `@/mocks/*`, its fixtures and MSW itself out of the shipped bundle.
+ * A static import would pull all of it in regardless of the condition.
+ */
+const MockControls = import.meta.env.DEV
+  ? lazy(() =>
+      import('@/components/dev/MockControls').then((module) => ({
+        default: module.MockControls,
+      }))
+    )
+  : null;
+
+function DevMockControls() {
+  if (!MockControls) return null;
+  return (
+    <Suspense fallback={null}>
+      <MockControls />
+    </Suspense>
+  );
+}
+
 function RootLayout() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  if (SELF_CHROMED_ROUTES.includes(pathname)) {
+    return (
+      <>
+        <HeadContent />
+        <Outlet />
+        <DevMockControls />
+      </>
+    );
+  }
+
   return (
     <div className="flex min-h-dvh flex-col bg-surface text-ink">
       <HeadContent />
@@ -63,6 +117,8 @@ function RootLayout() {
           </a>
         </p>
       </footer>
+
+      <DevMockControls />
     </div>
   );
 }

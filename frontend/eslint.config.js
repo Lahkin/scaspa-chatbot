@@ -121,6 +121,19 @@ export default tseslint.config(
   //     a non-component export;
   //   - `throw redirect()` / `throw notFound()` is how the router does control
   //     flow, and they are not Error subclasses.
+  // Node scripts. They run outside the browser bundle, and `page.evaluate`
+  // callbacks are serialised and executed *in the browser* — so both global sets
+  // are legitimately in scope here and nowhere else.
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
   {
     files: ['src/routes/**/*.tsx'],
     rules: {

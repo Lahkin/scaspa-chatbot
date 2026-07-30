@@ -50,6 +50,15 @@ export const config = {
   /** Exact origin permitted to embed the widget. Not a hostname, not '*'. */
   embedAllowedOrigin: readString(env.VITE_EMBED_ALLOWED_ORIGIN, 'https://www.scaspa.com'),
 
+  /**
+   * Serve the API from MSW instead of a real backend. Dev only — the flag is
+   * ignored in a production build, where the mock code is not even bundled.
+   *
+   * Defaults on, because for most of this project's life there was no backend to
+   * point at. Set `VITE_ENABLE_MOCKS=false` to develop against a running server.
+   */
+  useMocks: env.DEV && readBoolean(env.VITE_ENABLE_MOCKS, true),
+
   isDev: env.DEV,
   isProd: env.PROD,
 } as const;

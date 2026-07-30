@@ -20,6 +20,13 @@
       type="font/woff2"
       crossorigin
     />
+    <!-- Framing policy is NOT here, deliberately.
+         <meta http-equiv="X-Frame-Options"> has never been supported, and CSP's
+         frame-ancestors is explicitly ignored when delivered by <meta>. A tag
+         here would look like a control and enforce nothing, which is worse than
+         no tag: it closes the checklist item and leaves the site framable.
+         The real control is a response header set by the deploy.
+         See frontend/docs/embedding.md. -->
     <title>SCASPA Assistant</title>
   </head>
   <body>

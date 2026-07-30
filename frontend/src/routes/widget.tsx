@@ -1,18 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { PlaceholderPanel } from '@/components/shells/PlaceholderPanel';
+import { WidgetShell } from '@/components/shells/WidgetShell';
 
 /**
- * Embeddable widget route. Loaded inside an iframe by `public/embed.js` on
- * scaspa.com, so it renders without the site chrome that `__root` provides for
- * the standalone app.
+ * Embeddable widget.
+ *
+ * Loaded inside an iframe by `public/embed.js` on scaspa.com, so it renders
+ * without the site chrome `__root` provides for the standalone app — see the note
+ * there on self-chromed routes.
+ *
+ * Framing policy is a **deploy concern, not a markup one**: it cannot be set from
+ * a meta tag. See `docs/embedding.md`.
  */
 function WidgetRoute() {
-  return (
-    <PlaceholderPanel
-      title="Widget"
-      note="Embedded view. Rendered inside an iframe on scaspa.com; the loader and origin checks are built in F11."
-    />
-  );
+  return <WidgetShell />;
 }
 
 export const Route = createFileRoute('/widget')({
@@ -20,10 +20,10 @@ export const Route = createFileRoute('/widget')({
   head: () => ({
     meta: [
       { title: 'SCASPA Assistant' },
-      {
-        name: 'description',
-        content: 'Embedded SCASPA Assistant.',
-      },
+      { name: 'description', content: 'Embedded SCASPA Assistant.' },
+      // Embedded in someone else's page; it must never appear in search results
+      // as a standalone page.
+      { name: 'robots', content: 'noindex' },
     ],
   }),
 });

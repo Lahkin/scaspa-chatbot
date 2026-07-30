@@ -177,6 +177,18 @@
    * possibly on a moving ferry.
    */
   --size-touch-min: 44px;
+
+  /* The embedded widget's box. Fixed by the embed contract — public/embed.js
+   * creates an iframe of exactly this size — so the numbers live here rather than
+   * as arbitrary values scattered through the shell. */
+  --size-widget-w: 380px;
+  --size-widget-h: 600px;
+
+  /* A comfortable measure for reading. Around 65-75 characters per line is where
+   * the eye stops losing the start of the next line; a chat column stretched to a
+   * 1440px monitor is genuinely harder to read than one on a phone.
+   * `--container-*` is the namespace `max-w-*` reads. */
+  --container-measure: 68ch;
 }
 
 @layer base {
@@ -256,4 +268,15 @@
 @utility touch-target {
   min-width: var(--size-touch-min);
   min-height: var(--size-touch-min);
+}
+
+/* The widget box. `max-w-full` / `max-h-dvh` are applied alongside these at the
+ * usage site so that a 380px box inside a 320px viewport shrinks instead of
+ * forcing the page to scroll sideways. */
+@utility w-widget {
+  width: var(--size-widget-w);
+}
+
+@utility h-widget {
+  height: var(--size-widget-h);
 }
