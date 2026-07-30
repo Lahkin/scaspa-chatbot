@@ -70,6 +70,33 @@ export const ANSWER =
   'sailing back from Nevis on a weekday is 18:00 [kb-008]. That information was ' +
   'verified on 2026-04-01, so please confirm with SCASPA before you travel.';
 
+/**
+ * An answer carrying a fee table — the shape the tariff schedule arrives in.
+ *
+ * Five columns on purpose: it does not fit at 390px, so the horizontal scroll
+ * and its right-edge affordance are exercised rather than assumed. Columns are
+ * deliberately mixed — text, a numeric column that is *not* the quantity, a
+ * column with an "On application" in it, and the fee — so column classification
+ * has something to get wrong.
+ *
+ * Figures are fake, per CLAUDE.md rule 5. `44.44` and `1,111.11` are obviously
+ * placeholders; a plausible tariff here is one that ends up quoted to a customer.
+ */
+export const TABLE_ANSWER =
+  'Here are the placeholder container handling charges at the Deep Water Harbour ' +
+  '[kb-014].\n\n' +
+  '| Service | Unit | Transit days | Overtime | Charge (XCD) |\n' +
+  '| --- | --- | --- | --- | --- |\n' +
+  '| Container handling, 20ft | Per container | 5 | No | 444.44 |\n' +
+  '| Container handling, 40ft | Per container | 5 | No | 888.88 |\n' +
+  '| Reefer monitoring | Per day | 1 | Yes | 111.11 |\n' +
+  '| Storage after free period | Per day | 1 | No | 22.22 |\n' +
+  '| Special project cargo | Per lift | 1 | Yes | On application |\n\n' +
+  'These were verified on 2026-04-01. Confirm with SCASPA before you budget ' +
+  'against them [kb-008].';
+
+export const TABLE_RESPONSE_ANSWER = TABLE_ANSWER;
+
 export const TOOL_CALLS: ToolCall[] = [
   {
     name: 'search_scaspa_knowledge',

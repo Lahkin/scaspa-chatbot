@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run lint && npm run typecheck && npm run build && npm run test",
-    "check:responsive": "node scripts/responsive-check.mjs"
+    "check:responsive": "node scripts/responsive-check.mjs",
+    "check:streaming": "node scripts/streaming-perf.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",
@@ -26,6 +27,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "10.1.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
     "zod": "4.4.3"
   },
   "devDependencies": {

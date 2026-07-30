@@ -27,6 +27,7 @@ import {
   ERROR_UPSTREAM_TIMEOUT,
   ERROR_VALIDATION,
   HEALTH,
+  TABLE_ANSWER,
   REFUSAL_RESPONSE,
   STT_TEXT,
   UNGROUNDED_RESPONSE,
@@ -83,6 +84,9 @@ export const handlers = [
 
       case 'empty_citations':
         return HttpResponse.json(EMPTY_CITATIONS_RESPONSE);
+
+      case 'table':
+        return HttpResponse.json({ ...CHAT_RESPONSE, answer: TABLE_ANSWER });
 
       // Neither of these has a non-streaming equivalent — they are stream-only
       // failures — so the JSON endpoint answers normally.
@@ -144,6 +148,9 @@ export const handlers = [
 
       case 'ungrounded':
         return new HttpResponse(chatStream({ grounded: false }), { headers: SSE_HEADERS });
+
+      case 'table':
+        return new HttpResponse(chatStream({ answer: TABLE_ANSWER }), { headers: SSE_HEADERS });
 
       case 'empty_citations':
         return new HttpResponse(chatStream({ emptyCitations: true, grounded: false }), {

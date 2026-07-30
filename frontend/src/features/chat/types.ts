@@ -1,8 +1,63 @@
 /**
- * Chat session types: the reducer's state and actions.
+ * The conversation's view model.
  *
- * Not implemented yet. `useChatSession` and its reducer are built in a later
- * prompt; the shape is kept here so the feature has one home rather than
- * spreading across components.
+ * Deliberately *not* the wire types. `lib/types.ts` mirrors the contract exactly
+ * and must never drift from it; this is what the UI needs in order to render,
+ * which is a different question. Keeping them apart means a contract change
+ * surfaces as a compile error in one mapping function rather than as a redesign.
  */
-export {};
+
+import type { ApiError, ChartSpec, Citation, ToolName } from '@/lib/types';
+
+/** One tool step, assembled from a `tool_start` / `tool_end` pair. */
+export interface ToolActivity {
+  /** `name` plus arrival order — the contract says to match the pair by both. */
+  id: string;
+  name: ToolName;
+  /** The backend's own summary string, rendered directly. Never composed here. */
+  summary: string;
+  /** Measured duration, from `tool_end`. Null while the step is still running. */
+  ms: number | null;
+  done: boolean;
+}
+
+export type MessageRole = 'user' | 'assistant';
+
+export interface Message {
+  id: string;
+  role: MessageRole;
+  text: string;
+  /** When the message was created. Rendered in the user's own locale. */
+  at: Date;
+
+  // ── assistant only ─────────────────────────────────────────────────────────
+  /** True while tokens are still arriving. Drives throttled parsing. */
+  streaming?: boolean;
+  activity?: ToolActivity[];
+  citations?: Citation[];
+  chart?: ChartSpec | null;
+  /**
+   * Internal integrity signal, never surfaced as a correctness warning — the
+   * contract is explicit that `grounded: true` does not mean the answer is right.
+   */
+  grounded?: boolean;
+  refusal?: boolean;
+  /** A failure that arrived after the message existed, e.g. a mid-stream error. */
+  error?: ApiError | null;
+}
+
+export interface ChatState {
+  messages: Message[];
+  conversationId: string | null;
+  /** True from send until `done` or `error`. */
+  busy: boolean;
+  /** A failure that stopped a message existing at all, e.g. a 503 before the stream. */
+  error: ApiError | null;
+}
+
+export const initialChatState: ChatState = {
+  messages: [],
+  conversationId: null,
+  busy: false,
+  error: null,
+};

@@ -15,6 +15,12 @@ import {
 } from '@/components/ui';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
 import { SCENARIOS, getScenario, setScenario, subscribeToScenario } from '@/mocks/scenarios';
+import { Markdown } from '@/components/chat/Markdown';
+import { StreamingMarkdown } from '@/components/chat/StreamingMarkdown';
+import { AgentStatus } from '@/components/chat/AgentStatus';
+import { SuggestedQuestions } from '@/components/chat/SuggestedQuestions';
+import { MessageBubble } from '@/components/chat/MessageBubble';
+import { TABLE_ANSWER } from '@/mocks/fixtures';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.
@@ -235,6 +241,90 @@ export function Gallery() {
         <ScenarioPicker />
       </Section>
 
+      <Section
+        title="ScheduleTable"
+        note="The signature component. Column type is read from the cells, never the header."
+      >
+        <Markdown verifiedOn="2026-04-01" sourceId="kb-014">
+          {TABLE_ANSWER}
+        </Markdown>
+        <p className="text-caption text-ink-subtle">
+          Narrow the window to 390px: it becomes a labelled, focusable scroll region with a
+          right-edge gradient that disappears at the end of the scroll.
+        </p>
+      </Section>
+
+      <Section title="Markdown elements" note="Every element the model can emit, styled.">
+        <div className="max-w-measure rounded-md border border-border bg-surface-muted p-4">
+          <Markdown>{MARKDOWN_SAMPLE}</Markdown>
+        </div>
+      </Section>
+
+      <Section
+        title="Streaming markdown"
+        note="A half-written table renders as plain text until it closes — drag the slider."
+      >
+        <StreamingPreview />
+      </Section>
+
+      <Section title="Message bubbles">
+        <div className="max-w-measure space-y-4">
+          <MessageBubble
+            message={{
+              id: 'g-user',
+              role: 'user',
+              text: 'How much is a 40-foot container?',
+              at: new Date('2026-04-01T14:30:00Z'),
+            }}
+          />
+          <MessageBubble
+            message={{
+              id: 'g-assistant',
+              role: 'assistant',
+              text: 'The placeholder charge is **XCD 888.88** per container [kb-014].',
+              at: new Date('2026-04-01T14:30:04Z'),
+              citations: [],
+            }}
+          />
+          <MessageBubble
+            message={{
+              id: 'g-error',
+              role: 'assistant',
+              text: 'The placeholder charge is',
+              at: new Date('2026-04-01T14:30:06Z'),
+              error: {
+                code: 'INTERNAL',
+                message: 'Something went wrong at our end. Please call SCASPA on 869-465-8121.',
+                request_id: 'demo',
+              },
+            }}
+          />
+        </div>
+      </Section>
+
+      <Section
+        title="AgentStatus"
+        note="Every string comes from the backend. None is invented here."
+      >
+        <div className="max-w-measure space-y-4">
+          <div>
+            <p className="mb-1 text-caption text-ink-subtle">Running</p>
+            <AgentStatus activity={AGENT_RUNNING} answerStarted={false} />
+          </div>
+          <div>
+            <p className="mb-1 text-caption text-ink-subtle">Collapsed once the answer starts</p>
+            <AgentStatus activity={AGENT_DONE} answerStarted />
+          </div>
+        </div>
+      </Section>
+
+      <Section title="SuggestedQuestions">
+        <div className="max-w-measure space-y-6">
+          <SuggestedQuestions onSelect={() => {}} variant="empty" />
+          <SuggestedQuestions onSelect={() => {}} variant="idle" />
+        </div>
+      </Section>
+
       <Section title="Typography scale">
         <div className="space-y-1">
           <p className="text-display font-semibold">Display 36</p>
@@ -363,6 +453,73 @@ function Swatches({ label, tokens }: { label: string; tokens: string[] }) {
             <code className="text-caption text-ink-subtle">{token.replace('bg-', '')}</code>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+const MARKDOWN_SAMPLE = [
+  '# Heading (capped at h3)',
+  '',
+  'A paragraph with **bold**, *italic*, ~~struck~~ and `inline code`.',
+  '',
+  '- An unordered item',
+  '- Another, long enough to wrap and show that the second line aligns under the text rather than under the bullet',
+  '',
+  '1. An ordered item',
+  '2. A second',
+  '',
+  '> A blockquote, for a quoted notice.',
+  '',
+  '```',
+  'a fenced code block',
+  '```',
+  '',
+  '[An external link](https://example.invalid/tariff)',
+  '',
+  '---',
+].join('\n');
+
+const AGENT_RUNNING = [
+  {
+    id: 'search_scaspa_knowledge-0',
+    name: 'search_scaspa_knowledge' as const,
+    summary: 'Searching SCASPA knowledge base — container tariff',
+    ms: 148,
+    done: true,
+  },
+  {
+    id: 'search_site_content-1',
+    name: 'search_site_content' as const,
+    summary: 'Searching scaspa.com — tariff schedule PDF',
+    ms: null,
+    done: false,
+  },
+];
+
+const AGENT_DONE = AGENT_RUNNING.map((step) => ({ ...step, ms: step.ms ?? 90, done: true }));
+
+/** A table revealed one line at a time, so the anti-flicker behaviour is visible. */
+function StreamingPreview() {
+  const lines = TABLE_ANSWER.split('\n');
+  const [upTo, setUpTo] = useState(lines.length);
+  const text = lines.slice(0, upTo).join('\n');
+
+  return (
+    <div className="max-w-measure space-y-2">
+      <label className="block text-caption text-ink-subtle">
+        Reveal up to line {upTo} of {lines.length}
+        <input
+          type="range"
+          min={0}
+          max={lines.length}
+          value={upTo}
+          onChange={(event) => setUpTo(Number(event.target.value))}
+          className="mt-1 block w-full"
+        />
+      </label>
+      <div className="rounded-md border border-border bg-surface-muted p-4">
+        <StreamingMarkdown text={text} streaming />
       </div>
     </div>
   );

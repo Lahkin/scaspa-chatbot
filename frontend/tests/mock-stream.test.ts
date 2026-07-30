@@ -298,10 +298,19 @@ describe('tokenize', () => {
     expect(tokenize(ANSWER).join('')).toBe(ANSWER);
   });
 
-  it('refuses to build a fixture with no marker to split', () => {
-    // The split is the whole point. If someone edits the answer and removes the
-    // marker, this must fail loudly rather than silently becoming an easy mock.
-    expect(() => tokenize('no markers here at all')).toThrow(/\[kb-014\]/);
+  it('the default answer still carries a splittable marker', () => {
+    // The split is the whole point of this fixture. If someone edits the marker
+    // out of ANSWER, the mock silently becomes a comfortable one — so the claim
+    // is asserted about the fixture directly.
+    expect(ANSWER).toContain('[kb-014]');
+    expect(tokenize(ANSWER).some((piece) => piece.endsWith('[kb-0'))).toBe(true);
+  });
+
+  it('tokenizes a legitimately marker-free answer without throwing', () => {
+    // A refusal cites nothing. Throwing here killed the entire refusal stream:
+    // the client saw a connection error and rendered no answer at all.
+    const refusal = 'That is not something I can advise on. Call 869-465-8121.';
+    expect(tokenize(refusal).join('')).toBe(refusal);
   });
 });
 
@@ -387,3 +396,37 @@ describe('timing is realistic by default', () => {
  * mechanism. The `stream_stall` scenario exists precisely to keep that code
  * honest.
  */
+
+describe('the refusal streams as an answer', () => {
+  it('produces tokens, citations and done — not a connection error', async () => {
+    setScenario('refusal');
+    const response = await fetch(STREAM_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'where is my container?' }),
+    });
+    expect(response.status).toBe(200);
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    const chunks: string[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+
+    const frames = parseFrames(chunks);
+    const names = frames.map((frame) => frame.event);
+    expect(names.at(-1)).toBe('done');
+    expect(names.filter((name) => name === 'token').length).toBeGreaterThan(0);
+
+    const text = frames
+      .filter((frame) => frame.event === 'token')
+      .map((frame) => (frame.data as { text: string }).text)
+      .join('');
+    // The phone number is already inside the answer.
+    expect(text).toContain('869-465-8121');
+    expect((frames.at(-1)?.data as { refusal: boolean }).refusal).toBe(true);
+  });
+});

@@ -1,4 +1,4 @@
-import type { TextareaHTMLAttributes } from 'react';
+import type { Ref, TextareaHTMLAttributes } from 'react';
 import { useEffect, useId, useRef } from 'react';
 import { cn } from '@/lib/cn';
 
@@ -14,6 +14,15 @@ interface TextareaProps extends Omit<
   minRows?: number;
   /** Grows to this many rows, then scrolls. */
   maxRows?: number;
+  /**
+   * Forwarded to the underlying `<textarea>`.
+   *
+   * The component keeps its own ref for the auto-grow measurement, so this is
+   * merged with it rather than replacing it — a caller that needs to focus the
+   * field must not silently break the height calculation. React 19 takes `ref`
+   * as an ordinary prop, so no `forwardRef` is needed.
+   */
+  ref?: Ref<HTMLTextAreaElement> | undefined;
 }
 
 const LINE_HEIGHT_PX = 24; // --text-body--line-height
@@ -40,6 +49,7 @@ export function Textarea({
   maxRows = 6,
   disabled = false,
   value,
+  ref: forwardedRef,
   ...rest
 }: TextareaProps) {
   const id = useId();
@@ -72,7 +82,11 @@ export function Textarea({
 
       <textarea
         {...rest}
-        ref={ref}
+        ref={(node) => {
+          ref.current = node;
+          if (typeof forwardedRef === 'function') forwardedRef(node);
+          else if (forwardedRef) forwardedRef.current = node;
+        }}
         id={id}
         value={value}
         disabled={disabled}

@@ -242,18 +242,46 @@ describe('--amber-board is a fill, never a text colour', () => {
 
 // ── guard against the source-level mistake ───────────────────────────────────
 
-describe('no component uses amber-board as a text colour', () => {
-  it('text-amber-board appears in no source file', () => {
+describe('amber-board is only ever used on a dark ground', () => {
+  // This started as "text-amber-board appears in no source file", which was right
+  // while nothing used it. The departure-board treatment then made amber-on-navy
+  // the intended emphasis — and it measures 6.1:1 there, so a blanket ban would
+  // have been banning the correct usage.
+  //
+  // The real rule is about the *pairing*, not the string: amber text is fine on
+  // navy and never acceptable on a light surface. The contrast assertions above
+  // pin both numbers; this pins that the source only ever pairs it with navy.
+  // `tests/chat-rendering.test.tsx` goes further and checks the rendered DOM,
+  // where the ancestor background can actually be resolved.
+  it('every file using amber as text also establishes a navy ground', () => {
     const files = globSync('src/**/*.{ts,tsx,css}', { cwd: PROJECT_ROOT });
 
     const offenders: string[] = [];
     for (const file of files) {
       const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
-      // `text-amber-board` as a Tailwind utility sets a TEXT colour, which is the
-      // failing pairing. `bg-amber-board` and `border-amber-board` are fine.
-      if (/\btext-amber-board\b/.test(source)) offenders.push(file);
+      if (!/\btext-amber-board\b/.test(source)) continue;
+      if (!/\bbg-navy(-deep)?\b/.test(source)) offenders.push(file);
     }
 
+    expect(offenders).toEqual([]);
+  });
+
+  it('nothing pairs amber text with a light surface in the same class list', () => {
+    const files = globSync('src/**/*.{ts,tsx,css}', { cwd: PROJECT_ROOT });
+    const offenders: string[] = [];
+    for (const file of files) {
+      const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
+      // Same element carrying both amber text and a light background is
+      // unambiguously the failing pairing, whatever the ancestors do.
+      for (const line of source.split('\n')) {
+        if (
+          /\btext-amber-board\b/.test(line) &&
+          /\bbg-(surface|neutral-(0|50|100|200)|white)\b/.test(line)
+        ) {
+          offenders.push(`${file}: ${line.trim().slice(0, 60)}`);
+        }
+      }
+    }
     expect(offenders).toEqual([]);
   });
 });

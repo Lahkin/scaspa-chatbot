@@ -14,6 +14,7 @@
 
 export type ScenarioId =
   | 'happy'
+  | 'table'
   | 'rate_limited'
   | 'internal_error'
   | 'upstream_timeout'
@@ -35,6 +36,11 @@ export const SCENARIOS: ScenarioDescription[] = [
     id: 'happy',
     label: 'Normal cited answer',
     expected: 'Streams meta, tool events, tokens, citations, done.',
+  },
+  {
+    id: 'table',
+    label: 'Answer with a fee table',
+    expected: 'Five columns. Scrolls at 390px; figures right-aligned and tabular.',
   },
   {
     id: 'rate_limited',

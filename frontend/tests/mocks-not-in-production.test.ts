@@ -32,9 +32,14 @@ const bundles = builtJs();
 describe.skipIf(bundles.length === 0)('mocks are absent from the production bundle', () => {
   it('no fixture fare, phone fixture or scenario label is in any chunk', () => {
     // Strings unique to the mock. If any appears, the mock was bundled.
+    // Each needle must be unique to the mock. "What time is the last ferry back
+    // from Nevis?" is NOT: it is the STT fixture *and* a real suggested question
+    // from the demo script, so it legitimately ships. It was in this list and
+    // produced a false leak — a needle that can appear in production content
+    // trains you to ignore this test.
     const needles = [
       'Basseterre to Charlestown',
-      'What time is the last ferry back from Nevis?',
+      'example.invalid',
       'Illustrative sample figures',
       'Stream stalls after 2 tokens',
       'mock-chat-model',
@@ -69,6 +74,7 @@ describe.skipIf(bundles.length === 0)('mocks are absent from the production bund
     // the source it comes from.
     const fixtures = readFileSync(resolve(PROJECT_ROOT, 'src/mocks/fixtures.ts'), 'utf8');
     expect(fixtures).toContain('Basseterre to Charlestown');
+    expect(fixtures).toContain('example.invalid');
     expect(fixtures).toContain('mock-chat-model');
   });
 });

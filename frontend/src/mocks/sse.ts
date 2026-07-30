@@ -60,13 +60,18 @@ export function tokenize(answer: string = ANSWER): string[] {
     out.push(piece);
   }
 
-  if (!alreadySplit) {
-    throw new Error(
-      'The streaming mock could not find a [kb-014] marker to split. The whole ' +
-        'point of this fixture is that a marker crosses a frame boundary — fix the ' +
-        'fixture rather than removing the check.'
-    );
-  }
+  // No throw when there is no marker.
+  //
+  // There used to be one, to stop someone quietly editing the marker out of
+  // ANSWER and turning this into a comfortable mock. It was the wrong place for
+  // that guard: a refusal legitimately cites nothing, so the throw killed the
+  // entire refusal stream and the client rendered no answer at all. Found by
+  // driving the real UI — the tests had only ever exercised a refusal on
+  // `/api/chat`, never on the stream.
+  //
+  // The guard now lives in `tests/mock-stream.test.ts`, which asserts that ANSWER
+  // itself still carries a splittable marker. That is where it belongs: it is a
+  // claim about the fixture, not a runtime condition.
   return out;
 }
 

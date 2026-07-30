@@ -408,3 +408,164 @@ build-time literal, so the branch folds and Rollup never follows the import.
 **The chunk went from 19.2KB to 152 bytes and every mock string is gone.** Both
 guards are mutation-tested: a static `@/mocks/*` import in production code fails
 the test.
+
+---
+
+## F004 — The conversation surface
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+Runs entirely against MSW. Six components, and four findings worth carrying.
+
+### The security position on markdown, stated once
+
+**react-markdown escapes raw HTML by default. That default is the protection.**
+`<script>` in an answer arrives as the literal characters. The way it gets lost is
+by adding `rehype-raw`, which exists precisely to turn embedded HTML back into
+live nodes — and in a component rendering text derived from retrieved documents,
+that is a stored-XSS sink: a knowledge-base row, or a scraped page, becomes
+script on the SCASPA origin.
+
+So **no `rehype-raw`, ever**, and no `dangerouslySetInnerHTML` anywhere.
+`rehype-sanitize` is defence in depth, not the mechanism — it is the second lock,
+so that a plugin added in a hurry a year from now fails closed. `href` protocols
+are narrowed to http/https/mailto (the hast default also permits `irc`, `ircs`
+and `xmpp`, none of which a SCASPA answer needs).
+
+Tested: a `<script>`, an `<img onerror>` and a `javascript:` link are all inert.
+There is a test asserting `rehype-raw` is not a dependency and must not become
+one.
+
+### A no-op override silently disabled the whole table treatment
+
+The finding of this prompt. `Markdown` supplied pass-through components for
+`thead`/`tbody`/`tr`/`th`/`td` — each rendering exactly the element it replaced,
+apparently harmless.
+
+`ScheduleTable` identifies the header row with `section.type === 'thead'`, which
+only matches an **intrinsic** element. With the overrides in place the type was
+the override _function_, so the header never matched: the header row was parsed
+as data, every column therefore contained its own heading, every column
+classified as text, and **the right-alignment, the tabular figures and the amber
+quantity column all quietly disappeared.** The table still rendered, and looked
+approximately fine.
+
+Caught because the tests assert alignment rather than existence. The pass-throughs
+are gone and a comment says why they must not come back.
+
+### Column type is read from the cells, never the header
+
+A column headed "Fee" might hold "On application"; a column headed "Berth" might
+hold "40". Guessing from the header is guessing from a label a model wrote.
+
+A column is numeric only when **every** cell carrying content is a figure — not a
+majority. One "On application" in a fee column means it is not a clean set of
+quantities, and right-aligning the rest would imply a precision the data does not
+have. Blanks and dashes are ignored rather than counted against. "Bay 4" and
+"Berth 2" are labels containing digits and are deliberately not matched.
+
+The quantity column — the one that gets the amber — is the **last** numeric
+column, because tables read left to right from identifier to value.
+
+### The amber rule had to become a rule about pairing
+
+F002 asserted `text-amber-board` appeared in **no** source file. That was right
+while nothing used it. The departure-board treatment then made amber-on-navy the
+intended emphasis, where it measures 6.1:1 — so the blanket ban would have been
+banning the correct usage.
+
+The rule is about the _pairing_, not the string. The contrast test now checks that
+any file using amber as text also establishes a navy ground, and that nothing
+pairs it with a light surface on the same element; `chat-rendering.test.tsx` goes
+further and resolves the ancestor background in the rendered DOM, which a grep
+cannot do.
+
+### Streaming: two different problems
+
+**Throttling is a cost problem.** Tokens land every 20–40ms; parsing each one runs
+the full remark/rehype pipeline ~40 times a second over a growing document, on the
+main thread, at a cost quadratic in answer length. Refreshed on a ~50ms timer
+instead. Measured with fake timers: 40 tokens produce 40 distinct parses without
+it and fewer with — and removing the throttle makes that test fail.
+
+**Safe-point splitting is a correctness problem**, and the one that shows. Markdown
+parsed mid-construct is not slightly incomplete, it is a _different document_: a
+table missing its delimiter row is a paragraph of pipes that becomes a grid two
+tokens later; an open code fence swallows the rest of the answer.
+`splitAtSafePoint` holds the unterminated tail back and renders it as plain text.
+The tail is always on screen — nothing is buffered out of sight, which would
+defeat the point of streaming.
+
+**Measured** (`npm run check:streaming`), at 390px under 6x CPU throttling:
+
+|                                       |                         |
+| ------------------------------------- | ----------------------- |
+| Long tasks                            | 2 (71ms, 57ms)          |
+| Total blocking time                   | 28ms over a 4.6s stream |
+| Table shapes observed while streaming | `5x5` only              |
+
+That last row is the anti-flicker result: the DOM was sampled every 16ms and the
+table was **never** painted with fewer than its final five columns.
+
+⚠️ **This is an emulation, not a device.** 6x CDP throttling is the usual stand-in
+for a mid-tier Android; no physical phone has been tested. Read the numbers that
+way.
+
+### Scroll, and the rule about not yanking the reader
+
+Auto-scroll follows the newest message until the user scrolls up, then stops
+completely and offers "jump to latest". It is **never** re-enabled by a message
+arriving — only by the user returning to the bottom or pressing the button. Losing
+your place matters more here than in most chat apps, because what is being read is
+a fee table someone is copying down.
+
+`hasUnseen` is _derived_ from comparing the content signature against the one
+recorded when the user left the bottom, rather than stored as a flag. A flag would
+have to be set from the layout effect that handles new content — a setState inside
+an effect, costing an extra render per token — and it goes stale.
+
+### Two jsdom gaps, and what they mean
+
+jsdom implements neither `ResizeObserver` nor `Element.scrollTo`, both of which
+this surface uses. Stubbed in `vitest.setup.ts` as no-ops, because without layout
+a faithful implementation would have nothing to report. The behaviour they drive —
+overflow and scroll position — is measured for real in the browser scripts. Worth
+knowing that a green jsdom suite says nothing about either.
+
+### A guard in the wrong place broke the entire refusal stream
+
+Found by driving the real UI, not by a test. The mock's `tokenize` threw when it
+could not find a `[kb-014]` marker to split — a guard against someone quietly
+editing the marker out of the fixture and making the mock comfortable.
+
+But a **refusal cites nothing**. So the throw killed the refusal stream: the
+client saw a connection error, dropped the empty bubble, and rendered no answer
+at all. The one thing that must never be shown as a failure — the contract is
+explicit that a refusal is a successful 200 — was being shown as a failure.
+
+It survived because the prompt-15 tests exercised the refusal only on
+`/api/chat`, never on `/api/chat/stream`. The guard now lives in a test asserting
+that ANSWER still carries a splittable marker, which is where a claim about a
+fixture belongs, and there is a test for the streaming refusal path.
+
+### `aria-busy` is not a "stream finished" signal
+
+Worth recording because it made a verification lie. The agent-status list
+unmounts when it collapses, which happens at the **first token** — so waiting for
+`aria-busy` to clear measures the first fraction of a stream and reports it as the
+whole thing. It made the first smoke run report a 29-character answer for a
+300-character one. Both browser scripts now wait on the composer swapping Stop
+back to Send, which is driven by `busy`.
+
+### Bundle cost, stated rather than hidden
+
+The markdown pipeline (react-markdown + remark-gfm + rehype-sanitize) is
+**75 kB gzipped**, code-split so only `/chat` and `/widget` pay it — the landing,
+about and privacy pages do not. `/chat` is therefore ~173 kB gzipped total.
+
+For an audience on metered roaming data that is not nothing. It is kept eager
+because a user on `/chat` needs it within seconds and a lazy load risks stalling
+the first token. Moving it behind a dynamic import prefetched when the composer is
+focused is a real option — but it should be made on a measurement, not on a guess,
+so it is recorded here rather than done speculatively.
