@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import Settings, get_settings
 from app.errors import AppError, ErrorCode, log_app_error
-from app.routers import chat, health
+from app.routers import chat, health, voice
 from app.schemas import ErrorDetail, ErrorEnvelope
 
 APP_VERSION = "0.1.0"
@@ -189,6 +189,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
+    app.include_router(voice.router, prefix="/api")
 
     return app
 

@@ -11,6 +11,9 @@ changes, this file changes in the same pull request.
 | `POST /api/chat` | Ask a question, get one JSON response |
 | `POST /api/chat/stream` | The same answer, streamed as Server-Sent Events |
 | `GET /api/health` | Liveness, index state, configured models, uptime |
+| `POST /api/stt` | Transcribe recorded audio to text |
+| `POST /api/tts` | Synthesise text to MP3 audio |
+| `POST /api/tts/preview` | Show what TTS would say, free |
 
 **`/api/chat` and `/api/chat/stream` return identical content.** They share the
 same retrieval, generation and verification path. Streaming changes *when* you
@@ -412,6 +415,115 @@ With no index built, `status` is `degraded`, `index.ready` is `false`, and
 
 `models` appears here and **only** here. It never appears in a chat response or
 an error.
+
+
+---
+
+## Voice
+
+Voice is **accessibility, not novelty**. A cruise passenger on the pier with a
+phone in one hand and a bag in the other will talk to this long before they type,
+and so will a driver at the cargo gate.
+
+Both endpoints are enhancements. If either provider fails you get a clean error
+and the text path is completely unaffected — never block the chat UI on voice.
+
+### ⚠️ The microphone needs HTTPS
+
+**`navigator.mediaDevices.getUserMedia` only works on a secure context: HTTPS,
+or `localhost`.** On plain HTTP over a LAN address — `http://192.168.1.20:5173`,
+the usual way you test on a phone — `mediaDevices` is `undefined` and the mic
+**fails silently**. No prompt, no error dialog, nothing in the console unless you
+check for it.
+
+So:
+
+- Local development on `http://localhost:5173` works.
+- Testing on a phone against your laptop's IP over HTTP **will not work**, and it
+  will look like a bug in this API. It is not.
+- The deployed frontend **must** be served over HTTPS.
+
+Guard for it and say so, rather than letting the button do nothing:
+
+```js
+if (!navigator.mediaDevices?.getUserMedia) {
+  // Not a secure context, or no mic. Hide the mic button and keep typing.
+  showTypeOnlyMode("Voice needs a secure (HTTPS) connection.");
+}
+```
+
+### `POST /api/stt`
+
+Multipart upload, field name **`audio`**.
+
+| Constraint | Value |
+| --- | --- |
+| Formats | WebM, MP4, M4A, MPEG/MP3, WAV, OGG (parameters like `;codecs=opus` are fine) |
+| Max size | 20 MB |
+| Max duration | about 60 seconds |
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/stt -F "audio=@question.webm;type=audio/webm"
+```
+
+**200**
+
+```json
+{ "text": "How much is a ferry ticket?" }
+```
+
+That is the whole response, deliberately. **Do not chain this straight into
+`/api/chat`.** Put the transcript in the input box so the user can fix a misheard
+terminal name or figure first — a confident answer to a misheard question is both
+a bad experience and a bad demo moment.
+
+**422** for an unsupported format, an empty upload, too large, or too long. The
+`message` is written for a user and is safe to show as-is. **503** if the
+transcription provider is unavailable.
+
+Audio is processed in memory and discarded. Nothing is written to disk, and
+neither the audio nor the transcript is ever logged.
+
+### `POST /api/tts`
+
+```json
+{ "text": "The one-way fare is XCD 44.44 [kb-008]." }
+```
+
+Returns **`audio/mpeg`** bytes with `Cache-Control: public, max-age=3600` and an
+`ETag`. Send `If-None-Match` on a repeat and you get a **304**. `X-TTS-Cache` is
+`hit` or `miss` — server-side caching means the canned messages (refusal,
+no-answer, greeting) are synthesised once, not once per rehearsal.
+
+Send the **`answer` field verbatim**. The server sanitises it: markdown removed,
+`[kb-xxx]` markers removed, URLs replaced, JSON and table pipes removed, phone
+numbers and currency expanded. You do not need to pre-clean anything.
+
+What sanitisation does, with the cases that matter:
+
+| In | Spoken |
+| --- | --- |
+| `869-465-8121` | `8 6 9, 4 6 5, 8 1 2 1` |
+| `869-465-8121 / 2 / 3` | the three numbers, each as digits |
+| `XCD 44.44` | `44.44 East Caribbean dollars` |
+| `**bold**`, `` `code` ``, `## head` | the words only |
+| `[kb-008].` | removed, with no stray space before the full stop |
+| `https://www.scaspa.com/x` | `the SCASPA website` |
+| `\| Berth \| EC$100 \|` | `Berth, 100 East Caribbean dollars.` |
+
+The phone number is the one that matters most: read as an integer it becomes
+"eight hundred sixty-nine million…", which nobody can write down — and it ends
+every refusal.
+
+**422** if the text is empty, or empty once sanitised (e.g. only a citation
+marker), or over 4000 characters after sanitisation. **503** if the provider is
+unavailable.
+
+### `POST /api/tts/preview`
+
+Same body. Returns `{ "text": "..." }` — the sanitised text that *would* be
+spoken, with **no provider call and no cost**. Useful for showing a caption, and
+the fastest way to find a sanitisation bug.
 
 ---
 

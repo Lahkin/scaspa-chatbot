@@ -80,5 +80,11 @@ def tmp_settings(tmp_path: Path) -> Settings:
     return Settings(
         _env_file=None,
         CHROMA_DIR=str(tmp_path / "chroma"),
+        # SCRAPED_DIR must be isolated too. It defaults to ../data/scraped, and
+        # without this the scraper and TTS-cache tests wrote into the real data
+        # directory — a test fixture silently overwrote the committed
+        # flagged_for_client.md with one row of fake content, and the TTS cache
+        # leaked between tests so a "first" request reported a cache hit.
+        SCRAPED_DIR=str(tmp_path / "scraped"),
         KB_CSV_PATH=str(SAMPLE_CSV),
     )

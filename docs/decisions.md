@@ -790,3 +790,90 @@ That fails closed, which is the right direction, but it makes
 `web-xxxx` ids and widening the citation pattern touches the safety-critical
 validator, so it is deliberately **not** bundled into a scraping change. It is
 the first thing to do next.
+
+
+---
+
+## 0013 — Voice: sanitisation is the feature, and a test fixture was writing to the real data directory
+
+**Date:** 2026-07-29
+**Status:** Accepted
+
+### Sanitisation is where the value is
+
+Wiring up transcription and synthesis is a morning's work. Making the output
+*usable* is the whole job, and almost all of it happens before synthesis.
+
+The one that matters most is the phone number. `869-465-8121` handed to a voice
+model unmodified is read as a quantity — "eight hundred sixty-nine million, four
+hundred sixty-five thousand…" — which nobody can write down. It is also the
+string that ends **every refusal and every no-answer**, so it is the most spoken
+text in the product. SCASPA publishes it as `869-465-8121 / 2 / 3`, meaning three
+consecutive lines, which naively becomes "…eight one two one slash two slash
+three". Both shapes are expanded into digit groups.
+
+Three defects found by reading the output rather than trusting the regexes:
+
+1. **`[kb-008]` removal left a space before the full stop** — "for an adult
+   ticket ." reads as an odd pause. Punctuation is re-tightened after stripping.
+2. **A markdown table synthesised to silence.** Deleting table rows outright
+   meant an answer that was only a fee table produced no speech at all, and then
+   failed as "nothing to speak". Rows are now read as cells: `| Berth | EC$100 |`
+   becomes "Berth, 100 East Caribbean dollars."
+3. **Line breaks collapsed into a run-on.** "…8 1 2 3 Post: P.O. Box 963" gave
+   the voice model nowhere to breathe. Lines are joined as sentences.
+
+`POST /api/tts/preview` exists because of this: it returns the sanitised text
+with no provider call, so a sanitisation bug can be found in a second rather than
+by listening to every variation.
+
+### Duration limits are bounded, not decoded
+
+Exact for WAV, where the header states it. For compressed containers the duration
+is *bounded* from the byte count rather than decoded, because decoding would mean
+shipping a media library for a guard the 20 MB size cap already backstops.
+
+The bound is deliberately asymmetric: a clip is rejected only when even the
+highest plausible bitrate puts it over the limit — i.e. when it is *certainly*
+too long. Ambiguous clips are accepted. Wrongly refusing a traveller's question
+is worse than occasionally paying for a slightly longer one.
+
+### The transcript is never chained into the model
+
+`/api/stt` returns text and stops. The frontend puts it in the input box for the
+user to correct. A misheard fee or terminal name would otherwise produce a
+confident, well-cited answer to a question nobody asked.
+
+### The bug worth recording: tests were writing to the real data directory
+
+The TTS cache derives its location from `SCRAPED_DIR`, and the test fixture
+`tmp_settings` only isolated `CHROMA_DIR`. So `SCRAPED_DIR` still resolved to the
+real `../data/scraped`, and:
+
+* The TTS cache leaked between tests — a "first" request reported a cache **hit**,
+  which is how this was noticed.
+* Worse, `test_flagged_report_names_what_the_client_must_supply` wrote its
+  one-row fixture over the real `data/scraped/flagged_for_client.md`. The
+  **committed** client report in the previous commit was therefore test output:
+  a single "Tonnes of Cargo" row instead of all four flagged statistics. Anyone
+  reading it would not have known to chase the other three figures.
+
+Fixed by isolating `SCRAPED_DIR` in the fixture, verified by hashing the real
+report before and after a full test run. The report has been regenerated from a
+real crawl.
+
+The general lesson: a fixture that writes anywhere real will eventually write
+over something that matters, and it will look like a data problem rather than a
+test problem. Every path in `Settings` that a test can touch belongs in the
+isolation fixture.
+
+### Alternatives considered
+
+- **Chaining STT straight into chat** for a one-tap experience. Rejected: the
+  failure mode is a confident answer to the wrong question, and correcting a
+  transcript is much cheaper than correcting a wrong answer.
+- **Sanitising on the client.** Rejected: every client would reimplement it, and
+  the phone-number rule is the kind of thing that gets missed. It belongs next to
+  the text that produces it.
+- **Caching in memory only.** Rejected: it would be paid for again after every
+  restart, and restarts during rehearsal are frequent.

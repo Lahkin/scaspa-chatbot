@@ -133,6 +133,38 @@ class ChatResponse(BaseModel):
     meta: ResponseMeta = Field(description="Diagnostics")
 
 
+# --------------------------------------------------------------------- voice
+
+
+class SttResponse(BaseModel):
+    """POST /api/stt response.
+
+    Deliberately just the text. The transcript is **not** chained into the
+    assistant — the frontend puts it in the input box so the user can correct a
+    misheard terminal name or figure before asking.
+    """
+
+    text: str = Field(description="The transcript. Put this in the input box for the user to edit.")
+
+
+class TtsRequest(BaseModel):
+    """POST /api/tts body."""
+
+    text: str = Field(
+        min_length=1,
+        max_length=8000,
+        description="Text to speak. Markdown, [kb-xxx] markers and URLs are stripped first.",
+        examples=["The one-way fare is XCD 44.44 [kb-008]."],
+    )
+
+    @field_validator("text")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("text must contain at least one non-whitespace character")
+        return v
+
+
 # ------------------------------------------------------------------- health
 
 

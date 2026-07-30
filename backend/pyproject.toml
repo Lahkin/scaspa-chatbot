@@ -12,6 +12,8 @@ dependencies = [
     "pydantic==2.13.4",
     "pydantic-settings==2.14.2",
     "python-dotenv==1.1.1",
+    # Required by FastAPI for the multipart audio upload on /api/stt.
+    "python-multipart==0.0.32",
     # LangChain v1 — agent entry point is langchain.agents.create_agent
     "langchain==1.3.14",
     "langchain-core==1.5.2",

@@ -29,7 +29,8 @@ are documented placeholders. See [docs/architecture.md](docs/architecture.md).
 | Tool events on the stream and in the response | Working |
 | Conversation memory (in-process, not persisted) | Working |
 | Lint, format, tests, CI | Working |
-| Voice endpoints, charts, scraper | Not implemented |
+| Voice: `POST /api/stt`, `POST /api/tts` | Working |
+| Charts | Not implemented |
 
 The full API contract for the frontend team is
 [docs/api-contract.md](docs/api-contract.md).
@@ -179,6 +180,43 @@ with excerpts — so a new travel advisory is something the system notices.
 on a fee, a time or a phone number. **It never resolves a conflict.** The site
 being authoritative is guidance for a researcher, not a licence for code to
 overwrite a verified row.
+
+## Voice
+
+Voice is accessibility, not novelty. Someone on the pier with a bag in one hand
+talks before they type.
+
+```bash
+cd backend
+uv run python scripts/voice_smoke.py question.wav       # STT -> chat -> TTS -> mp3
+uv run python scripts/voice_smoke.py --preview-only --text "**Call** 869-465-8121 / 2 / 3"
+```
+
+### The microphone needs HTTPS — tell the frontend team before they debug it
+
+`getUserMedia` only works in a secure context: **HTTPS or `localhost`**. On a LAN
+address over plain HTTP — `http://192.168.1.20:5173`, the normal way to test on a
+phone — `navigator.mediaDevices` is `undefined` and the mic **fails silently**.
+No prompt, no error. The deployed frontend must be on HTTPS. This is in
+[docs/api-contract.md](docs/api-contract.md) too, with a guard to copy.
+
+### What the voice layer guarantees
+
+- **Uploaded audio never touches disk** and is never logged. Neither is the
+  transcript. Processed in memory, discarded.
+- **The transcript is not chained into the assistant.** `/api/stt` returns text
+  and stops, so the user can correct a misheard fee before asking.
+- **Answers are sanitised before synthesis.** Markdown, `[kb-xxx]` markers, URLs,
+  JSON and table pipes are stripped; phone numbers become digit groups
+  (`8 6 9, 4 6 5, 8 1 2 1`) and currency codes are expanded. Read as an integer
+  the SCASPA number is "eight hundred sixty-nine million" — unwriteable, and it
+  ends every refusal.
+- **Synthesised audio is cached** on disk by SHA-256 of the sanitised text, with
+  an LRU cap, plus `ETag`/`Cache-Control` so the browser caches too. The canned
+  messages are paid for once, not once per rehearsal. This cache is the only
+  audio written anywhere.
+- **Voice degrades to nothing.** A provider failure returns a clean 503 and the
+  text path is unaffected. If the mic dies on stage, keep typing.
 
 ## Privacy: what this service stores
 
