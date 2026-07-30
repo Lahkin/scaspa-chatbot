@@ -1,0 +1,48 @@
+# Render blueprint. Deploy from GitHub; set secrets in the dashboard, never here.
+#
+#   1. Push this repo to GitHub.
+#   2. Render -> New -> Blueprint -> pick the repo.
+#   3. Set the secret env vars listed below in the dashboard.
+#   4. Deploy.
+#
+# See README "Deploy" for the full walkthrough, and docs/decisions.md 0017 for why
+# the index is baked into the image rather than mounted.
+services:
+  - type: web
+    name: scaspa-chatbot-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: ohio
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # --- secrets: set these in the dashboard, sync:false keeps them out of git
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false          # the real frontend origin; a wildcard refuses to boot in prod
+      # --- non-secret configuration
+      - key: ENV
+        value: prod
+      - key: LOG_JSON
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "15"
+      - key: OPENAI_CHAT_MODEL
+        value: gpt-5.6-terra
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-large
+      - key: OPENAI_TRANSCRIBE_MODEL
+        value: gpt-transcribe
+      - key: OPENAI_TTS_MODEL
+        value: gpt-4o-mini-tts
+      - key: OPENAI_TTS_VOICE
+        value: marin
+      - key: DAILY_SPEND_WARN_USD
+        value: "5"

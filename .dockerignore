@@ -1,0 +1,37 @@
+# Paths are relative to the build context, which is the repository root.
+
+# Secrets. The API key is supplied as a BuildKit secret at build time, never
+# copied into the image.
+.env
+.env.*
+!.env.example
+
+# Generated state. The index is rebuilt inside the builder; shipping a local one
+# would make the image depend on whatever the last developer happened to have.
+data/chroma/
+data/index_meta.json
+data/tts_cache/
+data/scraped/pdfs/
+data/scraped/*.jsonl
+data/questions.jsonl
+data/questions_*.csv
+
+# Not needed at runtime.
+backend/tests/
+backend/.venv/
+evals/
+docs/
+*.md
+!data/knowledge/*.csv
+
+# Repo noise
+.git/
+.github/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/htmlcov/
+**/.coverage
+.DS_Store

@@ -1321,3 +1321,131 @@ Established, with tests:
 - **The refusal copy is not approved.**
 - **No real model has ever been called.** Every behavioural claim in this
   repository is measured against a scripted double.
+
+
+---
+
+## 0017 — The index is baked into the image, and what that costs
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+### The question a judge will ask
+
+*"The researchers updated the sheet — how fast is that live?"*
+
+The answer has to be a real number, so the choice is made explicitly here rather
+than left as whatever the Dockerfile happened to do.
+
+### Decision
+
+**Bake the Chroma index into the container image at build time.**
+
+Answer: **one rebuild and redeploy — a few minutes.** Not seconds, and not
+automatic.
+
+### Why, for a competition build
+
+- **The image cannot start with a stale or missing index.** The index and the code
+  ship as one artefact, so "which version is deployed" has exactly one answer,
+  visible on `/api/health` as `kb_version`.
+- **Rollback is a redeploy.** Reverting to yesterday's image reverts the knowledge
+  base with it. With a mounted volume, code and data roll back independently and
+  you can end up with new code reading an old index.
+- **Nothing mutates at runtime.** No job to schedule, no volume to provision, no
+  half-written index for a request to hit mid-rebuild. On the morning of a demo,
+  fewer moving parts is worth more than faster updates.
+- **The build refuses to bake fixture data.** It looks for
+  `scaspa_kb_YYYY-MM-DD.csv` and skips the index entirely if it only finds
+  `sample_kb.csv` — an image that starts degraded and says so is better than one
+  serving invented fares (CLAUDE.md rule 5).
+
+### What it costs, stated plainly
+
+- A content fix is a redeploy, not a button. If the researchers spot a wrong fee
+  fifteen minutes before presenting, the honest move is to present the version you
+  have and say when it was verified — which is what the run book says to do.
+- The build needs the OpenAI key, so a deploy costs embedding calls. Small, but not
+  zero, and it happens on every deploy rather than every content change.
+- Image size grows with the index. Irrelevant at hundreds of rows.
+
+### The alternative, and why it was rejected
+
+**A mounted volume, rebuilt by a one-off job.** Updates in minutes without a
+redeploy, and content changes stop being deploys.
+
+Rejected for this build because it adds: a volume to provision and back up, a job
+to run and monitor, a race between the job writing and the API reading, and a new
+failure mode where the API is healthy but pointing at a half-built index. Every one
+of those is a thing that can go wrong in a venue.
+
+**Revisit after the competition.** Once content changes daily rather than weekly,
+the volume becomes the right trade — and the API already supports it: point
+`CHROMA_DIR` at a mount and build with `BUILD_INDEX=false`.
+
+### The API key at build time
+
+The index build needs the key, and a build-time secret is easy to leak. It is
+mounted as a **BuildKit secret** (`--mount=type=secret`), never an `ARG` or `ENV`:
+an `ARG` is recorded in image history and `docker history` would print the key.
+
+### Not verified
+
+No Docker daemon was available here, so **the image has never been built**. The
+Dockerfile is checked structurally — multi-stage, non-root, healthcheck on
+`/api/health`, secret mount, no `uv` in the runtime stage — but not built or run.
+First build should be treated as untested.
+
+---
+
+## 0018 — Two README bugs found by cloning the repo and following it
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+The instruction was to hand the README to someone from another role and watch them
+fail, because every place they get stuck is a bug in the README. No person was
+available, so the mechanical version: clone into a fresh directory and follow every
+command literally.
+
+It failed on step three.
+
+### Bug 1 — `.env.example` was not copyable
+
+The README said `cp ../.env.example .env`, then `uv run pytest`. That crashed with
+**twenty Pydantic validation errors**.
+
+Cause: every key was written as `CHAT_TEMPERATURE=   # Sampling temperature; ...`
+and **python-dotenv treats the inline comment as the value**. So
+`CHAT_TEMPERATURE` became the literal string `"# Sampling temperature; ..."`, which
+is not a float.
+
+That file had been "documented" since the first commit and never once copied.
+
+Two fixes, both kept:
+
+1. `.env.example` rewritten with comments on their **own lines** above each key.
+2. `Settings` gained a `mode="before"` validator treating a blank value — or one
+   starting with `#` — as **unset**, so the default applies. A half-filled `.env` is
+   the normal state for someone starting out; it should mean "use the defaults",
+   not "refuse to boot with a traceback".
+
+### Bug 2 — the quick start told you to spend money you could not spend
+
+The README said to run `build_index.py` immediately after the tests, without
+mentioning that it calls the embeddings API and needs a key. A newcomer following
+along hits `error: OPENAI_API_KEY is not set`.
+
+Fixed by saying so, and by pointing at `--dry-run`, which validates the CSV and
+prints the full report for free.
+
+### Verified after fixing
+
+Fresh clone → `uv sync` → `cp ../.env.example .env` → `uv run pytest` → **482
+passed** → server starts → `/api/health` 200 → `/docs` 200.
+
+### The lesson
+
+Documentation is not verified by reading it. Both bugs were invisible on the page
+and immediate on the command line, and the second one had survived nine prompts of
+review.

@@ -11,7 +11,7 @@ CLAUDE.md absolute rule 2.
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/config.py -> backend/
@@ -27,6 +27,32 @@ class Settings(BaseSettings):
         extra="ignore",
         case_sensitive=True,
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_means_unset(cls, values: dict) -> dict:
+        """Treat an empty environment value as absent, so the default applies.
+
+        `.env.example` documents every key with a blank value, and the README tells
+        a newcomer to copy it. Without this, that documented first step crashes on
+        `CHAT_TEMPERATURE=` with a Pydantic traceback — because an empty string is
+        not a float. Found by cloning the repo and following the README literally.
+        A half-filled `.env` is the normal state for someone starting out; it
+        should mean "use the defaults", not "refuse to boot".
+        """
+        if not isinstance(values, dict):
+            return values
+
+        def unset(value: object) -> bool:
+            # A stray inline comment counts as unset too: python-dotenv reads
+            # `FOO=  # note` as the literal value "# note", and a hand-edited
+            # file will eventually contain one.
+            if not isinstance(value, str):
+                return False
+            stripped = value.strip()
+            return not stripped or stripped.startswith("#")
+
+        return {key: value for key, value in values.items() if not unset(value)}
 
     # --- OpenAI -----------------------------------------------------------
     # No default for the key: absence must be obvious, not silently empty-string.
