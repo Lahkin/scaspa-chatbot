@@ -21,7 +21,8 @@
     "check:responsive": "node scripts/responsive-check.mjs",
     "check:streaming": "node scripts/streaming-perf.mjs",
     "check:integration": "node scripts/integration-check.mjs",
-    "check:slow": "node scripts/slow-network-check.mjs"
+    "check:slow": "node scripts/slow-network-check.mjs",
+    "check:charts": "node scripts/chart-check.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",
@@ -29,6 +30,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "10.1.0",
+    "recharts": "^3.10.1",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "zod": "4.4.3"

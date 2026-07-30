@@ -3,6 +3,7 @@ import { cn } from '@/lib/cn';
 import type { Message } from '@/features/chat/types';
 import { reconcile } from '@/features/chat/citations';
 import { AgentStatus } from './AgentStatus';
+import { ChartBlock } from './ChartBlock';
 import { CitationProvider } from './CitationContext';
 import { EscalationCard } from './EscalationCard';
 import { NoAnswerCard } from './NoAnswerCard';
@@ -127,6 +128,19 @@ export function MessageBubble({ message, onOpenSource }: MessageBubbleProps) {
                   sourceId={sourceId}
                 />
               </CitationProvider>
+            )}
+
+            {/*
+              The chart, when the backend built one. After the text, because the
+              text is the answer and the chart is the evidence for it.
+
+              Suppressed while ungrounded, for the same reason the citation chips
+              are: a chart is believed more readily than a sentence, so drawing
+              one from figures the backend could not verify is the strongest
+              possible version of the claim it just declined to make.
+            */}
+            {!isUser && message.chart && grounded && !message.streaming && (
+              <ChartBlock spec={message.chart} />
             )}
 
             {!isUser && !grounded && !message.streaming && <UngroundedNotice />}

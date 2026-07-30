@@ -17,6 +17,7 @@ export type ScenarioId =
   | 'table'
   | 'hallucinated_marker'
   | 'volatility'
+  | 'chart'
   | 'no_answer'
   | 'index_missing'
   | 'retrieval_empty'
@@ -59,6 +60,11 @@ export const SCENARIOS: ScenarioDescription[] = [
     id: 'volatility',
     label: 'Citations with volatility (proposed)',
     expected: 'High row shows the travel-confirmation line and a tel: link; low row is quiet.',
+  },
+  {
+    id: 'chart',
+    label: 'Answer with a chart',
+    expected: 'Recharts loads lazily; caption and source chip always present.',
   },
   {
     id: 'no_answer',

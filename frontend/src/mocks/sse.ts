@@ -22,7 +22,7 @@
  * cruise terminal's wifi.
  */
 
-import type { Citation, StreamEvent } from '@/lib/types';
+import type { ChartSpec, Citation, StreamEvent } from '@/lib/types';
 import { ANSWER, CITATIONS, CONVERSATION_ID, KB_VERSION, REQUEST_ID, TOOL_CALLS } from './fixtures';
 import { sleep } from './scenarios';
 
@@ -105,6 +105,8 @@ export interface StreamOptions {
   skipTools?: boolean;
   /** Override the citations payload — used by the volatility scenario. */
   citations?: Citation[];
+  /** Emit a `chart` event after citations and before done, as the contract requires. */
+  chart?: ChartSpec;
 }
 
 /**
@@ -122,6 +124,7 @@ export function chatStream(options: StreamOptions = {}): ReadableStream<Uint8Arr
     answer = ANSWER,
     skipTools = false,
     citations = CITATIONS,
+    chart,
   } = options;
 
   let cancelled = false;
@@ -193,6 +196,12 @@ export function chatStream(options: StreamOptions = {}): ReadableStream<Uint8Arr
         // text, so it cannot come earlier.
         await sleep(30);
         enqueue(frame('citations', { citations: emptyCitations ? [] : citations }));
+
+        // After citations and always before done, per the contract.
+        if (chart) {
+          await sleep(20);
+          enqueue(frame('chart', chart));
+        }
 
         enqueue(
           frame('done', {

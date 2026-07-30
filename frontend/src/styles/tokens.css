@@ -184,6 +184,16 @@
   --size-widget-w: 380px;
   --size-widget-h: 600px;
 
+  /* Chart heights.
+   *
+   * ResponsiveContainer needs a parent with a DETERMINATE height — a percentage
+   * height resolving against `auto` is why a chart renders at zero pixels and
+   * looks like it failed to load. These are explicit, so there is nothing to
+   * resolve. See ChartCanvas.tsx.
+   */
+  --size-chart-h: 220px;
+  --size-chart-h-lg: 300px;
+
   /* A comfortable measure for reading. Around 65-75 characters per line is where
    * the eye stops losing the start of the next line; a chat column stretched to a
    * 1440px monitor is genuinely harder to read than one on a phone.
@@ -279,4 +289,15 @@
 
 @utility h-widget {
   height: var(--size-widget-h);
+}
+
+/* The determinate height ResponsiveContainer requires. Declared explicitly rather
+ * than reached for from the spacing scale, so it cannot silently fail to compile
+ * — see the tokens-compile test and decisions F002. */
+@utility h-chart {
+  height: var(--size-chart-h);
+}
+
+@utility h-chart-lg {
+  height: var(--size-chart-h-lg);
 }

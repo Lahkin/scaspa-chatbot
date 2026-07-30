@@ -124,3 +124,29 @@ describe('the MSW service worker does not ship', () => {
     expect(existsSync(resolve(PROJECT_ROOT, 'public/mockServiceWorker.js'))).toBe(true);
   });
 });
+
+describe('Recharts is not in the initial bundle', () => {
+  it('lives in its own chunk, not the entry', () => {
+    if (bundles.length === 0) return;
+
+    const entry = bundles.filter(({ file }) => /assets\/index-.*\.js$/.test(file));
+    expect(entry.length).toBeGreaterThan(0);
+
+    for (const { file, source } of entry) {
+      // Recharts is ~400kB and most conversations never render a chart. Charging
+      // that to someone on roaming data asking what time the ferry leaves is the
+      // thing this assertion exists to prevent.
+      for (const marker of ['ResponsiveContainer', 'CartesianGrid', 'recharts', 'victory-vendor']) {
+        expect(source.includes(marker), `${file} contains ${marker}`).toBe(false);
+      }
+    }
+  });
+
+  it('is present in a lazily-loaded chunk, so the split is real and not a deletion', () => {
+    if (bundles.length === 0) return;
+    // Without this, removing the chart feature entirely would pass the test above.
+    const chartChunk = bundles.filter(({ file }) => /ChartCanvas-.*\.js$/.test(file));
+    expect(chartChunk.length).toBe(1);
+    expect(chartChunk[0]!.source).toContain('recharts');
+  });
+});

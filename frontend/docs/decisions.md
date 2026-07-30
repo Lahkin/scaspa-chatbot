@@ -1164,3 +1164,120 @@ usage insight.
 `analytics` matched `telemetry.ts`'s own documentation explaining that it uses no
 analytics. Both were tightened to hostnames and API calls. A test that fails on
 its own explanation is a test people delete.
+
+---
+
+## F010 — Charts
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+The model never draws a chart. It describes one, the backend validates every
+figure in the specification against the text of the row it cites, and this renders
+what survived. `ChartBlock` computes nothing, aggregates nothing and infers
+nothing.
+
+### ResponsiveContainer, and why the height is a token
+
+The handbook's warning is right: the reason a chart is invisible is almost always
+`ResponsiveContainer`. It measures its parent, and given `height="100%"` inside a
+parent whose height is `auto`, the percentage resolves against nothing, the
+container measures **zero**, and the chart renders at zero pixels — which looks
+exactly like a failure to load.
+
+The wrapper therefore has an **explicit height** from `--size-chart-h`, not a
+percentage. It is a token rather than an arbitrary value specifically so nobody
+later "tidies" it into `h-full` and reintroduces the bug.
+
+**Verified at 320px first**, in a browser, because jsdom does no layout and would
+report every chart as invisible whether or not it is:
+
+| width | wrapper | svg     | ticks shown |
+| ----- | ------- | ------- | ----------- |
+| 320px | 220px   | 254×220 | 9 of 12     |
+| 390px | 220px   | 324×220 | 11 of 12    |
+| 768px | 300px   | 652×300 | all         |
+
+### Three signals per series, not one
+
+Colour, **stroke pattern**, and **marker shape or fill pattern**. Around one man in
+twelve has a colour-vision deficiency, the leave-behind is printed in black and
+white, and a projector in a bright room flattens the blue ramp into four greys.
+
+Bars and areas use SVG `<pattern>` fills — solid, diagonal, dotted, cross-hatch —
+because four translucent blues are four indistinguishable greys once colour is
+gone. Lines use dash patterns and dot shapes. The first two styles are the most
+distinct pair, since a two-series chart is the common case.
+
+`--amber-board` is the single accent, used only for a highlighted series. It stays
+a fill-and-dark-ground colour and never becomes text on a light surface.
+
+### The caption is never truncated, and the source is a live chip
+
+The backend refuses to emit a chart without a caption stating whether the figures
+are official or illustrative. It renders at `text-small` rather than
+`text-caption` — legible at arm's length on a phone, which caption-sized grey text
+is not — and a test asserts it carries no `truncate` or `line-clamp`. A chart is
+believed more readily than a sentence, so a chart whose provenance is clipped is
+exactly the artefact that ends up in somebody's budget.
+
+The source renders as a `CitationChip`, so the row behind the chart is one tap
+away, plus screen-reader text so the id is announced even when the chip resolves
+to nothing.
+
+### A chart is data, so the data is always there
+
+The data table is rendered **twice**: visually hidden, always, and visibly behind
+a "View as table" toggle. The hidden copy is unconditional — a chart is data, and
+the data must never be behind a button for someone who cannot see the drawing. The
+visible copy is `aria-hidden`, or a screen reader reads the same table twice.
+
+`aria-label` is computed from the numbers: what it measures, over what range,
+which way it goes. A flat series is described as "unchanged" rather than as a
+trend of size zero. Nothing is inferred and no adjective is used that the data
+does not support.
+
+**A missing point is a gap, not a zero** — in the rows Recharts gets (`null`,
+`connectNulls={false}`) and in the table (an em dash). On a tonnage chart those
+are very different claims.
+
+### Charts are suppressed on an ungrounded answer
+
+Same reasoning as the citation chips, and stronger: a chart is believed more
+readily than a sentence, so drawing one from figures the backend could not verify
+is the most emphatic possible version of the claim it has just declined to make.
+
+### Recharts is lazy, and it is measured
+
+`ChartCanvas` is the only module that imports Recharts and is reached only through
+`React.lazy`. The result:
+
+| chunk              | size  | gzip                |
+| ------------------ | ----- | ------------------- |
+| `ChartCanvas-*.js` | 403kB | 114kB               |
+| entry              | —     | no recharts markers |
+
+Two tests: one asserts the entry contains no Recharts markers, the other asserts
+the chart chunk exists and contains them — without the second, deleting the chart
+feature entirely would pass the first. The browser check confirms the chunk is not
+fetched until a chart is actually needed, at every width.
+
+**Slow 3G is unchanged**: 5249ms and 6239ms, against 5257ms and 6216ms before
+Recharts existed. Adding a 400kB dependency cost the first paint nothing, which is
+the whole point of the split.
+
+Rollup did rebalance the other chunks — the entry grew 309→390kB while the
+markdown chunk shrank 253→209kB. Checked rather than assumed: the entry's
+sourcemap lists only router, query, zod, react-dom and `src`, and the markdown
+pipeline is still in its own chunk. Same bytes, different distribution, loaded in
+parallel, and the Slow 3G numbers confirm it cost nothing.
+
+### Mobile decisions live in a pure module
+
+`chartLayout.ts` imports no Recharts, so tick density, label shortening and the
+horizontal-bar threshold are all testable in milliseconds. Months shorten to three
+letters rather than rotating 45°; anything else truncates with an ellipsis rather
+than being given an invented abbreviation. A bar chart with more than six
+categories flips horizontal below 640px — measured from the **container**, not a
+breakpoint, because the widget is 380px wide inside an iframe on a 1440px desktop
+and has exactly the phone's problem.

@@ -39,6 +39,8 @@ import { ERROR_COPY } from '@/features/chat/errorCopy';
 import type { FailureKind } from '@/features/chat/errorCopy';
 import { HEALTH_DEGRADED, HEALTH_STALE, NO_ANSWER_RESPONSE } from '@/mocks/fixtures';
 import { isStale } from '@/features/chat/queries';
+import { ChartBlock } from '@/components/chat/ChartBlock';
+import { ALL_CHART_FIXTURES } from '@/mocks/chartFixtures';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.
@@ -453,6 +455,13 @@ export function Gallery() {
         <ComposerDemo />
       </Section>
 
+      <Section
+        title="Charts"
+        note="Every shape the real subjects take. Recharts loads lazily — the first one here fetches it."
+      >
+        <ChartGallery />
+      </Section>
+
       <Section title="Typography scale">
         <div className="space-y-1">
           <p className="text-display font-semibold">Display 36</p>
@@ -785,6 +794,45 @@ function ComposerDemo() {
       <Button variant="secondary" onClick={() => setComposerDraft('a'.repeat(length))}>
         Fill the composer with {length} characters
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Every fixture, at a chosen width.
+ *
+ * The width selector is the point: a twelve-point line chart is fine at 1280px
+ * and unreadable at 390px unless the ticks thin and the labels shorten. Narrow it
+ * and watch the month names go from "September" to "Sep" and then start skipping.
+ */
+function ChartGallery() {
+  const [width, setWidth] = useState(390);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {[320, 390, 768, 1024].map((value) => (
+          <Chip key={value} selected={width === value} onClick={() => setWidth(value)}>
+            {value}px
+          </Chip>
+        ))}
+      </div>
+      <p className="text-caption text-ink-subtle">
+        Sized with a wrapper, not an iframe, so the chart measures its own container the way it does
+        inside a message bubble. A bar chart with more than six categories flips to a horizontal
+        layout below 640px.
+      </p>
+
+      <div className="overflow-x-auto">
+        <div className="space-y-6" style={{ width: `${width}px` }}>
+          {ALL_CHART_FIXTURES.map(({ label, spec }) => (
+            <div key={label} className="rounded-md border border-border bg-surface p-3">
+              <p className="mb-1 text-caption font-semibold text-ink-subtle">{label}</p>
+              <ChartBlock spec={spec} />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

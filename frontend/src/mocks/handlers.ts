@@ -41,6 +41,7 @@ import {
   UNGROUNDED_RESPONSE,
   silentMp3,
 } from './fixtures';
+import { CHART_CRUISE_PASSENGERS } from './chartFixtures';
 import { getScenario, sleep } from './scenarios';
 import { SSE_HEADERS, chatStream } from './sse';
 
@@ -98,6 +99,9 @@ export const handlers = [
 
       case 'hallucinated_marker':
         return HttpResponse.json({ ...CHAT_RESPONSE, answer: HALLUCINATED_ANSWER });
+
+      case 'chart':
+        return HttpResponse.json({ ...CHAT_RESPONSE, chart: CHART_CRUISE_PASSENGERS });
 
       case 'no_answer':
         // HTTP 200. A no-answer is not an error.
@@ -181,6 +185,11 @@ export const handlers = [
 
       case 'hallucinated_marker':
         return new HttpResponse(chatStream({ answer: HALLUCINATED_ANSWER }), {
+          headers: SSE_HEADERS,
+        });
+
+      case 'chart':
+        return new HttpResponse(chatStream({ chart: CHART_CRUISE_PASSENGERS }), {
           headers: SSE_HEADERS,
         });
 
