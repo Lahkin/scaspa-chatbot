@@ -29,6 +29,10 @@ data/scraped/*
 !data/scraped/flagged_for_client.md
 # Written by scripts/build_index.py and specific to a local index.
 data/index_meta.json
+# Question log and its exports. Real questions from real people belong to
+# SCASPA, not in a public repo.
+data/questions.jsonl
+data/questions_*.csv
 # Synthesised speech, cached to avoid paying twice for the same sentence.
 data/tts_cache/
 

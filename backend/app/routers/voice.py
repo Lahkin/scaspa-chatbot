@@ -17,7 +17,9 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import Response
 
 from app.config import Settings, get_settings
+from app.costs import SpendTracker, get_spend_tracker
 from app.errors import AppError, ErrorCode
+from app.ratelimit import RateLimiter, get_rate_limiter
 from app.schemas import ErrorEnvelope, SttResponse, TtsRequest
 from app.voice.stt import AudioRejected, STTUnavailableError, transcribe, validate_audio
 from app.voice.tts import TTSUnavailableError, sanitise_for_speech, synthesise
@@ -61,6 +63,8 @@ class AudioRejectedError(AppError):
 async def post_stt(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    tracker: Annotated[SpendTracker, Depends(get_spend_tracker)],
     audio: Annotated[UploadFile, File(description="Recorded audio. Max 20 MB, about 60 seconds.")],
 ) -> SttResponse:
     """Transcribe an audio upload.
@@ -69,6 +73,12 @@ async def post_stt(
     into the assistant: the frontend puts this in the input box so the user can
     correct a misheard terminal name or figure before asking.
     """
+    # Voice gets a tighter limit than chat: transcription is billed per second and
+    # one recording costs several text turns.
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="voice")
+
     data = await audio.read()
 
     try:
@@ -84,6 +94,7 @@ async def post_stt(
         # Drop the reference promptly; it is never written anywhere.
         del data
 
+    tracker.record_voice(seconds=check.duration_seconds or 0.0)
     logger.info(
         "stt_request bytes=%d content_type=%s request_id=%s",
         check.size_bytes,
@@ -107,6 +118,8 @@ async def post_tts(
     payload: TtsRequest,
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    tracker: Annotated[SpendTracker, Depends(get_spend_tracker)],
 ) -> Response:
     """Speak an answer.
 
@@ -114,12 +127,20 @@ async def post_tts(
     removed, and phone numbers and currency are expanded so they can be written
     down by someone listening.
     """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="voice")
+
     try:
         audio, entry = synthesise(payload.text, settings=settings)
     except ValueError as exc:
         raise AudioRejectedError(str(exc)) from exc
     except TTSUnavailableError as exc:
         raise VoiceUnavailableError(log_detail=f"tts: {exc}") from exc
+
+    if not entry.hit:
+        # Only a cache miss costs anything.
+        tracker.record_voice(characters=len(sanitise_for_speech(payload.text)))
 
     etag = f'"{entry.digest[:32]}"'
     # A matching ETag means the browser already has this audio.

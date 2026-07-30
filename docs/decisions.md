@@ -1146,3 +1146,178 @@ tool. A retrieval miss now fails the case.
   keyword rule.
 - **Defaulting hybrid on because it is standard practice.** Rejected: "it seemed
   better" is not a measurement, and here it was not even measurable.
+
+
+---
+
+## 0016 — Gate 3 hardening, and the feature freeze
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+### FEATURE FREEZE — declared 2026-07-30
+
+**The feature list is frozen as of this commit.** From here: fixes, content and
+rehearsal only.
+
+What that means concretely:
+
+* **Allowed** — bug fixes, real knowledge-base rows from the researchers, copy
+  changes, the deploy, rehearsal, and re-running the eval with a real API key.
+* **Not allowed** — new endpoints, new tools, new retrieval techniques, new UI
+  surfaces. Anything on the "would be nice" list is now post-competition.
+* **Exception** — a fix for a safety defect is always allowed, and is a fix, not
+  a feature.
+
+The reason for a hard line: everything still outstanding is *verification* work
+that needs an API key and real content, and unverified features are worth less
+than verified ones. Adding a tenth capability that has never been run against a
+real model is worse than polishing nine that have.
+
+### The numeric grounding gate: replace, do not flag
+
+Rule 10 previously marked an unverifiable figure and **still served the answer**.
+That was the wrong consequence: `grounded: false` in a JSON field does not stop
+anyone reading the number, and the number is what they act on.
+
+Now every currency amount, time, date and phone number is checked against the text
+of the rows retrieved that turn, and a failure **discards the answer** and
+substitutes a message pointing at the source and the phone number.
+
+Three cases the check has to get right, all of which would otherwise be false
+alarms that suppress correct answers:
+
+1. **The verification date.** The system prompt *requires* schedule answers to
+   state when the information was verified — and that date lives in chunk
+   metadata, not row text. Without allowing metadata `as_of`, the correct
+   behaviour would be flagged as a hallucination.
+2. **SCASPA's own phone number.** It comes from the escalation block, not from any
+   knowledge-base row.
+3. **Written variants.** `12,407,059` and `12407059` are the same figure; refusing
+   one spelling would suppress a correct answer.
+
+And the case it must *not* get wrong: `44` is a substring of `44.44`, so matching
+is verbatim with lookarounds. A rounded fare is the quiet version of inventing one.
+
+### Prompt injection: the half that matters
+
+Pattern-matching "ignore previous instructions" is the part that demos well and
+holds least. The structural half is the control: retrieved rows, scraped pages and
+PDFs are fenced in `<<<SOURCE ...>>>` blocks and the prompt states that anything
+inside a fence is quoted data even when phrased as a command.
+
+That matters specifically because of Prompt 6: **scraped web text is untrusted
+input.** Anyone who can edit a page on scaspa.com — or a PDF linked from it — could
+otherwise write an instruction into the prompt.
+
+The pattern guard is deliberately **neutralising, not rejecting**. "Should I ignore
+the sign at the cargo gate?" is a reasonable question, and refusing it would be a
+worse failure than answering it.
+
+### Rate limiting: the IP is a key, never a record
+
+Hashed with a random per-process salt, used as a dictionary key, discarded. Never
+logged, never persisted, never returned. The salt rotates on restart so keys from
+two runs cannot be correlated.
+
+Voice gets a stricter cap than chat (`RATE_LIMIT_PER_MINUTE // 3`, floor 3) because
+transcription is billed per second and one recording costs several text turns.
+
+Accepted limitation: per process, so N workers means N times the limit. Sharing it
+would mean external storage keyed by client, which is exactly the record being
+avoided.
+
+### Cost controls, and what is actually protecting the budget
+
+`MAX_OUTPUT_TOKENS` and `AGENT_MAX_TOOL_CALLS` are enforced from settings. A daily
+spend estimator accumulates token counts, prices them from settings, warns once per
+day past `DAILY_SPEND_WARN_USD`, and is exposed on the admin route.
+
+**The estimator is not the safety net and the code says so in its own docstring.**
+It counts only what the application saw. It cannot stop spend from a bug that
+bypasses it, a second deployment, or a script run with the same key.
+
+**The actual control is a hard monthly spending cap on the OpenAI account.** That
+is an action for a human on the OpenAI dashboard, it is not in this repository, and
+it is **outstanding** — see the caveats below.
+
+Prices are settings rather than literals, defaulting to `0.0`. A stale hardcoded
+rate turns the estimator into a confidently wrong number, which is worse than an
+obviously empty one.
+
+### The admin route: absence is the default
+
+`/api/admin/stats` is **not registered** unless `ADMIN_SECRET` is set. A route that
+checks a secret it does not have is one refactor away from checking nothing. With a
+secret it returns `404` — not `401` — for a wrong or missing header, so it does not
+confirm to a stranger that it exists.
+
+It is a shared bearer token with no rotation and no audit trail. Adequate for an
+operator stats page; stated as such rather than dressed up.
+
+### Structured logging: log the question, never the asker
+
+JSON logs carrying request id, route, latency, tool calls, token counts, retrieval
+scores, the grounded and refusal flags, and the question text.
+
+The formatter **raises `IdentifierLeak`** if a record carries a field named like an
+identifier — `ip`, `user_agent`, `session_id`, `audio`, `transcript` and others.
+Enforced in code and covered by a parametrised test over every forbidden name,
+rather than left to reviewer discipline. A future caller cannot slip one through by
+accident.
+
+The question log is a separate append-only file rather than something parsed out of
+application logs, so the export does not depend on log retention and it is obvious
+exactly what is being kept. It deliberately omits even the `conversation_id`:
+including it would let two questions be linked into one visit.
+
+### Refusal copy: drafted, NOT approved
+
+Handbook open question 21 asks for the team leader's and coach's sign-off on the
+exact wording. That approval **has not been obtained** — it is not something this
+work can produce.
+
+The draft is in `prompts.py` behind a `TODO(team-leader, coach)` block. The
+reasoning behind the wording:
+
+> I do not have that in SCASPA's verified information, so I will not guess at it.
+> SCASPA staff can confirm it for you directly.
+
+- Says plainly **what** it does not have, rather than how sorry it is.
+- **Apologises zero times.** Three apologies read as evasive and waste the line
+  that matters.
+- The phone number is last, because it is the action.
+- No "as an AI language model", no hedging about capabilities.
+
+Approve or amend it, then delete the TODO block.
+
+### A test-isolation bug, again
+
+`tmp_settings` did not isolate `QUESTION_LOG_PATH`, so tests would have appended
+test questions to the real `data/questions.jsonl`. Same class of bug as the
+`SCRAPED_DIR` leak in 0013, which silently overwrote a committed client report.
+Fixed, and the lesson restated: **every path in `Settings` that a test can reach
+belongs in the isolation fixture.**
+
+Also added an autouse fixture resetting the process-wide rate limiter and spend
+tracker between tests. Without it one test's requests counted against the next
+test's budget and 15 tests failed in whatever order exhausted it first.
+
+### What Gate 3 does and does not establish
+
+Established, with tests:
+
+- An ungrounded number cannot reach a user — the answer is replaced.
+- Rate limits work, return `429` with `Retry-After`, and never leak an IP.
+- Logs cannot contain an identifier; the formatter refuses.
+- Output tokens and the tool loop are capped from settings.
+- The admin route does not exist without a secret.
+
+**Not established:**
+
+- **The hard monthly cap on the OpenAI account is not set.** It cannot be set from
+  here. It is the single most important item on this list and it is a human action
+  on the OpenAI dashboard. Application limits are not a substitute.
+- **The refusal copy is not approved.**
+- **No real model has ever been called.** Every behavioural claim in this
+  repository is measured against a scripted double.

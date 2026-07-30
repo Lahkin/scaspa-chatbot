@@ -86,5 +86,26 @@ def tmp_settings(tmp_path: Path) -> Settings:
         # flagged_for_client.md with one row of fake content, and the TTS cache
         # leaked between tests so a "first" request reported a cache hit.
         SCRAPED_DIR=str(tmp_path / "scraped"),
+        # Same lesson as SCRAPED_DIR: an un-isolated path writes to the real data
+        # directory. The question log would otherwise accumulate test questions.
+        QUESTION_LOG_PATH=str(tmp_path / "questions.jsonl"),
         KB_CSV_PATH=str(SAMPLE_CSV),
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_process_state():
+    """Reset the process-wide limiter and spend tracker between tests.
+
+    Both are deliberately module-level singletons in production. Without this,
+    one test's requests count against the next test's rate limit and the suite
+    fails in whatever order happens to exhaust the budget first.
+    """
+    from app.costs import reset_spend_tracker
+    from app.ratelimit import reset_rate_limiter
+
+    reset_rate_limiter()
+    reset_spend_tracker()
+    yield
+    reset_rate_limiter()
+    reset_spend_tracker()

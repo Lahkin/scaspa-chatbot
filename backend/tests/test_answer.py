@@ -146,11 +146,17 @@ def test_build_citations_refuses_an_id_it_was_not_given(caplog) -> None:
 # ------------------------------------------------------------------ context
 
 
-def test_context_labels_each_chunk_with_its_id_and_date() -> None:
+def test_context_fences_each_chunk_as_untrusted_data() -> None:
+    """Retrieved content is DATA, not instruction, and the fence says so.
+
+    Scraped web text ends up in here too, and anyone who can edit a web page
+    could otherwise write an instruction into the prompt.
+    """
     context = format_context([chunk("kb-008"), chunk("kb-007")])
 
-    assert "[kb-008]" in context
-    assert "[kb-007]" in context
+    assert '<<<SOURCE id="kb-008"' in context
+    assert '<<<END SOURCE id="kb-008">>>' in context
+    assert '<<<SOURCE id="kb-007"' in context
     assert "2026-04-01" in context
 
 

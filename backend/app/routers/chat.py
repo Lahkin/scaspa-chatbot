@@ -22,9 +22,20 @@ from fastapi.responses import StreamingResponse
 
 from app.agent.memory import ConversationStore, get_conversation_store
 from app.config import Settings, get_settings
-from app.errors import AppError, ErrorCode, IndexMissingError, RetrievalEmptyError, log_app_error
+from app.costs import SpendTracker, get_spend_tracker
+from app.errors import (
+    AppError,
+    ErrorCode,
+    IndexMissingError,
+    RateLimitedError,
+    RetrievalEmptyError,
+    log_app_error,
+)
+from app.observability import TurnLog, append_question_log, log_turn
 from app.rag.answer import AnswerResult, answer_question, astream_answer
 from app.rag.ingest import read_index_meta
+from app.ratelimit import RateLimiter, get_rate_limiter
+from app.safety import InputRejected, sanitise_user_input
 from app.schemas import ChatRequest, ChatResponse, Citation, ErrorEnvelope, ResponseMeta, ToolCall
 
 logger = logging.getLogger(__name__)
@@ -38,6 +49,33 @@ SSE_HEADERS = {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
 }
+
+
+class MessageRejectedError(AppError):
+    """Input safety refused the message."""
+
+    code = ErrorCode.VALIDATION_ERROR
+    status_code = 422
+
+
+def enforce_rate_limit(request: Request, limiter: RateLimiter, scope: str = "chat") -> None:
+    """Check the per-client limit.
+
+    The IP is read here, hashed into a key, and discarded. It is never logged and
+    never stored — see `app.ratelimit`.
+    """
+    ip = request.client.host if request.client else None
+    decision = limiter.check(ip, scope=scope)
+    if not decision.allowed:
+        raise RateLimitedError(retry_after=decision.retry_after)
+
+
+def clean_message(payload: ChatRequest, settings: Settings) -> tuple[str, list[str]]:
+    """Apply input safety, translating a rejection into a 422."""
+    try:
+        return sanitise_user_input(payload.message, settings.MAX_MESSAGE_CHARS)
+    except InputRejected as exc:
+        raise MessageRejectedError(str(exc)) from exc
 
 
 def _require_index(settings: Settings) -> str | None:
@@ -94,24 +132,51 @@ async def post_chat(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
     store: Annotated[ConversationStore, Depends(get_conversation_store)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    tracker: Annotated[SpendTracker, Depends(get_spend_tracker)],
 ) -> ChatResponse:
     """Answer one question from the verified knowledge base."""
+    enforce_rate_limit(request, limiter, scope="chat")
+    message, injections = clean_message(payload, settings)
     kb_version = _require_index(settings)
     conversation_id = payload.conversation_id or store.new_id()
+    request_id = getattr(request.state, "request_id", "-")
 
-    result = answer_question(payload.message, category=payload.category, settings=settings)
+    if injections:
+        logger.warning("injection_neutralised route=/api/chat count=%d", len(injections))
+
+    result = answer_question(message, category=payload.category, settings=settings)
+    tracker.record_turn(result.prompt_tokens, result.completion_tokens)
+
+    turn = TurnLog(
+        request_id=request_id,
+        route="/api/chat",
+        question=message,
+        conversation_id=conversation_id,
+        answered=not result.refusal,
+        grounded=result.grounded,
+        refusal=result.refusal,
+        refusal_category=result.refusal_category,
+        latency_ms=result.latency_ms,
+        tool_names=[t.name for t in result.tool_calls],
+        prompt_tokens=result.prompt_tokens,
+        completion_tokens=result.completion_tokens,
+        best_score=result.best_score,
+        retrieval_scores=[c.score for c in result.retrieved],
+        cited_ids=result.cited_ids,
+        hallucinated_citations=result.hallucinated_citations,
+        ungrounded_numbers=result.ungrounded_numbers,
+        kb_version=kb_version,
+    )
+    log_turn(turn)
+    append_question_log(turn, settings)
 
     # History is recorded but not yet fed back into the prompt: this prompt is
     # plumbing and must not change answer behaviour. Wiring it in is a separate,
     # measurable change.
-    store.append(conversation_id, payload.message, result.answer)
+    store.append(conversation_id, message, result.answer)
 
-    return _to_response(
-        result,
-        conversation_id,
-        getattr(request.state, "request_id", "-"),
-        kb_version,
-    )
+    return _to_response(result, conversation_id, request_id, kb_version)
 
 
 def sse(event: str, data: dict) -> str:
@@ -129,6 +194,7 @@ async def post_chat_stream(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
     store: Annotated[ConversationStore, Depends(get_conversation_store)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> StreamingResponse:
     """Stream an answer.
 
@@ -139,6 +205,8 @@ async def post_chat_stream(
     marker, so the server does not strip them mid-stream; the client renders them
     inline and reconciles against `citations` when it arrives.
     """
+    enforce_rate_limit(request, limiter, scope="chat")
+    message, _injections = clean_message(payload, settings)
     kb_version = _require_index(settings)
     conversation_id = payload.conversation_id or store.new_id()
     request_id = getattr(request.state, "request_id", "-")
@@ -162,7 +230,7 @@ async def post_chat_stream(
             # verified to fire.
             async with aclosing(
                 astream_answer(
-                    payload.message,
+                    message,
                     category=payload.category,
                     settings=settings,
                 )
@@ -203,6 +271,16 @@ async def post_chat_stream(
             # Record whatever was produced, even on a disconnect or an error, so
             # a resumed conversation is not silently missing a turn.
             if pieces:
-                store.append(conversation_id, payload.message, "".join(pieces))
+                store.append(conversation_id, message, "".join(pieces))
+            log_turn(
+                TurnLog(
+                    request_id=request_id,
+                    route="/api/chat/stream",
+                    question=message,
+                    conversation_id=conversation_id,
+                    answered=bool(pieces),
+                    kb_version=kb_version,
+                )
+            )
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers=SSE_HEADERS)

@@ -44,9 +44,11 @@ from app.agent.prompts import (
     ESCALATION_BLOCK,
     NO_ANSWER_MESSAGE,
     REFUSAL_MESSAGE,
+    UNGROUNDED_NUMBER_MESSAGE,
     render_system_prompt,
 )
 from app.config import Settings, get_settings
+from app.rag.grounding import check_numbers
 from app.rag.retriever import RetrievedChunk
 from app.schemas import ChartSpec
 from app.upstream import call_with_retry
@@ -112,6 +114,13 @@ class AnswerResult(BaseModel):
     unverified_figures: list[str] = Field(
         default_factory=list,
         description="Money/time values in the answer found in no retrieved chunk (rule 10)",
+    )
+    ungrounded_numbers: list[str] = Field(
+        default_factory=list,
+        description="Figures that failed the numeric grounding gate; the answer was replaced",
+    )
+    answer_replaced: bool = Field(
+        default=False, description="True when the generated answer was discarded as ungrounded"
     )
     tool_calls: list[ToolCallInfo] = Field(
         default_factory=list, description="Tools the agent used, in order"
@@ -387,9 +396,37 @@ def finalise_answer(
             sorted(retrieved_ids),
         )
 
-    grounded = bool(verified_ids) and not hallucinated and not unverified_figures
+    # --- the numeric grounding gate: last line of defence ---
+    #
+    # Every currency amount, time, date and phone number in the answer must appear
+    # in a retrieved row. Previously an unverifiable figure only set
+    # grounded=false and the answer still shipped — but a flag in a JSON field
+    # does not stop anyone reading the number. Now the answer is discarded.
+    numbers = check_numbers(clean_answer, chunks)
+    ungrounded_numbers = numbers.values
+    answer_replaced = False
+    if ungrounded_numbers:
+        logger.warning(
+            "answer_replaced_ungrounded_numbers question=%r values=%s retrieved=%s",
+            query,
+            ungrounded_numbers,
+            sorted(retrieved_ids),
+        )
+        clean_answer = UNGROUNDED_NUMBER_MESSAGE
+        answer_replaced = True
+        # The replacement carries no citations of its own: nothing in it is a
+        # claim about SCASPA's facts.
+        citations = []
+        verified_ids = []
 
-    if not verified_ids:
+    grounded = (
+        bool(verified_ids)
+        and not hallucinated
+        and not unverified_figures
+        and not ungrounded_numbers
+    )
+
+    if not verified_ids and not answer_replaced:
         logger.warning("uncited_answer question=%r retrieved=%s", query, sorted(retrieved_ids))
 
     logger.info(
@@ -410,6 +447,8 @@ def finalise_answer(
         cited_ids=verified_ids,
         hallucinated_citations=hallucinated,
         unverified_figures=unverified_figures,
+        ungrounded_numbers=ungrounded_numbers,
+        answer_replaced=answer_replaced,
         best_score=best_score,
         model=settings.OPENAI_CHAT_MODEL,
         latency_ms=elapsed_ms,

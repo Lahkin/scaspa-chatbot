@@ -25,6 +25,7 @@ class ErrorCode(StrEnum):
 
     VALIDATION_ERROR = "VALIDATION_ERROR"
     RETRIEVAL_EMPTY = "RETRIEVAL_EMPTY"
+    RATE_LIMITED = "RATE_LIMITED"
     INDEX_MISSING = "INDEX_MISSING"
     UPSTREAM_TIMEOUT = "UPSTREAM_TIMEOUT"
     UPSTREAM_RATE_LIMITED = "UPSTREAM_RATE_LIMITED"
@@ -103,3 +104,20 @@ def log_app_error(error: AppError, request_id: str) -> None:
         request_id,
         error.log_detail or "(none)",
     )
+
+
+class RateLimitedError(AppError):
+    """Too many requests from one client. Carries the Retry-After value."""
+
+    code = ErrorCode.RATE_LIMITED
+    status_code = 429
+    message = (
+        f"You have sent a lot of questions in a short time. Please wait a moment and "
+        f"try again. If you need an answer now, call SCASPA on {SCASPA_PHONE}."
+    )
+
+    def __init__(
+        self, retry_after: int = 60, message: str | None = None, *, log_detail: str = ""
+    ) -> None:
+        self.retry_after = retry_after
+        super().__init__(message, log_detail=log_detail)

@@ -52,6 +52,28 @@ class Settings(BaseSettings):
     # --- Request limits ----------------------------------------------------
     MAX_MESSAGE_CHARS: int = Field(default=1000, gt=0)
 
+    # --- Cost controls -----------------------------------------------------
+    # Rates are settings, not literals, because provider pricing changes and a
+    # stale hardcoded rate turns the estimator into a confidently wrong number.
+    # Defaults are placeholders: set them from the current OpenAI pricing page.
+    PRICE_CHAT_INPUT_PER_MTOK: float = Field(default=0.0, ge=0)
+    PRICE_CHAT_OUTPUT_PER_MTOK: float = Field(default=0.0, ge=0)
+    PRICE_EMBEDDING_PER_MTOK: float = Field(default=0.0, ge=0)
+    PRICE_TRANSCRIBE_PER_MINUTE: float = Field(default=0.0, ge=0)
+    PRICE_TTS_PER_MCHAR: float = Field(default=0.0, ge=0)
+    DAILY_SPEND_WARN_USD: float = Field(default=5.0, ge=0)
+
+    # --- Admin -------------------------------------------------------------
+    # /api/admin/stats is omitted entirely unless this is set. In prod that means
+    # an unset secret removes the route rather than exposing it.
+    ADMIN_SECRET: str = ""
+
+    # --- Logging -----------------------------------------------------------
+    LOG_JSON: bool = True
+    # Where question text is appended for scripts/export_questions.py. Questions
+    # only — never an identifier.
+    QUESTION_LOG_PATH: Path = Path("../data/questions.jsonl")
+
     # --- Retrieval --------------------------------------------------------
     RETRIEVAL_TOP_K: int = Field(default=5, gt=0)
     RETRIEVAL_FETCH_K: int = Field(default=20, gt=0)
@@ -115,6 +137,16 @@ class Settings(BaseSettings):
     def kb_csv_path(self) -> Path:
         """KB_CSV_PATH resolved against backend/."""
         return (BACKEND_ROOT / self.KB_CSV_PATH).resolve()
+
+    @property
+    def question_log_path(self) -> Path:
+        """QUESTION_LOG_PATH resolved against backend/."""
+        return (BACKEND_ROOT / self.QUESTION_LOG_PATH).resolve()
+
+    @property
+    def admin_enabled(self) -> bool:
+        """Whether the admin route should exist at all."""
+        return bool(self.ADMIN_SECRET.strip())
 
     @property
     def scraped_path(self) -> Path:

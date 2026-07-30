@@ -294,6 +294,44 @@ class HealthResponse(BaseModel):
     index: IndexStatus = Field(description="Knowledge index status")
 
 
+# -------------------------------------------------------------------- admin
+
+
+class SpendSummary(BaseModel):
+    """One day's estimated spend. An estimate, not a bill."""
+
+    day: str
+    turns: int
+    prompt_tokens: int
+    completion_tokens: int
+    embedding_tokens: int
+    transcribe_seconds: float
+    tts_characters: int
+    chat_usd: float
+    embedding_usd: float
+    voice_usd: float
+    total_usd: float
+    daily_limit_usd: float
+    over_threshold: bool
+    note: str = ""
+
+
+class AdminStats(BaseModel):
+    """GET /api/admin/stats. Operator information; contains no user data."""
+
+    env: str
+    request_id: str
+    kb_version: str | None = None
+    kb_rows: int | None = None
+    rate_limit_per_minute: int
+    voice_rate_limit_per_minute: int
+    tracked_clients: int = Field(
+        description="Distinct rate-limit keys currently tracked. Hashed, not IPs"
+    )
+    today: SpendSummary
+    history: list[SpendSummary] = Field(default_factory=list)
+
+
 # -------------------------------------------------------------------- errors
 
 

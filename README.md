@@ -279,6 +279,33 @@ one question is 9 percentage points, so anything smaller than that is noise. Ful
 reasoning, including a technique that measured *worse* and had to be fixed, is in
 [docs/decisions.md](docs/decisions.md) 0015.
 
+## Hardening
+
+Feature freeze declared **2026-07-30** (docs/decisions.md 0016): fixes, content and
+rehearsal only.
+
+- **No number reaches a user unverified.** Every currency amount, time, date and
+  phone number in an answer is checked against the rows retrieved that turn. A
+  figure that cannot be traced **discards the answer** rather than flagging it — a
+  `grounded: false` field does not stop anyone reading the number.
+- **Rate limited** per client, with a stricter cap on voice. Returns `429` with
+  `Retry-After`. The IP is hashed into a key and never logged or stored.
+- **Logs carry the question, never the asker.** The formatter raises if a record
+  contains an identifier-shaped field.
+- **Spend is bounded** by `MAX_OUTPUT_TOKENS`, `AGENT_MAX_TOOL_CALLS` and a daily
+  estimate on `/api/admin/stats` — which is not registered at all unless
+  `ADMIN_SECRET` is set.
+
+> **Set a hard monthly spending cap on the OpenAI account.** The application
+> estimate cannot see spend that bypasses it. It is the warning light, not the fuse.
+> This is **still outstanding**.
+
+See [SECURITY.md](SECURITY.md) and [docs/privacy.md](docs/privacy.md).
+
+```bash
+uv run python scripts/export_questions.py --gaps   # what people actually asked
+```
+
 ## Privacy: what this service stores
 
 **Nothing is persisted about a user. Not one thing.**

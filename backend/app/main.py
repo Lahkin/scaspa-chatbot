@@ -17,8 +17,9 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import Settings, get_settings
-from app.errors import AppError, ErrorCode, log_app_error
-from app.routers import chat, health, voice
+from app.errors import AppError, ErrorCode, RateLimitedError, log_app_error
+from app.observability import JsonFormatter
+from app.routers import admin, chat, health, voice
 from app.schemas import ErrorDetail, ErrorEnvelope
 
 APP_VERSION = "0.1.0"
@@ -53,7 +54,9 @@ def configure_logging(settings: Settings) -> None:
     """
     handler = logging.StreamHandler()
     handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)-8s [%(request_id)s] %(name)s: %(message)s")
+        JsonFormatter()
+        if settings.LOG_JSON
+        else logging.Formatter("%(asctime)s %(levelname)-8s [%(request_id)s] %(name)s: %(message)s")
     )
     handler.addFilter(RequestIDLogFilter())
 
@@ -91,7 +94,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         request_id = _request_id(request)
         log_app_error(exc, request_id)
-        return error_response(exc.code, exc.message, exc.status_code, request_id)
+        response = error_response(exc.code, exc.message, exc.status_code, request_id)
+        if isinstance(exc, RateLimitedError) and exc.retry_after:
+            # A client that cannot see when to retry will retry immediately.
+            response.headers["Retry-After"] = str(exc.retry_after)
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -190,6 +197,14 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
     app.include_router(voice.router, prefix="/api")
+
+    # The admin route does not exist unless a secret is configured. An
+    # unauthenticated operator endpoint is worse than none, so absence is the
+    # default rather than a check that could be refactored away.
+    if settings.admin_enabled:
+        app.include_router(admin.router, prefix="/api")
+    else:
+        logger.info("admin_route_disabled reason=ADMIN_SECRET_not_set")
 
     return app
 
