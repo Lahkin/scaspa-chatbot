@@ -1,0 +1,103 @@
+/* Design tokens.
+ *
+ * Tailwind v4 is CSS-first: there is no tailwind.config.js. Tokens declared in
+ * @theme become both CSS variables AND utility classes, so `--color-brand-600`
+ * gives `bg-brand-600`, `text-brand-600` and so on. That is why tokens live here
+ * and not in JavaScript.
+ *
+ * INTERIM VALUES. The designers own this file and will replace it. Everything
+ * below is a placeholder chosen to be legible and accessible, not final brand
+ * colour. Do not hand-tune a hex here — change the token, or ask the designers.
+ *
+ * CLAUDE.md style rule: no arbitrary hex values in className. If a colour is
+ * needed and there is no token for it, add a token.
+ */
+
+@import 'tailwindcss';
+
+@theme {
+  /* --- brand -------------------------------------------------------------
+   * Interim maritime blue. SCASPA's real palette is a designer deliverable.
+   */
+  --color-brand-50: oklch(0.97 0.02 240);
+  --color-brand-100: oklch(0.93 0.04 240);
+  --color-brand-200: oklch(0.86 0.07 240);
+  --color-brand-300: oklch(0.76 0.1 240);
+  --color-brand-400: oklch(0.65 0.13 240);
+  --color-brand-500: oklch(0.56 0.15 240);
+  --color-brand-600: oklch(0.47 0.14 240);
+  --color-brand-700: oklch(0.39 0.12 240);
+  --color-brand-800: oklch(0.31 0.09 240);
+  --color-brand-900: oklch(0.24 0.06 240);
+
+  /* --- surfaces ---------------------------------------------------------- */
+  --color-surface: oklch(1 0 0);
+  --color-surface-muted: oklch(0.97 0.005 240);
+  --color-surface-sunken: oklch(0.94 0.008 240);
+  --color-border-subtle: oklch(0.89 0.01 240);
+
+  /* --- text -------------------------------------------------------------- */
+  --color-ink: oklch(0.22 0.02 240);
+  --color-ink-muted: oklch(0.48 0.02 240);
+  --color-ink-inverse: oklch(0.99 0 0);
+
+  /* --- status -----------------------------------------------------------
+   * `verified` marks an answer whose citations and figures the backend
+   * confirmed. `unverified` marks one it could not. These are semantic, not
+   * decorative: the difference is the whole product.
+   */
+  --color-verified: oklch(0.55 0.13 155);
+  --color-unverified: oklch(0.6 0.15 65);
+  --color-danger: oklch(0.55 0.2 25);
+
+  /* --- typography -------------------------------------------------------- */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* --- radius ------------------------------------------------------------ */
+  --radius-card: 0.75rem;
+  --radius-bubble: 1rem;
+
+  /* --- motion -----------------------------------------------------------
+   * Short. A traveller in a hurry does not want to watch an animation.
+   */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+}
+
+@layer base {
+  /* A visible focus ring on every interactive element — CLAUDE.md rule 10.
+   * :focus-visible, not :focus, so it appears for keyboard users without
+   * outlining everything a mouse touches. */
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Numbers in tables must line up: a fare column that jitters is hard to scan
+   * and easy to misread — CLAUDE.md rule 10. */
+  :where(td, th, .tabular) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Respect a user who has asked for less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}

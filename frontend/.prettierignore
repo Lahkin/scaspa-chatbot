@@ -1,0 +1,9 @@
+dist
+node_modules
+src/routeTree.gen.ts
+public/mockServiceWorker.js
+package-lock.json
+
+# Kept verbatim: the standing rules are quoted exactly as issued and must not be
+# reflowed by a formatter.
+CLAUDE.md
