@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
 
+import { shouldRetry } from './features/chat/queries';
 import { config } from './lib/config';
 import { routeTree } from './routeTree.gen';
 import './styles/tokens.css';
@@ -15,9 +16,17 @@ import './styles/tokens.css';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      // The users are on metered roaming data. Refetching on tab focus spends
+      // their bandwidth to replace something already on screen.
       refetchOnWindowFocus: false,
-      retry: 1,
+      // The policy lives in one place — see features/chat/queries.ts. In short:
+      // never retry a 429 (retrying a rate limit is how you extend one) and never
+      // retry a 422 (the request was wrong and will be wrong again).
+      retry: shouldRetry,
       staleTime: 30_000,
+    },
+    mutations: {
+      retry: shouldRetry,
     },
   },
 });

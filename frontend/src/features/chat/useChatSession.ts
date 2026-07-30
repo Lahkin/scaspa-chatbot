@@ -1,9 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
-import { ApiFailure } from '@/lib/api';
+import { ApiError, sendMessage } from '@/lib/api';
+import { config } from '@/lib/config';
 import { StreamTimeout, streamChat } from '@/lib/stream';
-import type { ApiError } from '@/lib/types';
+import type { ApiErrorBody } from '@/lib/types';
 import { OFFLINE, isNoAnswerCode, type FailureKind } from './errorCopy';
 import { setDraft } from './draft';
+import { clearConversationId, readConversationId, writeConversationId } from './conversation';
 import {
   initialChatState,
   type ChatFailure,
@@ -22,7 +24,7 @@ import {
  * a privacy problem, not a feature.
  */
 
-const CLIENT_FAILURE: ApiError = {
+const CLIENT_FAILURE: ApiErrorBody = {
   code: 'INTERNAL',
   message:
     'Something went wrong at our end. Please try again, or call SCASPA on ' +
@@ -44,7 +46,12 @@ function nextId(prefix: string): string {
 }
 
 export function useChatSession() {
-  const [state, setState] = useState<ChatState>(initialChatState);
+  const [state, setState] = useState<ChatState>(() => ({
+    ...initialChatState,
+    // Read on mount so a reload does not silently start a new conversation
+    // mid-exchange.
+    conversationId: readConversationId(),
+  }));
   const abort = useRef<AbortController | null>(null);
 
   /** Update the assistant message currently being streamed. */
@@ -98,6 +105,39 @@ export function useChatSession() {
       });
 
       try {
+        if (!config.useStreaming) {
+          // One request, one fully verified answer. No token loop, no
+          // reconciliation window — the markers in this text have already been
+          // checked server-side.
+          const answer = await sendMessage(question, conversationId, {
+            signal: controller.signal,
+          });
+          writeConversationId(answer.conversation_id);
+          patchLast((message) => ({
+            ...message,
+            text: answer.answer,
+            streaming: false,
+            citations: answer.citations,
+            chart: answer.chart,
+            grounded: answer.grounded,
+            refusal: answer.refusal,
+            refusal_category: answer.refusal_category ?? null,
+            activity: answer.tool_calls.map((tool, index) => ({
+              id: `${tool.name}-${index}`,
+              name: tool.name,
+              summary: tool.summary,
+              ms: tool.ms,
+              done: true,
+            })),
+          }));
+          setState((current) => ({
+            ...current,
+            conversationId: answer.conversation_id,
+            busy: false,
+          }));
+          return;
+        }
+
         const stream = streamChat({
           message: question,
           conversationId,
@@ -107,6 +147,10 @@ export function useChatSession() {
         for await (const event of stream) {
           switch (event.event) {
             case 'meta':
+              // Written back unconditionally. The server-side TTL is 60 minutes
+              // and an expired id is replaced by a fresh one, so the id sent is
+              // not necessarily the id now held.
+              writeConversationId(event.data.conversation_id);
               setState((current) => ({
                 ...current,
                 conversationId: event.data.conversation_id,
@@ -184,7 +228,7 @@ export function useChatSession() {
       } catch (thrown) {
         // `streamChat` converts an HTTP failure into an ApiFailure itself, so
         // everything reaching here is already typed.
-        const failure = thrown instanceof ApiFailure ? thrown : null;
+        const failure = thrown instanceof ApiError ? thrown : null;
 
         const kind: FailureKind = failure?.offline
           ? OFFLINE
@@ -193,13 +237,13 @@ export function useChatSession() {
             // rejected-fetch signal above is the primary one.
             !navigator.onLine
             ? OFFLINE
-            : (failure?.error.code ??
+            : (failure?.code ??
               (thrown instanceof StreamTimeout ? 'UPSTREAM_TIMEOUT' : 'INTERNAL'));
 
         const chatFailure: ChatFailure = {
           kind,
-          requestId: failure?.error.request_id,
-          retryAfterS: failure?.retryAfterS ?? null,
+          requestId: failure?.requestId,
+          retryAfterS: failure?.retryAfter ?? null,
           question,
         };
 
@@ -220,12 +264,12 @@ export function useChatSession() {
           // RETRIEVAL_EMPTY is routed to the calm no-answer treatment rather than
           // an error: from the user's side it is indistinguishable from the
           // assistant not knowing, and an error framing implies they hit a bug.
-          if (failure && isNoAnswerCode(failure.error.code) && last?.role === 'assistant') {
+          if (failure && isNoAnswerCode(failure.code) && last?.role === 'assistant') {
             messages[index] = {
               ...last,
               streaming: false,
               refusal: true,
-              text: failure.error.message,
+              text: failure.message,
             };
             return { ...current, messages, busy: false, error: null };
           }
@@ -240,7 +284,7 @@ export function useChatSession() {
             messages[index] = {
               ...last,
               streaming: false,
-              error: failure?.error ?? CLIENT_FAILURE,
+              error: failure?.body ?? CLIENT_FAILURE,
             };
           }
           return { ...current, messages, busy: false, error: null };
@@ -260,9 +304,23 @@ export function useChatSession() {
     setState((current) => ({ ...current, busy: false }));
   }, [patchLast]);
 
+  /**
+   * Start again.
+   *
+   * Clears the stored id *and* the transcript. Clearing only one leaves the more
+   * confusing half of the state: a fresh id with the old conversation still on
+   * screen, or an empty screen still threaded to a server-side history.
+   */
+  const startNewConversation = useCallback(() => {
+    abort.current?.abort();
+    clearConversationId();
+    setDraft('');
+    setState({ ...initialChatState, conversationId: null });
+  }, []);
+
   const dismissError = useCallback(() => {
     setState((current) => ({ ...current, error: null }));
   }, []);
 
-  return { state, send, stop, dismissError };
+  return { state, send, stop, dismissError, startNewConversation };
 }

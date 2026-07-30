@@ -20,7 +20,7 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { FullPageShell } from '@/components/shells/FullPageShell';
 import { ERROR_COPY, OFFLINE, copyFor, isNoAnswerCode } from '@/features/chat/errorCopy';
 import { getDraft, resetDraft, setDraft } from '@/features/chat/draft';
-import { isStale } from '@/features/chat/useHealth';
+import { isStale } from '@/features/chat/queries';
 import { setScenario } from '@/mocks/scenarios';
 import { HEALTH, HEALTH_DEGRADED, HEALTH_STALE, NO_ANSWER_RESPONSE } from '@/mocks/fixtures';
 import type { ErrorCode } from '@/lib/types';

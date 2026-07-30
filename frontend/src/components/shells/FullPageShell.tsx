@@ -42,8 +42,16 @@ export function FullPageShell() {
 }
 
 function FullPageShellInner() {
-  const { entries, highlighted, setHighlighted, scrollTo, panelOpen, setPanelOpen } =
-    useChatSessionContext();
+  const {
+    entries,
+    highlighted,
+    setHighlighted,
+    scrollTo,
+    panelOpen,
+    setPanelOpen,
+    state,
+    startNewConversation,
+  } = useChatSessionContext();
 
   return (
     // h-dvh + overflow-hidden: the document never scrolls, only the transcript does.
@@ -55,6 +63,18 @@ function FullPageShellInner() {
           <ScaspaMark />
 
           <span className="flex-1" />
+
+          {/* Only offered once there is something to clear. On an empty screen it
+              would be a button that does nothing. */}
+          {state.messages.length > 0 && (
+            <button
+              type="button"
+              onClick={startNewConversation}
+              className="min-h-touch shrink-0 rounded-md px-2 text-caption font-medium text-ink-muted underline hover:text-ink"
+            >
+              Start again
+            </button>
+          )}
 
           {/* Sources open in a bottom sheet below lg, where there is no room to
               dock them. Hidden at lg because the panel is permanently visible

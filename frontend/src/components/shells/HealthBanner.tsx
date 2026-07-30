@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isStale, useHealth } from '@/features/chat/useHealth';
+import { isStale, useHealth } from '@/features/chat/queries';
 import { SCASPA_TEL_HREF, SCASPA_TEL_TEXT } from '@/features/chat/contact';
 
 /**

@@ -7,7 +7,7 @@
  * surfaces as a compile error in one mapping function rather than as a redesign.
  */
 
-import type { ApiError, ChartSpec, Citation, RefusalCategory, ToolName } from '@/lib/types';
+import type { ApiErrorBody, ChartSpec, Citation, RefusalCategory, ToolName } from '@/lib/types';
 import type { FailureKind } from './errorCopy';
 
 /** One tool step, assembled from a `tool_start` / `tool_end` pair. */
@@ -53,13 +53,13 @@ export interface Message {
    */
   refusal_category?: RefusalCategory | undefined;
   /** A failure that arrived after the message existed, e.g. a mid-stream error. */
-  error?: ApiError | null;
+  error?: ApiErrorBody | null;
 }
 
 /**
  * A failure, in the terms the UI needs.
  *
- * Not the `ApiError` itself: `kind` is what selects approved copy, and
+ * Not the `ApiErrorBody` itself: `kind` is what selects approved copy, and
  * `requestId` is carried only so it can be logged in dev. Neither the code nor
  * the id is ever rendered.
  */

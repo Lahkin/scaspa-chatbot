@@ -24,7 +24,7 @@
  */
 
 import { config } from './config';
-import { ApiFailure, toApiFailure } from './api';
+import { ApiError, normaliseError } from './api';
 import { isKnownStreamEvent, streamPayloadSchemas } from './schemas';
 import type { StreamEvent } from './types';
 
@@ -131,18 +131,14 @@ export async function* streamChat(options: StreamOptions): AsyncGenerator<Parsed
     });
   } catch (thrown) {
     options.signal?.removeEventListener('abort', onAbort);
-    if (thrown instanceof ApiFailure) throw thrown;
+    if (thrown instanceof ApiError) throw thrown;
     // The request never reached a server — no wifi, a captive portal, DNS gone.
-    throw new ApiFailure(
-      {
-        code: 'INTERNAL',
-        message: 'Could not reach SCASPA.',
-        request_id: 'client-side',
-      },
-      0,
-      null,
-      true
-    );
+    throw new ApiError({
+      code: 'INTERNAL',
+      message: 'Could not reach SCASPA.',
+      status: 0,
+      offline: true,
+    });
   }
 
   if (!response.ok || !response.body) {
@@ -152,7 +148,7 @@ export async function* streamChat(options: StreamOptions): AsyncGenerator<Parsed
     // an ApiFailure carrying the backend's own user-facing message, rather than
     // thrown as a raw Response — a caller should never have to know that the
     // failure happened to come from fetch.
-    throw await toApiFailure(response);
+    throw await normaliseError(response);
   }
 
   const reader = response.body.getReader();

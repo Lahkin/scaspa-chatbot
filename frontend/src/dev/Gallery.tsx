@@ -38,7 +38,7 @@ import { ThinkingIndicator } from '@/components/chat/ThinkingIndicator';
 import { ERROR_COPY } from '@/features/chat/errorCopy';
 import type { FailureKind } from '@/features/chat/errorCopy';
 import { HEALTH_DEGRADED, HEALTH_STALE, NO_ANSWER_RESPONSE } from '@/mocks/fixtures';
-import { isStale } from '@/features/chat/useHealth';
+import { isStale } from '@/features/chat/queries';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.

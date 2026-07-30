@@ -220,7 +220,15 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'INTERNAL';
 
-export interface ApiError {
+/**
+ * The error object inside the envelope, as it arrives on the wire.
+ *
+ * Named `...Body` because `ApiError` is the *thrown* class in `lib/api.ts` — the
+ * one carrying status and retryAfter as well. Two different things, and calling
+ * both `ApiError` is how a catch block ends up reading a field that was never
+ * there.
+ */
+export interface ApiErrorBody {
   code: ErrorCode;
   /** Written for a traveller and **safe to display as-is**. Ends with the SCASPA phone number. */
   message: string;
@@ -229,7 +237,7 @@ export interface ApiError {
 
 /** Every non-2xx response has exactly this shape. */
 export interface ErrorEnvelope {
-  error: ApiError;
+  error: ApiErrorBody;
 }
 
 // ── Voice ────────────────────────────────────────────────────────────────────
@@ -334,7 +342,7 @@ export interface StreamDoneEvent {
  */
 export interface StreamErrorEvent {
   event: 'error';
-  data: ApiError;
+  data: ApiErrorBody;
 }
 
 export type StreamEvent =

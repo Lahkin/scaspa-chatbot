@@ -21,6 +21,8 @@ interface ChatSessionValue {
   send: (text: string) => Promise<void>;
   stop: () => void;
   dismissError: () => void;
+  /** Clears the stored conversation id and the transcript together. */
+  startNewConversation: () => void;
 
   /** Sources for the most recent assistant answer. */
   entries: CitationEntry[];

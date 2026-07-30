@@ -125,3 +125,94 @@ export type KnownStreamEvent = keyof typeof streamPayloadSchemas;
 export function isKnownStreamEvent(name: string): name is KnownStreamEvent {
   return name in streamPayloadSchemas;
 }
+
+// ── Health ───────────────────────────────────────────────────────────────────
+
+export const modelNamesSchema = z.object({
+  chat: z.string(),
+  embedding: z.string(),
+  transcribe: z.string(),
+  tts: z.string(),
+});
+
+/**
+ * Every unknown value is `null`, never `0` — the contract is explicit, and a
+ * client must not read "never built" as "built and empty". `.nullable()` rather
+ * than `.optional()` says the key is expected and its value may be null; a
+ * missing key is a contract change and should fail here.
+ */
+export const indexStatusSchema = z.object({
+  ready: z.boolean(),
+  kb_version: z.string().nullable(),
+  kb_rows: z.number().nullable(),
+  kb_rows_rejected: z.number().nullable(),
+  kb_csv_filename: z.string().nullable(),
+  kb_updated_at: z.string().nullable(),
+  index_built_at: z.string().nullable(),
+  embedding_model: z.string().nullable(),
+  web_docs: z.number().nullable(),
+  message: z.string().nullable(),
+});
+
+export const healthResponseSchema = z.object({
+  status: z.enum(['ok', 'degraded']),
+  env: z.string(),
+  version: z.string(),
+  uptime_s: z.number(),
+  request_id: z.string(),
+  models: modelNamesSchema,
+  index: indexStatusSchema,
+});
+
+// ── Voice ────────────────────────────────────────────────────────────────────
+
+export const sttResponseSchema = z.object({ text: z.string() });
+export const ttsPreviewResponseSchema = z.object({ text: z.string() });
+
+// ── Parsing at the boundary ──────────────────────────────────────────────────
+
+/**
+ * Thrown when a response does not match its schema.
+ *
+ * Separate from `ApiError` because it is not a failure of the *service* — the
+ * server answered, with a 200, and the shape was wrong. That is a contract
+ * mismatch between two halves being built in parallel, and it needs a different
+ * message and a different place to look.
+ */
+export class SchemaMismatch extends Error {
+  readonly issues: string[];
+
+  constructor(what: string, issues: string[]) {
+    super(
+      `The ${what} response did not match the API contract.\n` +
+        issues.map((issue) => `  - ${issue}`).join('\n') +
+        `\nThis is a mismatch between docs/api-contract.md and what the backend sent. ` +
+        `Check the field names on both sides before changing the schema.`
+    );
+    this.name = 'SchemaMismatch';
+    this.issues = issues;
+  }
+}
+
+/**
+ * Parse a payload, or throw something a teammate can act on.
+ *
+ * The whole point of the exercise: a silently renamed field fails **here**, at the
+ * boundary, naming the field and the expected type — rather than three components
+ * later as an `undefined` rendered into a fee table as "NaN", which is both
+ * confusing to debug and, on a tariff table, actively dangerous.
+ */
+export function parseOrThrow<T>(schema: z.ZodType<T>, payload: unknown, what: string): T {
+  const result = schema.safeParse(payload);
+  if (result.success) return result.data;
+
+  const issues = result.error.issues.map((issue) => {
+    const path = issue.path.length > 0 ? issue.path.join('.') : '(root)';
+    return `${path}: ${issue.message}`;
+  });
+  return neverReturns(new SchemaMismatch(what, issues));
+}
+
+function neverReturns(error: Error): never {
+  throw error;
+}

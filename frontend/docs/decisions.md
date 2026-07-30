@@ -823,3 +823,125 @@ Asserted, including no `<img>` and no `<svg>`. A visitor standing on a pier does
 not care what the thing is built from; they care whether they will make the last
 ferry. A badge spends the most valuable space on screen saying something that
 helps nobody.
+
+---
+
+## F007 — Wired to the real backend
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+Both halves ran together for the first time. The integration script ends
+**64 passed, 0 failed, 1 skipped** against a locally running backend, and
+non-streaming chat works end to end in a browser.
+
+### What the real backend actually did
+
+Two behaviours differ from the assumptions this prompt was written against, and
+both were found by running it rather than by reading it.
+
+**1. The backend adopts a client-supplied `conversation_id`.** The brief says an
+expired id "gets replaced with a fresh one". The code is
+`payload.conversation_id or store.new_id()` — it takes any id you send and only
+mints one when none arrives. Sending `00000000-0000-4000-8000-000000000000` gets
+that same id back.
+
+The client's rule — always overwrite the stored value with whatever comes back —
+is unchanged and is currently a no-op. It stays because it is the behaviour that
+survives the backend changing its mind, and because with more than one worker
+history is best-effort anyway. Worth confirming with the backend team that
+adopting an arbitrary id is intended; the client validates the stored value is a
+UUID before sending, so it never contributes a malformed one.
+
+**2. `/api/tts` 500s without an `OPENAI_API_KEY`.** Expected — it is the standing
+project state — but the first version of the check reported it as a contract
+failure. A check that cries wolf on a known condition gets ignored, so it now
+distinguishes _provider unavailable_ from _wrong shape_ and reports it as a skip.
+The first run also passed by accident on a warm TTS cache; it now sends a unique
+string.
+
+### The CORS lesson, confirmed the hard way
+
+The browser check failed with no assistant message at all. The cause was CORS: the
+dev server was on `:4350` and the backend's `ALLOWED_ORIGINS` defaults to
+`http://localhost:5173`.
+
+Worth recording precisely, because it is the intended trap:
+
+- **The integration script passed while the browser failed.** Node does not
+  enforce CORS. A green script proves the _shapes_ agree, not that a browser will
+  accept the response. The script now says so at the top, and its first check is
+  an origin preflight.
+- **A CORS failure reaches the client as "You appear to be offline."** The browser
+  refuses to tell JavaScript why a cross-origin request failed — the reason exists
+  only in the console. For a _user_ that copy is right: they can act on neither
+  cause. For a _developer_ it is actively misleading.
+
+So `unreachable()` now logs a dev-only hint when the fetch failed while
+`navigator.onLine` is true, naming CORS as the first suspect, naming the current
+origin, and saying plainly that **the fix is in the backend** and that no fetch
+option can change it.
+
+### zod at the boundary, and a legible failure
+
+`parseOrThrow` throws `SchemaMismatch` — deliberately not an `ApiError`, because
+it is not a failure of the service. The server answered, with a 200, and the shape
+was wrong; that is two halves drifting apart and it needs a different message and
+a different place to look. The message names the field, the path and the expected
+type, and points at `docs/api-contract.md`.
+
+Schemas are **not** strict about extra keys. A backend adding a field is not a
+reason to refuse an answer to someone standing at a ferry terminal. A missing or
+wrong-typed field is a different matter and does fail.
+
+### The retry policy, in one function
+
+`shouldRetry` is used by the QueryClient defaults for both queries and mutations,
+so there is one answer rather than one per call site.
+
+- **Never a 429.** Retrying a rate limit is how you extend one: the window slides,
+  the counter climbs, and the client trying hardest to recover is kept out
+  longest. Same for a 503 carrying `Retry-After` — the server has said when to
+  come back.
+- **Never a 422.** The request was wrong and will be wrong again; the only result
+  is two identical lines in the server log.
+- **Never a `SchemaMismatch`.** Re-fetching returns the same wrong shape.
+- Two attempts, not five: the backend already applies its own bounded retry with
+  backoff, so an `UPSTREAM_*` code means it has genuinely failed.
+
+### The content-type guard was untestable until it was made testable
+
+Mutation-testing found this: deleting the guard did **not** fail the HTML-error-page
+test, because `response.json()` throwing lands in the same fallback. The guard was
+therefore real but unproven.
+
+Two changes. The test now asserts `json()` is _never called_ on a non-JSON body,
+and there is a second case the throw cannot cover — a `text/plain` body that is
+valid JSON containing a filesystem path, which without the guard would be read as
+ours and rendered. Both fail when the guard is removed.
+
+### Measured limitation: a multipart body cannot be read under MSW-node
+
+`request.text()` and `request.formData()` both hang on a `FormData` body in MSW's
+Node interceptor. So the `audio` field name cannot be asserted through the network
+in Vitest. It is checked against the real backend by the integration script
+instead, which is the right place for it — a field name is exactly the kind of
+thing only the real server can confirm.
+
+### Non-streaming is a first-class path, not a fallback
+
+`VITE_USE_STREAMING=false` switches the whole app to `POST /api/chat`. The
+contract offers it deliberately: its text is fully verified before it is sent,
+with unverifiable markers already stripped, so a surface where a briefly-visible
+unverified marker is unacceptable should use it.
+
+Verified in a browser against the real backend: answer rendered, `conversation_id`
+stored and reused across turns, "Start again" clearing both the id and the
+transcript, and `sessionStorage` holding exactly one key.
+
+### Standing limitation, unchanged
+
+There is still **no `OPENAI_API_KEY`**. The backend runs, every shape is verified,
+and `/api/chat` returns a well-formed **no-answer refusal** — because retrieval
+scores zero without embeddings and the short-circuit fires. So the integration is
+proven; a real generated answer is not. Voice is skipped for the same reason.

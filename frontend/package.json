@@ -19,7 +19,8 @@
     "test:watch": "vitest",
     "verify": "npm run lint && npm run typecheck && npm run build && npm run test",
     "check:responsive": "node scripts/responsive-check.mjs",
-    "check:streaming": "node scripts/streaming-perf.mjs"
+    "check:streaming": "node scripts/streaming-perf.mjs",
+    "check:integration": "node scripts/integration-check.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",

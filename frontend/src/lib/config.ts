@@ -44,8 +44,34 @@ export const config = {
     charts: readBoolean(env.VITE_ENABLE_CHARTS, true),
   },
 
+  /**
+   * Stream the answer, or fetch it whole.
+   *
+   * Streaming is the default because latency is the thing it exists to disguise.
+   * The non-streaming path is not a fallback for a broken stream — the contract
+   * offers it deliberately, and its text is *fully verified before it is sent*,
+   * with unverifiable citation markers already stripped. A surface where a
+   * briefly-visible unverified marker is unacceptable should use it.
+   */
+  useStreaming: readBoolean(env.VITE_USE_STREAMING, true),
+
   /** Give up on a stream after this long. An honest error beats a spinner. */
   streamTimeoutMs: readNumber(env.VITE_STREAM_TIMEOUT_MS, 30_000),
+
+  /**
+   * Deadline for a non-streaming request.
+   *
+   * Longer than the stream's inter-chunk timeout because this one covers the
+   * *whole* answer — retrieval, generation and verification — with nothing
+   * arriving in the meantime to prove the connection is alive.
+   */
+  requestTimeoutMs: readNumber(env.VITE_REQUEST_TIMEOUT_MS, 45_000),
+
+  /** Health must answer fast or it is not telling us anything useful. */
+  healthTimeoutMs: readNumber(env.VITE_HEALTH_TIMEOUT_MS, 5_000),
+
+  /** Audio up and audio back: a 20MB upload on hotel wifi needs room. */
+  uploadTimeoutMs: readNumber(env.VITE_UPLOAD_TIMEOUT_MS, 60_000),
 
   /**
    * How often to re-check `GET /api/health`.

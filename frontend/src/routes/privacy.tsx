@@ -14,9 +14,22 @@ function Privacy() {
       </p>
       <h2 className="text-h3 font-medium">What stays on your device</h2>
       <p className="text-ink-muted">
-        Nothing you type is saved on your device. A conversation is identified by a random id kept
-        only for the current browser tab, and it disappears when you close it.
+        <strong>Nothing you type is stored on your device.</strong> Not your questions, not the
+        answers, not a half-typed message you decided against. Nothing is written to your
+        browser&rsquo;s storage and nothing survives closing the tab.
       </p>
+      <p className="text-ink-muted">
+        One thing is kept, and only one: a <strong>conversation id</strong>. It is a random code the
+        server generates so that a follow-up question can be matched to the one before it. It is
+        stored only for the current browser tab and disappears when you close it.
+      </p>
+      <p className="text-ink-muted">
+        The conversation id is <strong>not a login and not an account</strong>. It grants no access
+        to anything, it is not tied to your name, your email or your device, and anyone who saw it
+        would learn nothing about who you are. You can clear it at any time with{' '}
+        <strong>Start again</strong>, which also clears the conversation on screen.
+      </p>
+
       <h2 className="text-h3 font-medium">What SCASPA sees</h2>
       <p className="text-ink-muted">
         Your questions are sent to SCASPA&rsquo;s server to be answered, and are recorded to help
