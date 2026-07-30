@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
@@ -17,7 +17,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run lint && npm run typecheck && npm run build && npm run test",
+    "verify": "npm run build && npm run lint && npm run typecheck && npm run test",
     "check:responsive": "node scripts/responsive-check.mjs",
     "check:streaming": "node scripts/streaming-perf.mjs",
     "check:integration": "node scripts/integration-check.mjs",
