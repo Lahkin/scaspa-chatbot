@@ -25,7 +25,24 @@ const queryClient = new QueryClient({
 const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
-  scrollRestoration: true,
+  /**
+   * Scroll restoration is **off**, and that is a rule decision rather than a
+   * preference.
+   *
+   * TanStack Router implements it by writing a `tsr-scroll-restoration-v1_*` key
+   * to sessionStorage. CLAUDE.md rule 5 is narrow on purpose: *only*
+   * `conversation_id` may go to sessionStorage. A scroll offset is not message
+   * content, so this is not the leak the rule was written to prevent — but the
+   * rule is absolute and this writes to that store, so it goes.
+   *
+   * The cost is close to zero here. `/chat` and `/widget` never scroll at the
+   * document level — the transcript scrolls inside a `dvh` flex column, which
+   * this could not restore anyway — and the marketing pages are a screen long.
+   *
+   * Reversible: if the team decides a scroll offset is out of scope for rule 5,
+   * turn it back on in this one line.
+   */
+  scrollRestoration: false,
 });
 
 declare module '@tanstack/react-router' {

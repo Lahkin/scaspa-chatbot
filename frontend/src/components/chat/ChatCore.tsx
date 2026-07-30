@@ -1,8 +1,10 @@
-import { useState } from 'react';
 import { useChatSessionContext } from '@/features/chat/ChatSessionContext';
+import { setDraft } from '@/features/chat/draft';
 import { Composer } from './Composer';
+import { ErrorState } from './ErrorState';
 import { MessageList } from './MessageList';
 import { SuggestedQuestions } from './SuggestedQuestions';
+import { ThinkingIndicator } from './ThinkingIndicator';
 
 /**
  * The conversation.
@@ -12,12 +14,10 @@ import { SuggestedQuestions } from './SuggestedQuestions';
  * > **`ChatCore` fills its parent. The parent must be a fixed-height flex box.**
  *
  * The transcript scrolls (`flex-1 min-h-0`), the composer does not (`shrink-0`).
- * That is why both shells mount this unmodified — `100dvh` minus a header in one,
- * 600px minus a header in the other, and neither difference reaches here.
+ * That is why both shells mount this unmodified.
  */
 export function ChatCore() {
-  const { state, send, stop, dismissError, openSource } = useChatSessionContext();
-  const [draft, setDraft] = useState('');
+  const { state, send, stop, dismissError, openSource, thinkingSince } = useChatSessionContext();
 
   const idle = !state.busy && state.messages.length > 0;
 
@@ -27,65 +27,85 @@ export function ChatCore() {
         <MessageList
           messages={state.messages}
           onOpenSource={openSource}
-          emptyState={
-            <div className="space-y-6 py-4">
-              <div className="space-y-2">
-                <h1 className="text-h2 font-semibold">Ask about ports and travel in St. Kitts</h1>
-                <p className="text-small text-ink-muted">
-                  Ferries, cruise arrivals at Port Zante, cargo at the Deep Water Harbour and Robert
-                  L. Bradshaw International Airport. Every answer shows where it came from and when
-                  it was checked.
-                </p>
-              </div>
-              <SuggestedQuestions onSelect={setDraft} variant="empty" />
-            </div>
-          }
+          emptyState={<EmptyState />}
         />
       </div>
 
       <div className="shrink-0 border-t border-border bg-surface px-4 py-3">
         <div className="mx-auto max-w-measure space-y-2">
-          {/*
-            A conversation-level failure: the request never produced an answer.
-            The message is the backend's own and is safe to display as-is — it
-            already ends with the phone number.
-          */}
+          {/* The wait before the first token. Shown here rather than in the
+              transcript so it sits where the eye already is after pressing send,
+              and does not push the conversation around as it appears. */}
+          {thinkingSince !== null && <ThinkingIndicator startedAt={thinkingSince} />}
+
           {state.error && (
-            <div
-              role="alert"
-              className="flex items-start gap-2 rounded-md bg-danger-surface px-3 py-2 text-small text-danger"
-            >
-              <span className="flex-1">{state.error.message}</span>
-              <button
-                type="button"
-                onClick={dismissError}
-                aria-label="Dismiss"
-                className="shrink-0 font-medium underline"
-              >
-                Dismiss
-              </button>
-            </div>
+            <ErrorState
+              // A new failure is a new component, so the countdown restarts.
+              key={`${state.error.kind}:${state.error.retryAfterS ?? ''}:${state.error.question}`}
+              kind={state.error.kind}
+              requestId={state.error.requestId}
+              retryAfterS={state.error.retryAfterS}
+              // Retry resends the same question, so nobody has to retype it after
+              // a timeout — which is exactly when retyping is most irritating.
+              onRetry={() => {
+                const question = state.error?.question;
+                dismissError();
+                if (!question) return;
+                // The question is also back in the composer, so clear it here or
+                // it would still be sitting there after a successful resend.
+                setDraft('');
+                void send(question);
+              }}
+              onDismiss={dismissError}
+            />
           )}
 
           <Composer
             // `send` is async; the handler is a void slot. Explicitly discarding
-            // the promise says the rejection is handled inside the hook (it is —
-            // every failure becomes state) rather than dropped by accident.
+            // the promise says the rejection is handled inside the hook — it is,
+            // every failure becomes state — rather than dropped by accident.
             onSend={(text) => void send(text)}
             onStop={stop}
             busy={state.busy}
-            draft={draft}
-            onDraftChange={setDraft}
           />
 
           {/* Below the composer once there is something to follow up on. */}
           {idle && <SuggestedQuestions onSelect={setDraft} variant="idle" />}
-
-          <p className="text-caption text-ink-subtle">
-            Answers come from verified SCASPA information and show their source.
-          </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The first thing anyone sees.
+ *
+ * **No robot illustration and no "powered by AI" badge.** A visitor standing on a
+ * pier does not care what the thing is built from; they care whether they will
+ * make the last ferry. A badge spends the most valuable space on screen saying
+ * something that helps nobody, and an illustration of a robot invites the reader
+ * to treat the answers as a novelty.
+ *
+ * What is here instead: what it covers, four questions to tap, and one honest
+ * sentence about where answers come from.
+ */
+function EmptyState() {
+  return (
+    <div className="space-y-6 py-4">
+      <div className="space-y-3">
+        <h1 className="text-h2 font-semibold">Ask about ports and travel in St. Kitts</h1>
+        <p className="text-small text-ink-muted">
+          Ferry and cruise schedules, cargo and import procedures, published seaport tariffs, and
+          airport information.
+        </p>
+        {/* The honest sentence. Not a disclaimer — a description of the method,
+            which is the reason to trust it. */}
+        <p className="text-small text-ink-muted">
+          It answers from verified SCASPA information and shows you where every answer came from.
+        </p>
+      </div>
+
+      <SuggestedQuestions onSelect={setDraft} variant="empty" />
     </div>
   );
 }

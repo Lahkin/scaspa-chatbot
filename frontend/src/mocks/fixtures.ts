@@ -301,6 +301,42 @@ export const ERROR_VALIDATION = envelope(
   'That question is too long. Please shorten it to 1000 characters or fewer.'
 );
 
+/**
+ * The approved no-answer copy, transcribed verbatim from the backend's
+ * `NO_ANSWER_MESSAGE` (`backend/app/agent/prompts.py`).
+ *
+ * Signed off by the team leader and coach. **Not paraphrased here**: a mock that
+ * reworded it would let the UI be built against copy nobody approved, and the
+ * difference would only surface in front of a judge.
+ */
+export const NO_ANSWER_RESPONSE: ChatResponse = {
+  answer:
+    "I do not have that in SCASPA's verified information, so I will not guess at it. " +
+    'SCASPA staff can confirm it for you directly.' +
+    CONTACT_BLOCK,
+  conversation_id: CONVERSATION_ID,
+  grounded: false,
+  refusal: true,
+  // Absent, which is what distinguishes a no-answer from a boundary refusal.
+  refusal_category: null,
+  citations: [],
+  chart: null,
+  tool_calls: [],
+  meta: { ...META, latency_ms: 2, retrieved_count: 5, best_score: 0, cited_ids: [] },
+};
+
+export const ERROR_INDEX_MISSING = envelope(
+  'INDEX_MISSING',
+  'The assistant is being updated and cannot answer just now. Please call SCASPA on ' +
+    `${SCASPA_PHONE}.`
+);
+
+export const ERROR_RETRIEVAL_EMPTY = envelope(
+  'RETRIEVAL_EMPTY',
+  "I do not have that in SCASPA's verified information, so I will not guess at it. " +
+    `Please call SCASPA on ${SCASPA_PHONE}.`
+);
+
 // ── Health ───────────────────────────────────────────────────────────────────
 
 export const HEALTH: HealthResponse = {
@@ -327,6 +363,32 @@ export const HEALTH: HealthResponse = {
     web_docs: 0,
     message: null,
   },
+};
+
+/**
+ * `status: degraded` — the index has not been built. **Still HTTP 200**: the
+ * contract is explicit, and mocking it as a 503 would train the UI to treat a
+ * health check failure and a degraded service as the same thing.
+ *
+ * Unknown values are `null`, never `0` — a client must not read "never built" as
+ * "built and empty".
+ */
+export const HEALTH_DEGRADED: HealthResponse = {
+  ...HEALTH,
+  status: 'degraded',
+  index: {
+    ...HEALTH.index,
+    ready: false,
+    kb_rows: null,
+    index_built_at: null,
+    message: 'The knowledge index has not been built.',
+  },
+};
+
+/** Healthy, but the knowledge base was last verified long enough ago to mention. */
+export const HEALTH_STALE: HealthResponse = {
+  ...HEALTH,
+  index: { ...HEALTH.index, kb_updated_at: '2024-01-15' },
 };
 
 // ── Voice ────────────────────────────────────────────────────────────────────

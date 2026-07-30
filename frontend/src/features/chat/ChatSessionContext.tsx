@@ -33,6 +33,13 @@ interface ChatSessionValue {
   panelOpen: boolean;
   setPanelOpen: (open: boolean) => void;
   openSource: (kbId: string) => void;
+  /**
+   * When the current request started, or null when nothing is in flight.
+   *
+   * Cleared as soon as the first token or tool event lands, because from that
+   * point `AgentStatus` says something more specific than "thinking".
+   */
+  thinkingSince: number | null;
 }
 
 const Ctx = createContext<ChatSessionValue | null>(null);
@@ -64,6 +71,12 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     return reconcile(latest.text, latest.citations ?? null, latest.grounded ?? true).entries;
   }, [latest]);
 
+  // The generic indicator gives way the moment there is something specific to
+  // show. A spinner alongside "Searching SCASPA knowledge base" is redundant.
+  const pending = latest?.streaming === true;
+  const nothingYet = pending && latest.text.length === 0 && (latest.activity?.length ?? 0) === 0;
+  const thinkingSince = nothingYet ? latest.at.getTime() : null;
+
   const openSource = useCallback((kbId: string) => {
     setHighlighted(kbId);
     // A new object identity each time, so activating the same chip twice still
@@ -82,8 +95,9 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       panelOpen,
       setPanelOpen,
       openSource,
+      thinkingSince,
     }),
-    [session, entries, highlighted, scrollTo, panelOpen, openSource]
+    [session, entries, highlighted, scrollTo, panelOpen, openSource, thinkingSince]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

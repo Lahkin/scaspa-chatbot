@@ -17,13 +17,23 @@ export class ApiFailure extends Error {
   readonly status: number;
   /** Seconds, from `Retry-After`. Null when the server did not say. */
   readonly retryAfterS: number | null;
+  /**
+   * The request never reached a server.
+   *
+   * Distinguished from a 5xx because the user-facing answer is different: "you
+   * appear to be offline" is actionable, "something went wrong at our end" is
+   * not, and telling someone on a dead hotel wifi that *we* broke sends them to
+   * ring a phone number about our uptime.
+   */
+  readonly offline: boolean;
 
-  constructor(error: ApiError, status: number, retryAfterS: number | null = null) {
+  constructor(error: ApiError, status: number, retryAfterS: number | null = null, offline = false) {
     super(error.message);
     this.name = 'ApiFailure';
     this.error = error;
     this.status = status;
     this.retryAfterS = retryAfterS;
+    this.offline = offline;
   }
 }
 
@@ -73,7 +83,10 @@ async function getJson(path: string, init?: RequestInit): Promise<unknown> {
   try {
     response = await fetch(`${config.apiBaseUrl}${path}`, init);
   } catch {
-    throw new ApiFailure(NETWORK_FAILURE, 0);
+    // fetch rejects only on a network-level failure. `navigator.onLine` false is
+    // conclusive; true is not (a captive portal answers DNS and drops the rest),
+    // so a rejected fetch counts as offline either way.
+    throw new ApiFailure(NETWORK_FAILURE, 0, null, true);
   }
   if (!response.ok) throw await toApiFailure(response);
   return response.json();

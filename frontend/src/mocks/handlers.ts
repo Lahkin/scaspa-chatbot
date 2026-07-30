@@ -29,14 +29,19 @@ import {
   CITATIONS_WITH_VOLATILITY,
   CITATION_LOW,
   HALLUCINATED_ANSWER,
+  ERROR_INDEX_MISSING,
+  ERROR_RETRIEVAL_EMPTY,
   HEALTH,
+  HEALTH_DEGRADED,
+  HEALTH_STALE,
+  NO_ANSWER_RESPONSE,
   TABLE_ANSWER,
   REFUSAL_RESPONSE,
   STT_TEXT,
   UNGROUNDED_RESPONSE,
   silentMp3,
 } from './fixtures';
-import { getScenario } from './scenarios';
+import { getScenario, sleep } from './scenarios';
 import { SSE_HEADERS, chatStream } from './sse';
 
 const base = config.apiBaseUrl;
@@ -93,6 +98,16 @@ export const handlers = [
 
       case 'hallucinated_marker':
         return HttpResponse.json({ ...CHAT_RESPONSE, answer: HALLUCINATED_ANSWER });
+
+      case 'no_answer':
+        // HTTP 200. A no-answer is not an error.
+        return HttpResponse.json(NO_ANSWER_RESPONSE);
+
+      case 'index_missing':
+        return HttpResponse.json(ERROR_INDEX_MISSING, { status: 503 });
+
+      case 'retrieval_empty':
+        return HttpResponse.json(ERROR_RETRIEVAL_EMPTY, { status: 503 });
 
       case 'volatility':
         return HttpResponse.json({
@@ -169,6 +184,28 @@ export const handlers = [
           headers: SSE_HEADERS,
         });
 
+      case 'no_answer':
+        return new HttpResponse(
+          chatStream({
+            answer: NO_ANSWER_RESPONSE.answer,
+            skipTools: true,
+            grounded: false,
+            emptyCitations: true,
+          }),
+          { headers: SSE_HEADERS }
+        );
+
+      case 'index_missing':
+        return HttpResponse.json(ERROR_INDEX_MISSING, { status: 503 });
+
+      case 'retrieval_empty':
+        return HttpResponse.json(ERROR_RETRIEVAL_EMPTY, { status: 503 });
+
+      case 'slow':
+        // Long enough for the elapsed counter to appear and be read.
+        await sleep(8000);
+        return new HttpResponse(chatStream(), { headers: SSE_HEADERS });
+
       case 'volatility':
         return new HttpResponse(
           chatStream({ citations: [...CITATIONS_WITH_VOLATILITY, CITATION_LOW] }),
@@ -187,7 +224,17 @@ export const handlers = [
   }),
 
   // ── GET /api/health ────────────────────────────────────────────────────────
-  http.get(`${base}/api/health`, () => HttpResponse.json(HEALTH)),
+  http.get(`${base}/api/health`, () => {
+    switch (getScenario()) {
+      case 'degraded_health':
+        // Degraded is still HTTP 200 — the contract is explicit.
+        return HttpResponse.json(HEALTH_DEGRADED);
+      case 'stale_index':
+        return HttpResponse.json(HEALTH_STALE);
+      default:
+        return HttpResponse.json(HEALTH);
+    }
+  }),
 
   // ── POST /api/stt ──────────────────────────────────────────────────────────
   // Multipart, field name `audio`. The whole response is the transcript — and it

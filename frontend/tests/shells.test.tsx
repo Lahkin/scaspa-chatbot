@@ -10,7 +10,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { renderWithProviders as render } from './helpers';
 import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
 import { routeTree } from '@/routeTree.gen';

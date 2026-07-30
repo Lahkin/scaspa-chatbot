@@ -17,6 +17,12 @@ export type ScenarioId =
   | 'table'
   | 'hallucinated_marker'
   | 'volatility'
+  | 'no_answer'
+  | 'index_missing'
+  | 'retrieval_empty'
+  | 'degraded_health'
+  | 'stale_index'
+  | 'slow'
   | 'rate_limited'
   | 'internal_error'
   | 'upstream_timeout'
@@ -53,6 +59,36 @@ export const SCENARIOS: ScenarioDescription[] = [
     id: 'volatility',
     label: 'Citations with volatility (proposed)',
     expected: 'High row shows the travel-confirmation line and a tel: link; low row is quiet.',
+  },
+  {
+    id: 'no_answer',
+    label: 'No verified answer',
+    expected: 'Calm treatment, not an error. Backend copy verbatim plus tappable contacts.',
+  },
+  {
+    id: 'slow',
+    label: 'Slow response (8s)',
+    expected: 'Thinking indicator, then the elapsed counter after 3s. Composer disabled.',
+  },
+  {
+    id: 'index_missing',
+    label: '503 INDEX_MISSING',
+    expected: 'Service degraded. Contact route shown immediately, no retry.',
+  },
+  {
+    id: 'retrieval_empty',
+    label: '503 RETRIEVAL_EMPTY',
+    expected: 'Routed to the no-answer treatment, NOT an error panel.',
+  },
+  {
+    id: 'degraded_health',
+    label: 'Health: degraded',
+    expected: 'Dismissible banner at the top of the shell.',
+  },
+  {
+    id: 'stale_index',
+    label: 'Health: stale index',
+    expected: 'Quiet note giving the last-verified date. Not a warning.',
   },
   {
     id: 'rate_limited',

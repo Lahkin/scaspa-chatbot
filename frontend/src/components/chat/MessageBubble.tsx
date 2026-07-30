@@ -5,6 +5,7 @@ import { reconcile } from '@/features/chat/citations';
 import { AgentStatus } from './AgentStatus';
 import { CitationProvider } from './CitationContext';
 import { EscalationCard } from './EscalationCard';
+import { NoAnswerCard } from './NoAnswerCard';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { UngroundedNotice } from './UngroundedNotice';
 
@@ -77,8 +78,27 @@ export function MessageBubble({ message, onOpenSource }: MessageBubbleProps) {
         )}
 
         {!isUser && message.refusal ? (
-          // A refusal replaces the bubble entirely rather than sitting inside one.
-          <EscalationCard category={message.refusal_category} answer={message.text} />
+          /*
+           * Two different refusals, and they deserve different framing.
+           *
+           * `refusal_category` present  → a *boundary*: "I am not allowed to
+           *   advise on that." The escalation handoff, because the right next
+           *   step is a person who can see the case.
+           * `refusal_category` absent   → a *gap*: "I do not have that." The calm
+           *   no-answer treatment, which is the most trustworthy thing the
+           *   assistant does and must not look like a failure.
+           *
+           * ⚠️ The stream's `done` event carries `refusal` but not
+           * `refusal_category`, so a streamed boundary refusal currently renders
+           * as a no-answer. Both show the backend's own approved text and the
+           * contact route, so the degradation is in framing only — but it is a
+           * contract gap, recorded in docs/decisions.md F005.
+           */
+          message.refusal_category ? (
+            <EscalationCard category={message.refusal_category} answer={message.text} />
+          ) : (
+            <NoAnswerCard message={message.text} />
+          )
         ) : (
           <div
             className={cn(

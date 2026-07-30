@@ -15,6 +15,7 @@ import {
 } from '@/components/ui';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
 import { SCENARIOS, getScenario, setScenario, subscribeToScenario } from '@/mocks/scenarios';
+import { setDraft as setComposerDraft } from '@/features/chat/draft';
 import { Markdown } from '@/components/chat/Markdown';
 import { StreamingMarkdown } from '@/components/chat/StreamingMarkdown';
 import { AgentStatus } from '@/components/chat/AgentStatus';
@@ -31,6 +32,13 @@ import { CitationProvider } from '@/components/chat/CitationContext';
 import { EscalationCard } from '@/components/chat/EscalationCard';
 import { SourceList } from '@/components/chat/SourceList';
 import { reconcile } from '@/features/chat/citations';
+import { ErrorState } from '@/components/chat/ErrorState';
+import { NoAnswerCard } from '@/components/chat/NoAnswerCard';
+import { ThinkingIndicator } from '@/components/chat/ThinkingIndicator';
+import { ERROR_COPY } from '@/features/chat/errorCopy';
+import type { FailureKind } from '@/features/chat/errorCopy';
+import { HEALTH_DEGRADED, HEALTH_STALE, NO_ANSWER_RESPONSE } from '@/mocks/fixtures';
+import { isStale } from '@/features/chat/useHealth';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.
@@ -382,6 +390,69 @@ export function Gallery() {
         </div>
       </Section>
 
+      <Section
+        title="Unhappy paths — every failure, one place"
+        note="The screens nobody demos and everybody hits. This is the Phase 3 QA page."
+      >
+        <div className="max-w-measure space-y-4">
+          {(Object.keys(ERROR_COPY) as FailureKind[]).map((kind) => (
+            <div key={kind} className="space-y-1">
+              <p className="text-caption font-semibold text-ink-subtle">{kind}</p>
+              <ErrorState
+                kind={kind}
+                requestId="demo-request-id-never-rendered"
+                retryAfterS={kind === 'UPSTREAM_RATE_LIMITED' ? 8 : null}
+                onRetry={() => {}}
+                onDismiss={() => {}}
+              />
+            </div>
+          ))}
+        </div>
+        <p className="text-caption text-ink-subtle">
+          None of these shows a code, a request id, an HTTP status or a model name. The request id
+          is logged to the console in dev and nowhere else.
+        </p>
+      </Section>
+
+      <Section
+        title="No verified answer"
+        note="Task 3. Calm, not an error. Copy comes from the backend's NO_ANSWER_MESSAGE verbatim."
+      >
+        <div className="max-w-measure">
+          <NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />
+        </div>
+      </Section>
+
+      <Section title="Thinking" note="The elapsed counter appears after three seconds.">
+        <ThinkingDemo />
+      </Section>
+
+      <Section
+        title="Health banners"
+        note="A backend ops endpoint turned into a user-facing honesty feature."
+      >
+        <div className="max-w-measure space-y-3">
+          <div className="overflow-hidden rounded-md border border-border">
+            <StaticDegradedBanner />
+          </div>
+          <div className="overflow-hidden rounded-md border border-border">
+            <StaticStaleBanner />
+          </div>
+          <p className="text-caption text-ink-subtle">
+            Live versions are driven by the Health mock scenarios above; these are static so both
+            are visible at once. Stale threshold: {String(isStale(HEALTH_STALE))} for{' '}
+            {HEALTH_STALE.index.kb_updated_at}.
+          </p>
+        </div>
+      </Section>
+
+      <Section
+        title="Composer edge cases"
+        note="The counter appears at 900 and disables send above 1000, so the backend's 422 is unreachable."
+      >
+        <ComposerDemo />
+      </Section>
+
       <Section title="Typography scale">
         <div className="space-y-1">
           <p className="text-display font-semibold">Display 36</p>
@@ -640,6 +711,83 @@ const ASSISTANT_STATES = [
     streaming: false,
   },
 ];
+
+function ThinkingDemo() {
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  return (
+    <div className="max-w-measure space-y-2">
+      <Chip onClick={() => setStartedAt(Date.now())}>Start the clock</Chip>
+      <div className="rounded-md border border-border bg-surface-muted p-3">
+        {startedAt === null ? (
+          <p className="text-caption text-ink-subtle">Not thinking.</p>
+        ) : (
+          <ThinkingIndicator startedAt={startedAt} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Static copies of the two banners.
+ *
+ * `HealthBanner` reads live query state, so both variants cannot be on screen at
+ * once. These duplicate only the markup, from the same fixtures, so a designer can
+ * compare them — the live ones are one mock toggle away.
+ */
+function StaticDegradedBanner() {
+  return (
+    <div className="flex items-start gap-3 bg-amber-surface px-4 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-small font-medium text-amber-text">
+          The assistant is not working properly at the moment
+        </p>
+        <p className="mt-0.5 text-caption text-ink-muted">
+          Its information is being updated, so answers may be missing or incomplete. For anything
+          you need now, call SCASPA on 869-465-8121.
+        </p>
+      </div>
+      <span className="min-h-touch shrink-0 px-2 text-caption text-ink-muted underline">
+        Dismiss
+      </span>
+    </div>
+  );
+}
+
+function StaticStaleBanner() {
+  return (
+    <div className="bg-surface-muted px-4 py-1.5">
+      <p className="text-caption text-ink-subtle">
+        SCASPA information was last verified on {HEALTH_STALE.index.kb_updated_at}. Please confirm
+        anything time-sensitive before you rely on it.
+      </p>
+    </div>
+  );
+}
+
+function ComposerDemo() {
+  const lengths = [0, 899, 900, 1000, 1001];
+  const [length, setLength] = useState(900);
+
+  return (
+    <div className="max-w-measure space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {lengths.map((value) => (
+          <Chip key={value} selected={length === value} onClick={() => setLength(value)}>
+            {value} chars
+          </Chip>
+        ))}
+      </div>
+      <p className="text-caption text-ink-subtle">
+        Degraded health status: {HEALTH_DEGRADED.status}. Set the length, then look at the composer
+        on <code>/chat</code> — the draft store is shared, so it is already filled.
+      </p>
+      <Button variant="secondary" onClick={() => setComposerDraft('a'.repeat(length))}>
+        Fill the composer with {length} characters
+      </Button>
+    </div>
+  );
+}
 
 /** The five widths the layout is verified at. */
 const BREAKPOINTS = [320, 390, 768, 1024, 1440];

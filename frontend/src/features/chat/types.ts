@@ -8,6 +8,7 @@
  */
 
 import type { ApiError, ChartSpec, Citation, RefusalCategory, ToolName } from '@/lib/types';
+import type { FailureKind } from './errorCopy';
 
 /** One tool step, assembled from a `tool_start` / `tool_end` pair. */
 export interface ToolActivity {
@@ -55,13 +56,28 @@ export interface Message {
   error?: ApiError | null;
 }
 
+/**
+ * A failure, in the terms the UI needs.
+ *
+ * Not the `ApiError` itself: `kind` is what selects approved copy, and
+ * `requestId` is carried only so it can be logged in dev. Neither the code nor
+ * the id is ever rendered.
+ */
+export interface ChatFailure {
+  kind: FailureKind;
+  requestId: string | undefined;
+  retryAfterS: number | null;
+  /** The question that produced it, so Retry can resend without retyping. */
+  question: string;
+}
+
 export interface ChatState {
   messages: Message[];
   conversationId: string | null;
   /** True from send until `done` or `error`. */
   busy: boolean;
   /** A failure that stopped a message existing at all, e.g. a 503 before the stream. */
-  error: ApiError | null;
+  error: ChatFailure | null;
 }
 
 export const initialChatState: ChatState = {

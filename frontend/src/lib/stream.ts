@@ -24,7 +24,7 @@
  */
 
 import { config } from './config';
-import { toApiFailure } from './api';
+import { ApiFailure, toApiFailure } from './api';
 import { isKnownStreamEvent, streamPayloadSchemas } from './schemas';
 import type { StreamEvent } from './types';
 
@@ -116,17 +116,34 @@ export async function* streamChat(options: StreamOptions): AsyncGenerator<Parsed
   const onAbort = () => controller.abort();
   options.signal?.addEventListener('abort', onAbort);
 
-  const response = await fetch(`${config.apiBaseUrl}/api/chat/stream`, {
-    method: 'POST',
-    // No Authorization header, no cookie. There is no auth and no session token —
-    // CLAUDE.md rule 2.
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({
-      message: options.message,
-      conversation_id: options.conversationId ?? null,
-    }),
-    signal: controller.signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${config.apiBaseUrl}/api/chat/stream`, {
+      method: 'POST',
+      // No Authorization header, no cookie. There is no auth and no session token —
+      // CLAUDE.md rule 2.
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({
+        message: options.message,
+        conversation_id: options.conversationId ?? null,
+      }),
+      signal: controller.signal,
+    });
+  } catch (thrown) {
+    options.signal?.removeEventListener('abort', onAbort);
+    if (thrown instanceof ApiFailure) throw thrown;
+    // The request never reached a server — no wifi, a captive portal, DNS gone.
+    throw new ApiFailure(
+      {
+        code: 'INTERNAL',
+        message: 'Could not reach SCASPA.',
+        request_id: 'client-side',
+      },
+      0,
+      null,
+      true
+    );
+  }
 
   if (!response.ok || !response.body) {
     options.signal?.removeEventListener('abort', onAbort);

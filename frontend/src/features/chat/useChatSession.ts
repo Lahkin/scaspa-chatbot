@@ -2,7 +2,15 @@ import { useCallback, useRef, useState } from 'react';
 import { ApiFailure } from '@/lib/api';
 import { StreamTimeout, streamChat } from '@/lib/stream';
 import type { ApiError } from '@/lib/types';
-import { initialChatState, type ChatState, type Message, type ToolActivity } from './types';
+import { OFFLINE, isNoAnswerCode, type FailureKind } from './errorCopy';
+import { setDraft } from './draft';
+import {
+  initialChatState,
+  type ChatFailure,
+  type ChatState,
+  type Message,
+  type ToolActivity,
+} from './types';
 
 /**
  * Drives one conversation.
@@ -175,32 +183,65 @@ export function useChatSession() {
         }
       } catch (thrown) {
         // `streamChat` converts an HTTP failure into an ApiFailure itself, so
-        // everything reaching here is already a typed error.
+        // everything reaching here is already typed.
         const failure = thrown instanceof ApiFailure ? thrown : null;
 
-        const apiError: ApiError =
-          failure?.error ??
-          (thrown instanceof StreamTimeout
-            ? {
-                code: 'UPSTREAM_TIMEOUT',
-                message: `${thrown.message} Please try again, or call SCASPA on 869-465-8121 / 2 / 3.`,
-                request_id: 'client-side',
-              }
-            : CLIENT_FAILURE);
+        const kind: FailureKind = failure?.offline
+          ? OFFLINE
+          : // `navigator.onLine === false` is conclusive; true proves nothing (a
+            // captive portal answers DNS and drops the rest), which is why the
+            // rejected-fetch signal above is the primary one.
+            !navigator.onLine
+            ? OFFLINE
+            : (failure?.error.code ??
+              (thrown instanceof StreamTimeout ? 'UPSTREAM_TIMEOUT' : 'INTERNAL'));
+
+        const chatFailure: ChatFailure = {
+          kind,
+          requestId: failure?.error.request_id,
+          retryAfterS: failure?.retryAfterS ?? null,
+          question,
+        };
+
+        // Put the question back in the composer.
+        //
+        // The offline copy promises "nothing you typed has been lost", and until
+        // this line that was only true in the sense that Retry could resend it —
+        // the user saw an empty box, which reads as exactly the loss the sentence
+        // denies. Restoring it also lets them edit before retrying, which is what
+        // someone does after a timeout on a long question.
+        setDraft(question);
 
         setState((current) => {
           const messages = [...current.messages];
           const index = messages.length - 1;
           const last = messages[index];
-          // A failure before any token means there is no answer to keep; drop the
-          // empty bubble and report at conversation level instead of leaving a
-          // blank one on screen.
+
+          // RETRIEVAL_EMPTY is routed to the calm no-answer treatment rather than
+          // an error: from the user's side it is indistinguishable from the
+          // assistant not knowing, and an error framing implies they hit a bug.
+          if (failure && isNoAnswerCode(failure.error.code) && last?.role === 'assistant') {
+            messages[index] = {
+              ...last,
+              streaming: false,
+              refusal: true,
+              text: failure.error.message,
+            };
+            return { ...current, messages, busy: false, error: null };
+          }
+
+          // A failure before any token means there is no answer to keep. Drop the
+          // empty bubble rather than leaving a blank one on screen.
           if (last && last.role === 'assistant' && last.text.length === 0) {
             messages.splice(index, 1);
-            return { ...current, messages, busy: false, error: apiError };
+            return { ...current, messages, busy: false, error: chatFailure };
           }
           if (last && last.role === 'assistant') {
-            messages[index] = { ...last, streaming: false, error: apiError };
+            messages[index] = {
+              ...last,
+              streaming: false,
+              error: failure?.error ?? CLIENT_FAILURE,
+            };
           }
           return { ...current, messages, busy: false, error: null };
         });

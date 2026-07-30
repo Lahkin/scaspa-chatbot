@@ -694,3 +694,132 @@ The dropped-marker `console.warn` fired four times per answer: `reconcile` runs
 from two `useMemo`s (the bubble and the session context) and StrictMode
 double-invokes both. Four lines for one event is how a warning gets ignored — the
 same lesson as the MSW request noise in F003. Deduped, with a reset seam for tests.
+
+---
+
+## F006 — The unhappy paths
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+Every state a user actually hits and nobody demos.
+
+### Error copy is data, in one file
+
+`features/chat/errorCopy.ts` holds one approved string per code. In one place so
+the whole set can be read and signed off together — the alternative is a sentence
+written inline wherever it was needed and eight slightly different apologies
+nobody has ever seen side by side.
+
+The rule it enforces: **never a code, a `request_id`, an HTTP status, a stack or a
+model name.** A traveller cannot act on `UPSTREAM_TIMEOUT`, and reading it makes a
+working system look broken. The `request_id` is logged to the dev console and
+nowhere else — the compromise that keeps a bug report actionable without putting
+internals on someone's screen. Asserted against the copy table itself, not just a
+rendered instance.
+
+`RETRIEVAL_EMPTY` is routed to the calm no-answer treatment rather than an error
+panel. From the service's side it is a fault; from the user's it is
+indistinguishable from the assistant not knowing, and an error framing implies
+they hit a bug.
+
+### A test regex that matched correct copy
+
+The "nothing technical" test used `/\b[45]\d\d\b/` for an HTTP status. It matched
+**465** — inside `869-465-8121`. It would have failed on copy that was entirely
+right, and the fix for a false positive like that is usually to weaken the test.
+Replaced with an explicit status list.
+
+### One fake-timer test took ten others down
+
+A countdown test failed part-way and left `vi.useFakeTimers()` installed. Every
+later test that awaited anything then hung on a clock that never advanced — ten
+timeouts, none of them a real defect, all pointing at the wrong place.
+`vi.useRealTimers()` now runs unconditionally in `afterEach`. Worth remembering:
+a fake-timer leak presents as failures in unrelated tests.
+
+### The draft is in memory, deliberately not sessionStorage
+
+**CLAUDE.md rule 5**: never write message content to localStorage, sessionStorage
+or IndexedDB. A half-typed question is message content — arguably the most
+sensitive kind, being what someone was about to ask and thought better of. On a
+shared cruise-terminal tablet a surviving draft is a privacy problem, not a
+feature.
+
+So it is a module-level store: it survives a client-side route change because the
+module is not re-evaluated, and does not survive a reload because nothing was
+written. Verified in a browser — `/about` → `/chat` via a real `Link` preserves it.
+React state alone would not, since the provider unmounts on a route change.
+
+### Rule 5 was being broken by the router, not by us
+
+The browser check found `tsr-scroll-restoration-v1_3` in sessionStorage. TanStack
+Router's `scrollRestoration: true` writes it.
+
+A scroll offset is **not** message content, so this is not the leak the rule was
+written to prevent. But the rule is narrow on purpose — _only_ `conversation_id`
+may go there — and it is absolute, so scroll restoration is off. The cost is close
+to zero: `/chat` and `/widget` never scroll at the document level (the transcript
+scrolls inside a `dvh` flex column, which this could not restore anyway) and the
+marketing pages are a screen long. One line to reverse if the team decides a
+scroll offset is out of scope for rule 5. There is now a test asserting
+sessionStorage holds nothing but `conversation_id`.
+
+### The offline copy was making a promise the app broke
+
+"Nothing you typed has been lost" — while the composer sat empty, because the
+draft was cleared on send. The question _was_ recoverable via Retry, so nothing
+was technically lost, but an empty box reads as exactly the loss the sentence
+denies. A failed send now puts the question back in the composer, which also lets
+someone edit a long question before retrying.
+
+### Offline cannot be tested through MSW, and that is not a bug
+
+With the service worker active, every request is answered locally, so a
+browser-level offline switch is invisible to the app. Verified with
+`VITE_ENABLE_MOCKS=false` instead, and both paths work:
+
+- **Unreachable backend, `navigator.onLine === true`** → offline copy. This is the
+  captive-portal case, and the reason the rejected-fetch signal is primary:
+  `navigator.onLine` false is conclusive, true proves nothing.
+- **Browser offline** → offline copy.
+
+### The counter makes the 422 unreachable
+
+Appears at 900, red at 1000, send disabled above it. `maxLength` is deliberately
+_not_ set on the textarea: a hard truncate silently eats characters as they are
+typed, which is more confusing than a visible count and a disabled button.
+`VALIDATION_ERROR` copy exists, but if a human sees it the counter has a bug.
+
+### Enter is different on a touch device, and it is not a detail
+
+Physical keyboard: Enter sends, Shift+Enter newlines. Touch: **Enter newlines** and
+the send button is the only way to send. On a phone the on-screen return key is
+where you reach for a new line, there is no Shift, and every attempt at a second
+sentence would fire off a half-finished question.
+
+Detected with `(pointer: coarse)`, not a width breakpoint — a narrow desktop
+window still has a real keyboard. Also guarded on `isComposing`, so an IME Enter
+confirming a candidate does not send a half-typed word. Verified on an emulated
+iPhone 13: `"line one\nline two"`.
+
+### Health is an ops endpoint turned into an honesty feature
+
+Polled every five minutes. Two levels, deliberately different in weight:
+**degraded** is a dismissible warning with the phone number (a banner that cannot
+be dismissed gets ignored rather than obeyed); **stale** is a quiet note giving the
+last-verified date, because the information may be perfectly current and a date is
+a fact to weigh, not an alarm. Neither shows `status`, `kb_rows` or any other
+diagnostic.
+
+Adding it gave the shells a hard dependency on `QueryClientProvider`, which broke
+eleven existing tests that rendered a shell bare. Fixed with a `renderWithProviders`
+helper rather than by making the component tolerate a missing provider — a missing
+provider is a bug, and swallowing it would hide a real one later.
+
+### The empty state has no robot and no AI badge
+
+Asserted, including no `<img>` and no `<svg>`. A visitor standing on a pier does
+not care what the thing is built from; they care whether they will make the last
+ferry. A badge spends the most valuable space on screen saying something that
+helps nobody.

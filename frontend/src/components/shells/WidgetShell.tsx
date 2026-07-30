@@ -3,6 +3,7 @@ import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/Chat
 import { IconButton, Sheet } from '@/components/ui';
 import { config } from '@/lib/config';
 import { SCASPA_PHONE_HREF, ScaspaMark } from './ScaspaMark';
+import { HealthBanner } from './HealthBanner';
 import { SourcePanel } from './SourcePanel';
 
 /**
@@ -58,6 +59,8 @@ function WidgetShellInner() {
     <div className="flex h-widget max-h-dvh w-widget max-w-full flex-col overflow-hidden bg-surface text-ink">
       {/* Compact header: one row, 44px targets, no strapline. Sixty pixels of a
           600px panel is a tenth of the conversation. */}
+      <HealthBanner />
+
       <header className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2">
         <ScaspaMark compact />
 

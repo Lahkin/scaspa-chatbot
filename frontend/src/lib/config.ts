@@ -47,6 +47,21 @@ export const config = {
   /** Give up on a stream after this long. An honest error beats a spinner. */
   streamTimeoutMs: readNumber(env.VITE_STREAM_TIMEOUT_MS, 30_000),
 
+  /**
+   * How often to re-check `GET /api/health`.
+   *
+   * Five minutes: index state changes on a deploy, not on a timer, so polling
+   * harder spends roaming data to learn nothing. Configurable because a demo may
+   * want it tighter.
+   */
+  healthPollMs: readNumber(env.VITE_HEALTH_POLL_MS, 5 * 60_000),
+
+  /**
+   * Past this many days since `kb_updated_at`, the UI notes when the information
+   * was last verified. Not an error — a fact the reader can weigh.
+   */
+  kbStaleAfterDays: readNumber(env.VITE_KB_STALE_AFTER_DAYS, 90),
+
   /** Exact origin permitted to embed the widget. Not a hostname, not '*'. */
   embedAllowedOrigin: readString(env.VITE_EMBED_ALLOWED_ORIGIN, 'https://www.scaspa.com'),
 

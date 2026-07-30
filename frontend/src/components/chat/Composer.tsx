@@ -1,42 +1,80 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Button, Textarea } from '@/components/ui';
+import { cn } from '@/lib/cn';
+import {
+  getDraft,
+  getDraftServerSnapshot,
+  setDraft,
+  subscribeToDraft,
+} from '@/features/chat/draft';
 
 interface ComposerProps {
   onSend: (text: string) => void;
   onStop: () => void;
   busy: boolean;
-  /** Set by a suggested-question chip. Populates the box; does not send. */
-  draft: string;
-  onDraftChange: (text: string) => void;
 }
 
-/** The contract rejects anything longer, so the limit is enforced before the round trip. */
-const MAX_LENGTH = 1000;
+/** The contract rejects anything longer, so the cap is enforced before the round trip. */
+export const MAX_LENGTH = 1000;
+/** Below this the counter is noise; above it, it is information. */
+export const COUNTER_VISIBLE_FROM = 900;
 
-export function Composer({ onSend, onStop, busy, draft, onDraftChange }: ComposerProps) {
+/**
+ * The composer.
+ *
+ * ### The counter makes a 422 unreachable
+ *
+ * The backend rejects a message over 1000 characters. A user who hits that is told
+ * *after* typing a long question and pressing send — the worst possible moment. So
+ * the count appears at 900, turns red at the cap, and send is disabled above it.
+ * The `VALIDATION_ERROR` copy exists, but if a human ever sees it the counter has
+ * a bug.
+ *
+ * `maxLength` is deliberately **not** set on the textarea: a hard truncate silently
+ * eats characters as they are typed, which is more confusing than a visible count
+ * and a disabled button.
+ *
+ * ### Enter behaves differently on a touch device, and that is not a detail
+ *
+ * With a physical keyboard, Enter sends and Shift+Enter makes a newline — the usual
+ * chat idiom. On a phone that is infuriating: the on-screen return key is where you
+ * reach for a new line, there is no Shift, and every attempt at a second sentence
+ * fires off a half-finished question. So on a touch device Enter inserts a newline
+ * and the send button is the only way to send.
+ *
+ * Detected by pointer capability, not width: a narrow desktop window still has a
+ * real keyboard, and treating it as a phone would break Enter-to-send for someone
+ * who just resized their browser.
+ */
+export function Composer({ onSend, onStop, busy }: ComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [touched, setTouched] = useState(false);
+  const draft = useSyncExternalStore(subscribeToDraft, getDraft, getDraftServerSnapshot);
+  const coarsePointer = useCoarsePointer();
 
-  // A chip fills the box, then focus moves to the end of it — so the next action
-  // is either pressing send or editing "40-foot" into "20-foot", with no hunting
-  // for the caret.
+  // A chip fills the box, then focus lands at the end of it — so the next action is
+  // pressing send or editing "40-foot" into "20-foot", with no hunt for the caret.
   useEffect(() => {
     if (!draft) return;
     const element = inputRef.current;
-    if (!element) return;
+    if (!element || document.activeElement === element) return;
     element.focus();
     element.setSelectionRange(element.value.length, element.value.length);
   }, [draft]);
 
-  const tooLong = draft.length > MAX_LENGTH;
-  const empty = draft.trim().length === 0;
+  const trimmed = draft.trim();
+  const overCap = draft.length > MAX_LENGTH;
+  const empty = trimmed.length === 0;
+  const canSend = !busy && !empty && !overCap;
 
   const submit = () => {
-    if (busy || empty || tooLong) return;
-    onSend(draft);
-    onDraftChange('');
-    setTouched(false);
+    if (!canSend) return;
+    // Trimmed on the way out: trailing whitespace is not part of the question, and
+    // the backend rejects a whitespace-only message anyway.
+    onSend(trimmed);
+    setDraft('');
   };
+
+  const showCounter = draft.length >= COUNTER_VISIBLE_FROM;
 
   return (
     <form
@@ -44,48 +82,89 @@ export function Composer({ onSend, onStop, busy, draft, onDraftChange }: Compose
         event.preventDefault();
         submit();
       }}
-      className="flex items-end gap-2"
+      className="space-y-1"
     >
-      <div className="min-w-0 flex-1">
-        <Textarea
-          ref={inputRef}
-          label="Your question"
-          labelHidden
-          placeholder="Ask about ferries, cruise, cargo or the airport"
-          value={draft}
-          maxRows={6}
-          onChange={(event) => {
-            onDraftChange(event.target.value);
-            setTouched(true);
-          }}
-          onKeyDown={(event) => {
-            // Enter sends, Shift+Enter makes a new line. The usual chat idiom —
-            // and on a phone the on-screen keyboard shows its own return key, so
-            // the form submit below is what actually fires there.
-            if (event.key === 'Enter' && !event.shiftKey) {
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <Textarea
+            ref={inputRef}
+            label="Your question"
+            labelHidden
+            placeholder="Ask about ferries, cruise, cargo or the airport"
+            value={draft}
+            maxRows={6}
+            // Disabled while a request is in flight: a second question sent
+            // mid-answer either races the first or silently replaces it.
+            disabled={busy}
+            aria-describedby={showCounter ? 'composer-counter' : undefined}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              // Touch device: Enter is always a newline.
+              if (coarsePointer) return;
+              // An IME Enter confirms a candidate. Sending there cuts a word in
+              // half for anyone typing a non-Latin script.
+              if (event.nativeEvent.isComposing) return;
+              if (event.shiftKey) return;
               event.preventDefault();
               submit();
-            }
-          }}
-          {...(touched && tooLong
-            ? {
-                error: `That is ${draft.length} characters. Please shorten it to ${MAX_LENGTH} or fewer.`,
-              }
-            : {})}
-        />
+            }}
+          />
+        </div>
+
+        {busy ? (
+          // Stopping is free: closing the connection cancels generation
+          // server-side and nothing further is charged.
+          <Button type="button" variant="secondary" onClick={onStop}>
+            Stop
+          </Button>
+        ) : (
+          <Button type="submit" disabled={!canSend}>
+            Send
+          </Button>
+        )}
       </div>
 
-      {busy ? (
-        // Stopping is free: closing the connection cancels generation server-side
-        // and nothing further is charged.
-        <Button type="button" variant="secondary" onClick={onStop}>
-          Stop
-        </Button>
-      ) : (
-        <Button type="submit" disabled={empty || tooLong}>
-          Send
-        </Button>
-      )}
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-caption text-ink-subtle">
+          {coarsePointer
+            ? 'Tap Send when you are ready.'
+            : 'Enter to send, Shift + Enter for a new line.'}
+        </p>
+
+        {showCounter && (
+          <p
+            id="composer-counter"
+            // Polite, not assertive: it must not interrupt a screen reader on every
+            // keystroke, but the user has to be told before they press send.
+            aria-live="polite"
+            className={cn(
+              'shrink-0 text-caption tabular',
+              overCap ? 'font-semibold text-danger' : 'text-ink-muted'
+            )}
+          >
+            {draft.length} / {MAX_LENGTH}
+            {overCap && <span className="ml-1">— too long to send</span>}
+          </p>
+        )}
+      </div>
     </form>
+  );
+}
+
+/** True on a device whose primary input cannot hover — a phone or tablet. */
+function useCoarsePointer(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+      const media = window.matchMedia('(pointer: coarse)');
+      media.addEventListener('change', onChange);
+      return () => media.removeEventListener('change', onChange);
+    },
+    () =>
+      typeof window !== 'undefined' && !!window.matchMedia
+        ? window.matchMedia('(pointer: coarse)').matches
+        : false,
+    () => false
   );
 }

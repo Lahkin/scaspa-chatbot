@@ -2,6 +2,7 @@ import { ChatCore } from '@/components/chat/ChatCore';
 import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { IconButton, Sheet } from '@/components/ui';
 import { SCASPA_PHONE_HREF, ScaspaMark } from './ScaspaMark';
+import { HealthBanner } from './HealthBanner';
 import { SourcePanel } from './SourcePanel';
 
 /**
@@ -47,6 +48,8 @@ function FullPageShellInner() {
   return (
     // h-dvh + overflow-hidden: the document never scrolls, only the transcript does.
     <div className="flex h-dvh flex-col overflow-hidden bg-surface text-ink">
+      <HealthBanner />
+
       <header className="shrink-0 border-b border-border bg-surface">
         <div className="flex items-center gap-2 px-4 py-2">
           <ScaspaMark />
