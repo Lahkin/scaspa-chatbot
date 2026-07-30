@@ -1281,3 +1281,121 @@ than being given an invented abbreviation. A bar chart with more than six
 categories flips horizontal below 640px — measured from the **container**, not a
 breakpoint, because the widget is 380px wide inside an iframe on a 1440px desktop
 and has exactly the phone's problem.
+
+---
+
+## F011 — Voice
+
+**Date:** 2026-07-30
+**Status:** Accepted — with one gap stated plainly
+
+Accessibility, not novelty. A passenger with a bag in one hand will talk to this
+long before they type.
+
+### The button is absent, not disabled, when it cannot work
+
+`getUserMedia` exists only on HTTPS or `localhost`. Testing on a phone against a
+laptop's LAN address — `http://192.168.x.x:5173`, the usual way — leaves
+`mediaDevices` undefined and the microphone fails with **no prompt, no dialog and
+nothing in the console**. It looks exactly like a bug in this code and is not.
+
+So `detectVoiceCapability` resolves `isSecureContext`, `mediaDevices`,
+`MediaRecorder` and format support before render, and the control renders
+**nothing** when any of them fails, with a dev warning naming the cause and the
+fix. A control that does nothing when tapped is worse than an absent one: the user
+taps three times and concludes the product is broken. There is no layout hole
+either — the composer's flex row simply has one fewer child.
+
+### The format is negotiated, never assumed
+
+`MediaRecorder.isTypeSupported` across a candidate list, in preference order,
+every entry on the backend's whitelist. Chrome and Firefox take
+`audio/webm;codecs=opus`; Safari falls through to `audio/mp4`. Sending something
+off the list produces a clean 422 that reads exactly like a broken recorder and
+costs an hour.
+
+**Verified in two engines.** Chromium negotiates `audio/webm;codecs=opus`.
+Playwright's WebKit was run with `isTypeSupported` narrowed to Safari's real
+support and negotiated `audio/mp4` — the branch that matters.
+
+⚠️ **Playwright's WebKit is not Safari here.** Its build _does_ support
+`audio/webm`, which real Safari does not, so it cannot substitute for a device on
+this specific question. The constraint was injected precisely because the default
+would have tested the wrong branch and looked like a pass.
+
+### The level meter is real audio, and that is the point
+
+An `AnalyserNode` reading the actual stream, not a looping animation. **A fake
+animation lies when the mic is muted**: the user sees confident movement, talks
+for thirty seconds, gets nothing, and has no way to tell whether the fault was
+theirs, the browser's or ours. A real meter that stays flat says "we are not
+hearing you", which is the useful answer.
+
+Measured in Chromium with a fake capture device: `0000000400000400000400000` —
+all four bars tracking the device's periodic tone.
+
+### Permission is asked on the tap, and only once
+
+Never on load: a prompt on arrival arrives before any reason to trust the page and
+gets denied _permanently_ for the origin. After a denial the control stops asking
+for the session — the browser will not re-prompt anyway, so asking again only
+wastes a tap — and the message says which browser control re-enables it.
+
+### The transcript goes to the composer, never to the model
+
+Hard rule from the backend spec, and the reason is one word: **"Nevis" versus
+"never"**. A confident answer to a misheard question is both a bad experience and
+a bad demo moment. Verified in a browser: the transcript lands in the box, focus
+follows it, and nothing is sent.
+
+### One audio element, and a bug the tests caught
+
+Two answers talking over each other is a memorable failure and the _default_
+outcome of giving each message its own player, so there is one element in a
+module-level store and starting a playback stops the previous one. It is a store
+rather than component state because a message can scroll out of the list while its
+audio is still playing.
+
+**Found by a test:** a TTS failure set `messageId: null` alongside the error, so no
+speaker button matched it and the message was never displayed. The failure was
+silent — which is the one thing a _contained_ failure must not be. The id is now
+kept. Mutation-tested.
+
+### iOS unlocking, which is the failure that only appears on stage
+
+iOS Safari refuses programmatic playback not tied to a user gesture, and `play()`
+rejects with `NotAllowedError` that nobody is watching for. TTS therefore works
+through every round of desktop testing and does nothing on the presenter's iPhone.
+
+An `AudioContext` is created and resumed inside the **first gesture anywhere in
+the app**, capture-phase so a `stopPropagation` cannot swallow it, listeners
+removing themselves afterwards. By the time anyone taps a speaker, the gesture
+that unlocked audio was their tap on a suggested question.
+
+### Failure is contained, by construction
+
+Verified in a browser with the TTS-failure scenario: the error appears on the
+speaker control, the answer text is byte-identical before and after, and the
+composer stays usable. If the microphone fails mid-demo the presenter can carry on
+without comment — which is a code property, not a presenting skill.
+
+### ⚠️ What has NOT been verified
+
+**No real iPhone.** The definition of done asks for "recording works in Chrome and
+in Safari on a real iPhone". Chrome is fully verified end to end. iOS is verified
+only as far as an emulated engine allows: WebKit renders the control, negotiates
+`audio/mp4` under Safari's constraints, exposes `AudioContext`, and runs the text
+path with no errors — but no recording was made on a real device, and the iOS
+audio unlock has never faced the real restriction it exists for.
+
+That is the single largest untested assumption in this feature and it needs ten
+minutes with a phone on an HTTPS URL before anyone relies on it.
+
+### Two test defects worth recording
+
+A stub `AudioContext` written as `vi.fn(() => ({...}))` cannot be constructed —
+`new (() => {})` throws — so `getAudioContext()` returned null and three unlock
+tests failed for entirely the wrong reason. And a `await import('@/features/chat/draft')`
+picked up a _fresh_ module instance because earlier tests in the file call
+`vi.resetModules()`, so it wrote to a different store from the one the rendered
+component was subscribed to.

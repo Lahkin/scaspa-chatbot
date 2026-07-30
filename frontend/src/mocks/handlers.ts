@@ -250,10 +250,36 @@ export const handlers = [
   // goes in the input box, never straight into /api/chat, so a misheard terminal
   // name can be corrected before it becomes a confident answer to the wrong
   // question.
-  http.post(`${base}/api/stt`, () => HttpResponse.json({ text: STT_TEXT })),
+  http.post(`${base}/api/stt`, () => {
+    if (getScenario() === 'voice_stt_fails') {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'INTERNAL',
+            message: 'Transcription is unavailable. Please call SCASPA on 869-465-8121 / 2 / 3.',
+            request_id: 'mock',
+          },
+        },
+        { status: 503 }
+      );
+    }
+    return HttpResponse.json({ text: STT_TEXT });
+  }),
 
   // ── POST /api/tts ──────────────────────────────────────────────────────────
   http.post(`${base}/api/tts`, () => {
+    if (getScenario() === 'voice_tts_fails') {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'INTERNAL',
+            message: 'Speech is unavailable just now.',
+            request_id: 'mock',
+          },
+        },
+        { status: 503 }
+      );
+    }
     const bytes = silentMp3();
     return new HttpResponse(bytes, {
       headers: {

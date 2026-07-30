@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
 
 import { shouldRetry } from './features/chat/queries';
+import { installAudioUnlock } from './features/voice/audioUnlock';
 import { config } from './lib/config';
 import { routeTree } from './routeTree.gen';
 import './styles/tokens.css';
@@ -91,6 +92,16 @@ async function startMocks(): Promise<void> {
     quiet: true,
   });
 }
+
+/**
+ * Unlock audio on the first user gesture anywhere.
+ *
+ * iOS Safari refuses programmatic playback not tied to a gesture, and the failure
+ * is silent — TTS works through every round of desktop testing and then does
+ * nothing on the presenter's iPhone. By the time anyone taps a speaker button,
+ * the gesture that unlocked audio was their tap on a suggested question.
+ */
+installAudioUnlock();
 
 void startMocks().then(() => {
   createRoot(rootElement).render(

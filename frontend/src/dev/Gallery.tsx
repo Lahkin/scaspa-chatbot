@@ -41,6 +41,14 @@ import { HEALTH_DEGRADED, HEALTH_STALE, NO_ANSWER_RESPONSE } from '@/mocks/fixtu
 import { isStale } from '@/features/chat/queries';
 import { ChartBlock } from '@/components/chat/ChartBlock';
 import { ALL_CHART_FIXTURES } from '@/mocks/chartFixtures';
+import { VoiceButton } from '@/components/chat/VoiceButton';
+import { SpeakButton } from '@/components/chat/SpeakButton';
+import {
+  CANDIDATE_MIME_TYPES,
+  detectVoiceCapability,
+  pickMimeType,
+} from '@/features/voice/capabilities';
+import { config as appConfig } from '@/lib/config';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.
@@ -462,6 +470,13 @@ export function Gallery() {
         <ChartGallery />
       </Section>
 
+      <Section
+        title="Voice"
+        note="Accessibility, not novelty. The mic renders nothing at all when it cannot work — check the console for the reason."
+      >
+        <VoiceSection />
+      </Section>
+
       <Section title="Typography scale">
         <div className="space-y-1">
           <p className="text-display font-semibold">Display 36</p>
@@ -831,6 +846,57 @@ function ChartGallery() {
               <ChartBlock spec={spec} />
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VoiceSection() {
+  const capability = detectVoiceCapability(appConfig.features.voice);
+  const [transcript, setTranscript] = useState('');
+
+  return (
+    <div className="max-w-measure space-y-3">
+      <dl className="grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1 text-caption">
+        <dt className="text-ink-subtle">Secure context</dt>
+        <dd className="tabular">
+          {String(typeof window !== 'undefined' && window.isSecureContext)}
+        </dd>
+        <dt className="text-ink-subtle">Feature flag</dt>
+        <dd className="tabular">{String(appConfig.features.voice)}</dd>
+        <dt className="text-ink-subtle">Available</dt>
+        <dd className="tabular">
+          {String(capability.available)}
+          {capability.reason ? ` (${capability.reason})` : ''}
+        </dd>
+        <dt className="text-ink-subtle">Negotiated format</dt>
+        <dd className="tabular">{pickMimeType() ?? 'none supported'}</dd>
+        <dt className="text-ink-subtle">Candidates tried</dt>
+        <dd className="text-ink-muted">{CANDIDATE_MIME_TYPES.join(', ')}</dd>
+      </dl>
+
+      <div className="rounded-md border border-border bg-surface-muted p-3">
+        <p className="mb-2 text-caption text-ink-subtle">
+          Tap to record. It asks for permission on the tap, never on page load, and the meter is
+          driven by real audio — it stays flat when the mic is muted, which is the one useful thing
+          to know.
+        </p>
+        <VoiceButton onTranscript={setTranscript} />
+        {transcript && (
+          <p className="mt-2 text-small">
+            Transcript (would go to the composer, never to the model): <strong>{transcript}</strong>
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-md border border-border bg-surface-muted p-3">
+        <p className="mb-2 text-caption text-ink-subtle">
+          One shared audio element for the whole app: starting a second playback stops the first.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <SpeakButton messageId="gallery-1" text="The placeholder fare is XCD 44.44." />
+          <SpeakButton messageId="gallery-2" text="The last sailing back from Nevis is 18:00." />
         </div>
       </div>
     </div>

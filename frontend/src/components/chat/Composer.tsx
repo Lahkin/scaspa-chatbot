@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Button, Textarea } from '@/components/ui';
+import { VoiceButton } from './VoiceButton';
 import { cn } from '@/lib/cn';
 import {
   getDraft,
@@ -128,6 +129,15 @@ export function Composer({
             }}
           />
         </div>
+
+        {/*
+          The transcript goes into the draft and focus follows it — it is NEVER
+          sent. "Nevis" versus "never" is exactly the mishearing that happens on
+          stage, and a confident answer to the wrong question is both a bad
+          experience and a bad demo moment. Renders nothing when voice cannot
+          work, so there is no layout hole.
+        */}
+        {!busy && <VoiceButton onTranscript={(text) => setDraft(text)} />}
 
         {busy ? (
           // Stopping is free: closing the connection cancels generation

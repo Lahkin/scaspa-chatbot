@@ -18,6 +18,8 @@ export type ScenarioId =
   | 'hallucinated_marker'
   | 'volatility'
   | 'chart'
+  | 'voice_stt_fails'
+  | 'voice_tts_fails'
   | 'no_answer'
   | 'index_missing'
   | 'retrieval_empty'
@@ -65,6 +67,16 @@ export const SCENARIOS: ScenarioDescription[] = [
     id: 'chart',
     label: 'Answer with a chart',
     expected: 'Recharts loads lazily; caption and source chip always present.',
+  },
+  {
+    id: 'voice_stt_fails',
+    label: 'Voice: transcription fails',
+    expected: 'Mic error contained to the control; typing is completely unaffected.',
+  },
+  {
+    id: 'voice_tts_fails',
+    label: 'Voice: speech fails',
+    expected: 'Speaker says so; the answer above is unchanged.',
   },
   {
     id: 'no_answer',

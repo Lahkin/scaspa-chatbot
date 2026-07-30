@@ -7,6 +7,7 @@ import { ChartBlock } from './ChartBlock';
 import { CitationProvider } from './CitationContext';
 import { EscalationCard } from './EscalationCard';
 import { NoAnswerCard } from './NoAnswerCard';
+import { SpeakButton } from './SpeakButton';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { UngroundedNotice } from './UngroundedNotice';
 
@@ -152,6 +153,14 @@ export function MessageBubble({ message, onOpenSource }: MessageBubbleProps) {
                 {message.error.message}
               </p>
             )}
+          </div>
+        )}
+
+        {/* Read-aloud, on the finished answer only: speaking a half-arrived
+            sentence would cut off mid-word. */}
+        {!isUser && !message.streaming && message.text.length > 0 && (
+          <div className="mt-1">
+            <SpeakButton messageId={message.id} text={message.text} />
           </div>
         )}
 
