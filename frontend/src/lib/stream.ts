@@ -1,189 +1,295 @@
 /**
- * SSE-over-POST: fetch + ReadableStream, parsed by hand.
+ * SSE over POST: fetch + `response.body.getReader()` + `TextDecoder`.
  *
- * `EventSource` is deliberately not used and must never be — CLAUDE.md rule 3.
- * It can only issue GET requests and the chat endpoint is a POST with a JSON
- * body. There is no workaround; the lint config makes `new EventSource(...)` an
- * error so this is enforced rather than remembered.
+ * **`EventSource` is not usable here and never will be** — CLAUDE.md rule 3. It
+ * issues GET only and cannot carry a body; the endpoint is `POST /api/chat/stream`
+ * with a JSON body. There is no workaround, and the lint config makes
+ * `new EventSource(...)` an error so it is enforced rather than remembered.
  *
- * ### The two things this has to get right
+ * `@microsoft/fetch-event-source` would have supported POST. It is not used: the
+ * frame handling is the part that breaks, so it is written here, in `lib/sse.ts`,
+ * where it can be read and tested directly rather than trusted.
  *
- * **1. A frame can be split across chunks.** TCP does not care where the frames
- * are. A chunk may end mid-JSON, mid-`data:` line, or between the two newlines
- * that terminate a frame. So bytes are accumulated in a buffer and only complete
- * frames — those terminated by a blank line — are taken off it. The mock splits
- * the first token frame mid-JSON on purpose, which is what keeps this honest.
- *
- * **2. Cancellation is a race, not an abort.** Measured in F003: under MSW's
- * Node interceptor `body.cancel()` never settles and `AbortController.abort()`
- * does not reject a read that is already pending. Both work in a real browser,
- * but a timeout that depends on the read rejecting is untestable and, on a flaky
- * mobile connection, slower than it looks. So the read is raced against a timer
- * and consumption stops when the timer wins; the abort is cleanup afterwards,
- * not the mechanism.
+ * This module owns the wire. It knows nothing about React, messages or citations
+ * — it turns bytes into validated events and hands them to callbacks.
  */
 
+import { normaliseError, ApiError } from './api';
 import { config } from './config';
-import { ApiError, normaliseError } from './api';
+import { SseParser, parseFrameData } from './sse';
 import { isKnownStreamEvent, streamPayloadSchemas } from './schemas';
-import type { StreamEvent } from './types';
-
-/** One `event:` / `data:` pair, already validated against its payload schema. */
-export type ParsedEvent = StreamEvent;
-
-export class StreamTimeout extends Error {
-  constructor(ms: number) {
-    super(`The assistant stopped responding after ${Math.round(ms / 1000)} seconds.`);
-    this.name = 'StreamTimeout';
-  }
-}
+import type { ApiErrorBody, ChartSpec, Citation, ToolName } from './types';
 
 /**
- * Pull complete frames out of an accumulating buffer.
+ * One callback per event the contract defines.
  *
- * Returns the frames found and whatever is left over. The leftover is the whole
- * point: it is the half-frame that the next chunk completes.
+ * A typed object rather than a single `(event) => void`: the caller ends up
+ * switching on a string either way, and doing it here means an event the contract
+ * adds shows up as a missing property rather than as a silently unhandled case.
  */
-export function takeFrames(buffer: string): { frames: string[]; rest: string } {
-  const frames: string[] = [];
-  let rest = buffer;
-
-  for (;;) {
-    // SSE terminates a frame with a blank line. \r\n\r\n is tolerated because
-    // proxies rewrite line endings.
-    const match = /\r?\n\r?\n/.exec(rest);
-    if (!match) break;
-    frames.push(rest.slice(0, match.index));
-    rest = rest.slice(match.index + match[0].length);
-  }
-
-  return { frames, rest };
+export interface StreamHandlers {
+  /** Always first, before any token. Adopt `conversation_id` immediately. */
+  onMeta?: (data: { conversation_id: string }) => void;
+  onToken?: (data: { text: string }) => void;
+  onToolStart?: (data: { name: ToolName; summary: string }) => void;
+  onToolEnd?: (data: { name: ToolName; summary: string; ms: number }) => void;
+  /** After the last token — validation needs the finished text. */
+  onCitations?: (data: { citations: Citation[] }) => void;
+  onChart?: (data: ChartSpec) => void;
+  /**
+   * The tool-call cap was hit. Everything streamed so far was an internal
+   * message, not an answer: discard it and render this instead.
+   */
+  onReplace?: (data: { text: string }) => void;
+  onDone?: (data: {
+    latency_ms: number;
+    grounded: boolean;
+    refusal: boolean;
+    kb_version: string;
+  }) => void;
+  /** Once headers are sent the status is fixed at 200, so a failure arrives here. */
+  onError?: (data: ApiErrorBody) => void;
 }
 
-/**
- * Parse one frame's text into a typed event.
- *
- * Returns null for anything unrecognised — a comment line (`: keep-alive`), an
- * event name this client does not know, or a payload that fails its schema. An
- * unknown event is not an error: the backend is allowed to add events, and a
- * client that throws on one it has not been taught is a client that breaks on
- * the next deploy.
- */
-export function parseFrame(frame: string): ParsedEvent | null {
-  let name = '';
-  const dataLines: string[] = [];
-
-  for (const line of frame.split(/\r?\n/)) {
-    if (line.startsWith(':')) continue; // comment / keep-alive
-    if (line.startsWith('event:')) name = line.slice(6).trim();
-    else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
-  }
-
-  if (!name || dataLines.length === 0) return null;
-  if (!isKnownStreamEvent(name)) return null;
-
-  let json: unknown;
-  try {
-    json = JSON.parse(dataLines.join('\n'));
-  } catch {
-    return null;
-  }
-
-  const result = streamPayloadSchemas[name].safeParse(json);
-  if (!result.success) return null;
-
-  return { event: name, data: result.data } as ParsedEvent;
-}
-
-export interface StreamOptions {
+export interface StreamRequest {
   message: string;
   conversationId?: string | null;
-  signal?: AbortSignal;
-  /** Overrides `config.streamTimeoutMs`. */
-  timeoutMs?: number;
+}
+
+/** Thrown when the response was not a stream at all. */
+export class NotAStream extends Error {
+  readonly contentType: string;
+
+  constructor(contentType: string) {
+    super(
+      `Expected text/event-stream, got "${contentType || '(none)'}". ` +
+        `A proxy or gateway has intercepted the request.`
+    );
+    this.name = 'NotAStream';
+    this.contentType = contentType;
+  }
+}
+
+export interface StreamResult {
+  /** True once `done` arrived. False if the stream ended any other way. */
+  completed: boolean;
+  /** True if an `error` event was dispatched. */
+  errored: boolean;
 }
 
 /**
- * Open the stream and yield events as they arrive.
+ * Open the stream and drive the handlers until it ends.
  *
- * Throws `StreamTimeout` if nothing arrives for `timeoutMs` — measured between
- * chunks, not from the start, so a long answer is not cut off mid-sentence while
- * a genuinely dead connection still ends.
+ * Resolves when the connection closes. Throws `ApiError` for a failure that
+ * happened *before* streaming began — those arrive as a normal HTTP error with the
+ * usual envelope, because validation runs before the first byte is written.
  */
-export async function* streamChat(options: StreamOptions): AsyncGenerator<ParsedEvent, void, void> {
-  const timeoutMs = options.timeoutMs ?? config.streamTimeoutMs;
-  const controller = new AbortController();
-  const onAbort = () => controller.abort();
-  options.signal?.addEventListener('abort', onAbort);
-
+export async function streamMessage(
+  request: StreamRequest,
+  handlers: StreamHandlers,
+  signal?: AbortSignal
+): Promise<StreamResult> {
   let response: Response;
   try {
     response = await fetch(`${config.apiBaseUrl}/api/chat/stream`, {
       method: 'POST',
-      // No Authorization header, no cookie. There is no auth and no session token —
-      // CLAUDE.md rule 2.
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      headers: {
+        'Content-Type': 'application/json',
+        // Declares the intent. A proxy that is going to mangle SSE will often
+        // reveal itself in the response to this.
+        Accept: 'text/event-stream',
+      },
+      // No Authorization header and no cookie: there is no auth and no session
+      // token — CLAUDE.md rule 2.
       body: JSON.stringify({
-        message: options.message,
-        conversation_id: options.conversationId ?? null,
+        message: request.message,
+        conversation_id: request.conversationId ?? null,
       }),
-      signal: controller.signal,
+      ...(signal ? { signal } : {}),
     });
   } catch (thrown) {
-    options.signal?.removeEventListener('abort', onAbort);
-    if (thrown instanceof ApiError) throw thrown;
-    // The request never reached a server — no wifi, a captive portal, DNS gone.
+    // A deliberate cancel is not a failure to report.
+    if (signal?.aborted) throw thrown;
     throw new ApiError({
       code: 'INTERNAL',
-      message: 'Could not reach SCASPA.',
+      message:
+        'I could not reach SCASPA just now. Please check your connection and try again, ' +
+        'or call SCASPA on 869-465-8121 / 2 / 3.',
       status: 0,
       offline: true,
     });
   }
 
-  if (!response.ok || !response.body) {
-    options.signal?.removeEventListener('abort', onAbort);
-    // Validation and upstream failures happen *before* streaming starts, so they
-    // arrive as a normal HTTP error with the usual envelope. Converted here into
-    // an ApiFailure carrying the backend's own user-facing message, rather than
-    // thrown as a raw Response — a caller should never have to know that the
-    // failure happened to come from fetch.
+  // Validation and upstream failures happen *before* streaming starts, so they
+  // arrive as an ordinary HTTP error carrying the usual envelope.
+  if (!response.ok) throw await normaliseError(response);
+
+  /*
+   * Check it is actually a stream before reading a byte.
+   *
+   * Two distinct wrong answers, and conflating them costs an afternoon:
+   *
+   *   application/json — the backend returned an error envelope with a 200, or a
+   *     shape change. Parse it and throw a real ApiError.
+   *   text/html — a proxy, gateway or captive portal intercepted the request. The
+   *     body is somebody else's HTML and must never be read or shown.
+   *
+   * Without this, both are fed to the frame parser, which finds no `data:` lines
+   * and reports an empty stream — a symptom pointing nowhere near the cause.
+   */
+  const contentType = (response.headers.get('Content-Type') ?? '').toLowerCase();
+
+  if (contentType.includes('application/json')) {
     throw await normaliseError(response);
   }
 
+  if (!contentType.includes('text/event-stream')) {
+    throw new NotAStream(contentType);
+  }
+
+  if (!response.body) throw new NotAStream(contentType);
+
+  const parser = new SseParser();
+  // One decoder for the whole stream. `{ stream: true }` below makes it hold a
+  // partial multi-byte sequence across a chunk boundary — without it, a chunk
+  // that splits the middle of "—" or an accented character in a French place
+  // name emits U+FFFD and the answer is visibly corrupted.
+  const decoder = new TextDecoder('utf-8');
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+
+  const result: StreamResult = { completed: false, errored: false };
 
   try {
     for (;;) {
-      // The race described above. `timer` resolves to a sentinel rather than
-      // rejecting, so a lost race is ordinary control flow.
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const deadline = new Promise<'timeout'>((resolve) => {
-        timer = setTimeout(() => resolve('timeout'), timeoutMs);
-      });
+      /*
+       * Check the signal ourselves rather than relying on the read rejecting.
+       *
+       * Measured (F003): under MSW's Node interceptor an abort does **not**
+       * reject a pending read, so a test could not observe cancellation at all.
+       * But it is not only a test concern — a reader part-way through a buffered
+       * chunk keeps delivering what it already has, so a user who presses Stop
+       * would watch several more tokens appear after they pressed it.
+       *
+       * Checking here makes the stop immediate and makes cancellation testable,
+       * regardless of how the underlying reader behaves.
+       */
+      if (signal?.aborted) break;
 
-      const next = await Promise.race([reader.read(), deadline]);
-      if (timer !== undefined) clearTimeout(timer);
+      const { done, value } = await reader.read();
 
-      if (next === 'timeout') throw new StreamTimeout(timeoutMs);
-      if (next.done) break;
+      if (signal?.aborted) break;
 
-      buffer += decoder.decode(next.value, { stream: true });
-      const { frames, rest } = takeFrames(buffer);
-      buffer = rest;
+      if (done) {
+        // Drain anything the server left unterminated.
+        for (const frame of parser.flush()) {
+          if (dispatch(frame.event, frame.data, handlers, result)) break;
+        }
+        break;
+      }
 
-      for (const frame of frames) {
-        const event = parseFrame(frame);
-        if (event) yield event;
+      const text = decoder.decode(value, { stream: true });
+      for (const frame of parser.push(text)) {
+        // `error` closes the connection; nothing after it is meaningful.
+        if (dispatch(frame.event, frame.data, handlers, result)) {
+          return result;
+        }
       }
     }
   } finally {
-    options.signal?.removeEventListener('abort', onAbort);
-    // Cleanup, not mechanism. Best-effort and never awaited: under MSW-node
-    // `cancel()` does not settle, and waiting on it here would hang the caller.
-    controller.abort();
-    void reader.cancel().catch(() => {});
+    // Releasing the lock is what actually lets the connection be collected. A
+    // leaked reader keeps the connection open, and the backend explicitly detects
+    // a live connection to decide whether to keep generating — so a leak here
+    // keeps burning tokens for an answer nobody is reading.
+    try {
+      // `cancel()` tells the source to stop producing — this is the half that
+      // reaches the backend and lets it stop generating. Not awaited: under
+      // MSW-node it never settles, and waiting would hang the caller.
+      void reader.cancel().catch(() => {});
+      reader.releaseLock();
+    } catch {
+      // Already released, or the stream errored. Nothing to do.
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Validate one frame and call its handler.
+ *
+ * Returns true when the stream should stop — only `error` does that.
+ */
+function dispatch(
+  event: string,
+  data: string,
+  handlers: StreamHandlers,
+  result: StreamResult
+): boolean {
+  // An event this client does not know is not an error. The backend is allowed to
+  // add events, and a client that throws on one it has not been taught is a
+  // client that breaks on the next deploy.
+  if (!isKnownStreamEvent(event)) {
+    if (event !== '' && import.meta.env.DEV) {
+      console.warn(`[stream] ignoring unknown event "${event}"`);
+    }
+    return false;
+  }
+
+  const payload = parseFrameData({ event, data });
+  if (!payload.ok) return false; // malformed; already warned
+
+  const parsed = streamPayloadSchemas[event].safeParse(payload.value);
+  if (!parsed.success) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        `[stream] "${event}" did not match its schema and was skipped: ` +
+          parsed.error.issues.map((issue) => `${issue.path.join('.')} ${issue.message}`).join('; ')
+      );
+    }
+    return false;
+  }
+
+  switch (event) {
+    case 'meta':
+      // Adopted immediately, before any token, so the conversation is correct
+      // even if the user navigates away mid-answer.
+      handlers.onMeta?.(parsed.data as { conversation_id: string });
+      return false;
+    case 'token':
+      handlers.onToken?.(parsed.data as { text: string });
+      return false;
+    case 'tool_start':
+      handlers.onToolStart?.(parsed.data as { name: ToolName; summary: string });
+      return false;
+    case 'tool_end':
+      handlers.onToolEnd?.(parsed.data as { name: ToolName; summary: string; ms: number });
+      return false;
+    case 'citations':
+      handlers.onCitations?.(parsed.data as { citations: Citation[] });
+      return false;
+    case 'chart':
+      handlers.onChart?.(parsed.data as ChartSpec);
+      return false;
+    case 'replace':
+      handlers.onReplace?.(parsed.data as { text: string });
+      return false;
+    case 'done':
+      result.completed = true;
+      handlers.onDone?.(
+        parsed.data as {
+          latency_ms: number;
+          grounded: boolean;
+          refusal: boolean;
+          kb_version: string;
+        }
+      );
+      return false;
+    case 'error':
+      result.errored = true;
+      handlers.onError?.(parsed.data as ApiErrorBody);
+      // The connection closes after an error event; nothing further arrives.
+      return true;
+    default:
+      return false;
   }
 }

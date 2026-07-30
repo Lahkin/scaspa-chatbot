@@ -1,70 +1,130 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { ApiError, sendMessage } from '@/lib/api';
 import { config } from '@/lib/config';
-import { StreamTimeout, streamChat } from '@/lib/stream';
-import type { ApiErrorBody } from '@/lib/types';
-import { OFFLINE, isNoAnswerCode, type FailureKind } from './errorCopy';
-import { setDraft } from './draft';
+import { NotAStream, streamMessage } from '@/lib/stream';
 import { clearConversationId, readConversationId, writeConversationId } from './conversation';
-import {
-  initialChatState,
-  type ChatFailure,
-  type ChatState,
-  type Message,
-  type ToolActivity,
-} from './types';
+import { setDraft } from './draft';
+import { OFFLINE, isNoAnswerCode, type FailureKind } from './errorCopy';
+import { chatReducer, initialMachineState, type Transport } from './reducer';
+import type { ChatFailure } from './types';
 
 /**
  * Drives one conversation.
  *
- * State lives here and only here. Nothing is written to localStorage,
- * sessionStorage or IndexedDB — CLAUDE.md rule 5. Losing the tab loses the
- * conversation, which is the documented and intended behaviour: there is no
- * account, and a transcript that survives on a shared cruise-terminal tablet is
- * a privacy problem, not a feature.
- */
-
-const CLIENT_FAILURE: ApiErrorBody = {
-  code: 'INTERNAL',
-  message:
-    'Something went wrong at our end. Please try again, or call SCASPA on ' +
-    '869-465-8121 / 2 / 3.',
-  request_id: 'client-side',
-};
-
-let counter = 0;
-/**
- * Ids for React keys only.
+ * State lives in a **pure reducer** (`reducer.ts`) so a whole answer can be
+ * replayed in a unit test with no network, no timers and no React. This hook owns
+ * only the things a reducer cannot: the connection, the deadlines, and the
+ * decision to give up on the stream and try the other endpoint.
  *
- * `crypto.randomUUID` needs a secure context, and on plain HTTP over a LAN
- * address — the usual way this gets demonstrated on a phone — it is undefined.
- * A counter is sufficient: these never leave the tab and identify nothing.
+ * Nothing is written to localStorage, sessionStorage or IndexedDB except the
+ * `conversation_id` — CLAUDE.md rule 5.
  */
+
+/** Ids for React keys only; they never leave the tab and identify nothing. */
+let counter = 0;
 function nextId(prefix: string): string {
   counter += 1;
   return `${prefix}-${counter}`;
 }
 
+/**
+ * How long to wait for `meta` before giving up on the stream.
+ *
+ * `meta` is the first thing the server sends, so its absence means the stream
+ * never really started — which on a hostile network usually means a proxy is
+ * buffering `text/event-stream` and will release it at the end, or not at all.
+ * Shorter than the overall timeout because there is a working alternative and no
+ * reason to spend the whole budget discovering that.
+ */
+const META_DEADLINE_MS = 6000;
+
 export function useChatSession() {
-  const [state, setState] = useState<ChatState>(() => ({
-    ...initialChatState,
+  const [state, dispatch] = useReducer(chatReducer, initialMachineState, (initial) => ({
+    ...initial,
     // Read on mount so a reload does not silently start a new conversation
     // mid-exchange.
     conversationId: readConversationId(),
   }));
-  const abort = useRef<AbortController | null>(null);
 
-  /** Update the assistant message currently being streamed. */
-  const patchLast = useCallback((patch: (message: Message) => Message) => {
-    setState((current) => {
-      const messages = [...current.messages];
-      const index = messages.length - 1;
-      const last = messages[index];
-      if (!last || last.role !== 'assistant') return current;
-      messages[index] = patch(last);
-      return { ...current, messages };
-    });
+  const abort = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+
+  /**
+   * Abort on unmount, which covers a route change too.
+   *
+   * A leaked reader keeps the connection open, and the backend explicitly detects
+   * a live connection to decide whether to keep generating — so unmounting
+   * without this keeps burning tokens on an answer that has nowhere to go.
+   */
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      abort.current?.abort();
+    };
   }, []);
+
+  const toFailure = useCallback((thrown: unknown, question: string): ChatFailure => {
+    const api = thrown instanceof ApiError ? thrown : null;
+
+    const kind: FailureKind = api?.offline
+      ? OFFLINE
+      : // `navigator.onLine === false` is conclusive; true proves nothing — a
+        // captive portal answers DNS and drops the rest. The rejected-fetch
+        // signal above is therefore the primary one.
+        !navigator.onLine
+        ? OFFLINE
+        : (api?.code ?? 'INTERNAL');
+
+    return {
+      kind,
+      message:
+        api?.message ??
+        'Something went wrong at our end. Please try again, or call SCASPA on ' +
+          '869-465-8121 / 2 / 3.',
+      requestId: api?.requestId,
+      retryAfterS: api?.retryAfter ?? null,
+      question,
+    };
+  }, []);
+
+  /**
+   * The non-streaming path.
+   *
+   * Used directly when streaming is switched off, and as the automatic fallback
+   * when the stream stalls. Its text is fully verified before it is sent, with
+   * unverifiable markers already stripped — so there is no held tail and no
+   * reconciliation window.
+   */
+  const runFetch = useCallback(
+    async (question: string, signal: AbortSignal, why: 'configured' | 'fallback') => {
+      const answer = await sendMessage(question, readConversationId(), { signal });
+      writeConversationId(answer.conversation_id);
+      if (!mounted.current) return;
+
+      if (why === 'fallback') {
+        // Logged, not shown. Which path answered is the first thing worth knowing
+        // when someone reports the demo "felt different" on venue wifi.
+        console.info(
+          '[chat] the stream stalled; this answer came from POST /api/chat instead. ' +
+            'A proxy on this network is probably buffering text/event-stream.'
+        );
+      }
+
+      dispatch({
+        type: 'FALLBACK_ANSWER',
+        text: answer.answer,
+        citations: answer.citations,
+        chart: answer.chart,
+        grounded: answer.grounded,
+        refusal: answer.refusal,
+        refusalCategory: answer.refusal_category ?? null,
+        toolCalls: answer.tool_calls,
+        conversationId: answer.conversation_id,
+      });
+    },
+    []
+  );
 
   const send = useCallback(
     async (text: string) => {
@@ -75,234 +135,144 @@ export function useChatSession() {
       const controller = new AbortController();
       abort.current = controller;
 
-      const userMessage: Message = {
-        id: nextId('user'),
-        role: 'user',
+      const transport: Transport = config.useStreaming ? 'stream' : 'fetch';
+      dispatch({
+        type: 'SEND',
+        userId: nextId('user'),
+        assistantId: nextId('assistant'),
+        at: new Date(),
         text: question,
-        at: new Date(),
-      };
-      const assistantMessage: Message = {
-        id: nextId('assistant'),
-        role: 'assistant',
-        text: '',
-        at: new Date(),
-        streaming: true,
-        activity: [],
-        citations: [],
-        chart: null,
-        error: null,
-      };
-
-      let conversationId: string | null = null;
-      setState((current) => {
-        conversationId = current.conversationId;
-        return {
-          ...current,
-          messages: [...current.messages, userMessage, assistantMessage],
-          busy: true,
-          error: null,
-        };
+        transport,
       });
 
+      if (!config.useStreaming) {
+        try {
+          await runFetch(question, controller.signal, 'configured');
+        } catch (thrown) {
+          if (controller.signal.aborted || !mounted.current) return;
+          setDraft(question);
+          dispatch({ type: 'REQUEST_FAILED', failure: toFailure(thrown, question) });
+        }
+        return;
+      }
+
+      // ── the stall guard ────────────────────────────────────────────────────
+      //
+      // Two deadlines, both reset by activity. Some conference and hotel networks
+      // buffer or terminate `text/event-stream`, and this is what keeps the demo
+      // alive when the venue wifi is hostile.
+      let stalled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      const arm = (ms: number) => {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = setTimeout(() => {
+          stalled = true;
+          controller.abort();
+        }, ms);
+      };
+      const disarm = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = undefined;
+      };
+
+      // Nothing has arrived yet, so the shorter deadline applies.
+      arm(META_DEADLINE_MS);
+
       try {
-        if (!config.useStreaming) {
-          // One request, one fully verified answer. No token loop, no
-          // reconciliation window — the markers in this text have already been
-          // checked server-side.
-          const answer = await sendMessage(question, conversationId, {
-            signal: controller.signal,
-          });
-          writeConversationId(answer.conversation_id);
-          patchLast((message) => ({
-            ...message,
-            text: answer.answer,
-            streaming: false,
-            citations: answer.citations,
-            chart: answer.chart,
-            grounded: answer.grounded,
-            refusal: answer.refusal,
-            refusal_category: answer.refusal_category ?? null,
-            activity: answer.tool_calls.map((tool, index) => ({
-              id: `${tool.name}-${index}`,
-              name: tool.name,
-              summary: tool.summary,
-              ms: tool.ms,
-              done: true,
-            })),
-          }));
-          setState((current) => ({
-            ...current,
-            conversationId: answer.conversation_id,
-            busy: false,
-          }));
+        await streamMessage(
+          { message: question, conversationId: readConversationId() },
+          {
+            onMeta: (data) => {
+              writeConversationId(data.conversation_id);
+              dispatch({ type: 'META', conversationId: data.conversation_id });
+              // The stream is alive; switch to the longer inter-event deadline.
+              arm(config.streamTimeoutMs);
+            },
+            onToken: (data) => {
+              arm(config.streamTimeoutMs);
+              dispatch({ type: 'TOKEN', text: data.text });
+            },
+            onToolStart: (data) => {
+              arm(config.streamTimeoutMs);
+              dispatch({ type: 'TOOL_START', name: data.name, summary: data.summary });
+            },
+            onToolEnd: (data) => {
+              arm(config.streamTimeoutMs);
+              dispatch({ type: 'TOOL_END', name: data.name, summary: data.summary, ms: data.ms });
+            },
+            onCitations: (data) => dispatch({ type: 'CITATIONS', citations: data.citations }),
+            onChart: (data) => dispatch({ type: 'CHART', chart: data }),
+            onReplace: (data) => dispatch({ type: 'REPLACE', text: data.text }),
+            onDone: (data) => {
+              disarm();
+              dispatch({ type: 'DONE', grounded: data.grounded, refusal: data.refusal });
+            },
+            onError: (data) => {
+              disarm();
+              dispatch({ type: 'STREAM_ERROR', error: data });
+            },
+          },
+          controller.signal
+        );
+      } catch (thrown) {
+        disarm();
+        if (!mounted.current) return;
+
+        // A stall, or a proxy that returned something other than a stream. Both
+        // mean this network cannot carry SSE, and both have the same answer: ask
+        // again over plain POST, transparently.
+        const proxyMangled = thrown instanceof NotAStream;
+        if (stalled || proxyMangled) {
+          if (proxyMangled && import.meta.env.DEV) {
+            console.warn(`[chat] ${thrown.message}`);
+          }
+          const retry = new AbortController();
+          abort.current = retry;
+          try {
+            await runFetch(question, retry.signal, 'fallback');
+          } catch (fallbackError) {
+            if (retry.signal.aborted || !mounted.current) return;
+            setDraft(question);
+            dispatch({ type: 'REQUEST_FAILED', failure: toFailure(fallbackError, question) });
+          }
           return;
         }
 
-        const stream = streamChat({
-          message: question,
-          conversationId,
-          signal: controller.signal,
-        });
+        // A deliberate cancel is not a failure to report.
+        if (controller.signal.aborted) return;
 
-        for await (const event of stream) {
-          switch (event.event) {
-            case 'meta':
-              // Written back unconditionally. The server-side TTL is 60 minutes
-              // and an expired id is replaced by a fresh one, so the id sent is
-              // not necessarily the id now held.
-              writeConversationId(event.data.conversation_id);
-              setState((current) => ({
-                ...current,
-                conversationId: event.data.conversation_id,
-              }));
-              break;
-
-            case 'tool_start':
-              patchLast((message) => {
-                const activity = message.activity ?? [];
-                const step: ToolActivity = {
-                  // name + order, which is how the contract says to match the pair.
-                  id: `${event.data.name}-${activity.length}`,
-                  name: event.data.name,
-                  summary: event.data.summary,
-                  ms: null,
-                  done: false,
-                };
-                return { ...message, activity: [...activity, step] };
-              });
-              break;
-
-            case 'tool_end':
-              patchLast((message) => {
-                const activity = [...(message.activity ?? [])];
-                // The last still-running step with this name — order plus name.
-                for (let i = activity.length - 1; i >= 0; i -= 1) {
-                  const step = activity[i];
-                  if (step && step.name === event.data.name && !step.done) {
-                    activity[i] = { ...step, ms: event.data.ms, done: true };
-                    break;
-                  }
-                }
-                return { ...message, activity };
-              });
-              break;
-
-            case 'token':
-              patchLast((message) => ({ ...message, text: message.text + event.data.text }));
-              break;
-
-            case 'replace':
-              // The tool-call cap was hit: everything streamed so far was an
-              // internal message, not an answer. Discard it entirely.
-              patchLast((message) => ({ ...message, text: event.data.text }));
-              break;
-
-            case 'citations':
-              patchLast((message) => ({ ...message, citations: event.data.citations }));
-              break;
-
-            case 'chart':
-              patchLast((message) => ({ ...message, chart: event.data }));
-              break;
-
-            case 'done':
-              patchLast((message) => ({
-                ...message,
-                streaming: false,
-                grounded: event.data.grounded,
-                refusal: event.data.refusal,
-              }));
-              break;
-
-            case 'error':
-              // HTTP is already 200. Keep whatever text arrived — it was real,
-              // and discarding it wastes the wait.
-              patchLast((message) => ({
-                ...message,
-                streaming: false,
-                error: event.data,
-              }));
-              break;
-          }
+        // RETRIEVAL_EMPTY reads to a user as the assistant simply not knowing, so
+        // it is routed to the calm no-answer treatment rather than an error panel.
+        if (thrown instanceof ApiError && isNoAnswerCode(thrown.code)) {
+          dispatch({
+            type: 'FALLBACK_ANSWER',
+            text: thrown.message,
+            citations: [],
+            chart: null,
+            grounded: false,
+            refusal: true,
+            refusalCategory: null,
+            toolCalls: [],
+            conversationId: readConversationId() ?? '',
+          });
+          return;
         }
-      } catch (thrown) {
-        // `streamChat` converts an HTTP failure into an ApiFailure itself, so
-        // everything reaching here is already typed.
-        const failure = thrown instanceof ApiError ? thrown : null;
 
-        const kind: FailureKind = failure?.offline
-          ? OFFLINE
-          : // `navigator.onLine === false` is conclusive; true proves nothing (a
-            // captive portal answers DNS and drops the rest), which is why the
-            // rejected-fetch signal above is the primary one.
-            !navigator.onLine
-            ? OFFLINE
-            : (failure?.code ??
-              (thrown instanceof StreamTimeout ? 'UPSTREAM_TIMEOUT' : 'INTERNAL'));
-
-        const chatFailure: ChatFailure = {
-          kind,
-          requestId: failure?.requestId,
-          retryAfterS: failure?.retryAfter ?? null,
-          question,
-        };
-
-        // Put the question back in the composer.
-        //
-        // The offline copy promises "nothing you typed has been lost", and until
-        // this line that was only true in the sense that Retry could resend it —
-        // the user saw an empty box, which reads as exactly the loss the sentence
-        // denies. Restoring it also lets them edit before retrying, which is what
-        // someone does after a timeout on a long question.
         setDraft(question);
-
-        setState((current) => {
-          const messages = [...current.messages];
-          const index = messages.length - 1;
-          const last = messages[index];
-
-          // RETRIEVAL_EMPTY is routed to the calm no-answer treatment rather than
-          // an error: from the user's side it is indistinguishable from the
-          // assistant not knowing, and an error framing implies they hit a bug.
-          if (failure && isNoAnswerCode(failure.code) && last?.role === 'assistant') {
-            messages[index] = {
-              ...last,
-              streaming: false,
-              refusal: true,
-              text: failure.message,
-            };
-            return { ...current, messages, busy: false, error: null };
-          }
-
-          // A failure before any token means there is no answer to keep. Drop the
-          // empty bubble rather than leaving a blank one on screen.
-          if (last && last.role === 'assistant' && last.text.length === 0) {
-            messages.splice(index, 1);
-            return { ...current, messages, busy: false, error: chatFailure };
-          }
-          if (last && last.role === 'assistant') {
-            messages[index] = {
-              ...last,
-              streaming: false,
-              error: failure?.body ?? CLIENT_FAILURE,
-            };
-          }
-          return { ...current, messages, busy: false, error: null };
-        });
-        return;
+        dispatch({ type: 'REQUEST_FAILED', failure: toFailure(thrown, question) });
       } finally {
-        patchLast((message) => (message.streaming ? { ...message, streaming: false } : message));
-        setState((current) => ({ ...current, busy: false }));
+        disarm();
       }
     },
-    [patchLast]
+    [runFetch, toFailure]
   );
 
+  /** The visible stop control while streaming. */
   const stop = useCallback(() => {
     abort.current?.abort();
-    patchLast((message) => ({ ...message, streaming: false }));
-    setState((current) => ({ ...current, busy: false }));
-  }, [patchLast]);
+    dispatch({ type: 'ABORT' });
+  }, []);
 
   /**
    * Start again.
@@ -315,12 +285,10 @@ export function useChatSession() {
     abort.current?.abort();
     clearConversationId();
     setDraft('');
-    setState({ ...initialChatState, conversationId: null });
+    dispatch({ type: 'RESET' });
   }, []);
 
-  const dismissError = useCallback(() => {
-    setState((current) => ({ ...current, error: null }));
-  }, []);
+  const dismissError = useCallback(() => dispatch({ type: 'DISMISS_ERROR' }), []);
 
   return { state, send, stop, dismissError, startNewConversation };
 }

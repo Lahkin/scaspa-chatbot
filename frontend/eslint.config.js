@@ -66,7 +66,7 @@ export default tseslint.config(
       '@typescript-eslint/await-thenable': 'error',
 
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
     },
   },
   // CLAUDE.md absolute rules, enforced by the linter rather than by review.

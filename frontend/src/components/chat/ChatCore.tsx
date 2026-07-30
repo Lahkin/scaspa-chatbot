@@ -17,9 +17,10 @@ import { ThinkingIndicator } from './ThinkingIndicator';
  * That is why both shells mount this unmodified.
  */
 export function ChatCore() {
-  const { state, send, stop, dismissError, openSource, thinkingSince } = useChatSessionContext();
+  const { state, busy, send, stop, dismissError, openSource, thinkingSince } =
+    useChatSessionContext();
 
-  const idle = !state.busy && state.messages.length > 0;
+  const idle = !busy && state.messages.length > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -66,7 +67,7 @@ export function ChatCore() {
             // every failure becomes state — rather than dropped by accident.
             onSend={(text) => void send(text)}
             onStop={stop}
-            busy={state.busy}
+            busy={busy}
           />
 
           {/* Below the composer once there is something to follow up on. */}

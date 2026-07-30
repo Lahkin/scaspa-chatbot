@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { reconcile, type CitationEntry } from './citations';
 import { useChatSession } from './useChatSession';
-import type { ChatState } from './types';
+import type { ChatMachineState } from './reducer';
 
 /**
  * Holds the conversation for one shell.
@@ -17,7 +17,9 @@ import type { ChatState } from './types';
  * `ChatCore` fills its parent and owns its own behaviour.
  */
 interface ChatSessionValue {
-  state: ChatState;
+  state: ChatMachineState;
+  /** `thinking` or `streaming`. The composer disables and offers Stop. */
+  busy: boolean;
   send: (text: string) => Promise<void>;
   stop: () => void;
   dismissError: () => void;
@@ -75,9 +77,10 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
 
   // The generic indicator gives way the moment there is something specific to
   // show. A spinner alongside "Searching SCASPA knowledge base" is redundant.
-  const pending = latest?.streaming === true;
-  const nothingYet = pending && latest.text.length === 0 && (latest.activity?.length ?? 0) === 0;
-  const thinkingSince = nothingYet ? latest.at.getTime() : null;
+  // `thinking` is precisely the state this indicator is for: sent, nothing back
+  // yet. Once tokens or tool events arrive the status moves to `streaming` and
+  // AgentStatus says something more specific.
+  const thinkingSince = session.state.status === 'thinking' ? (latest?.at.getTime() ?? null) : null;
 
   const openSource = useCallback((kbId: string) => {
     setHighlighted(kbId);
@@ -90,6 +93,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ChatSessionValue>(
     () => ({
       ...session,
+      busy: session.state.status === 'thinking' || session.state.status === 'streaming',
       entries,
       highlighted,
       setHighlighted,

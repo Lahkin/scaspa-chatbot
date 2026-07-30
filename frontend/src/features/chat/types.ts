@@ -65,6 +65,8 @@ export interface Message {
  */
 export interface ChatFailure {
   kind: FailureKind;
+  /** The backend's own user-facing sentence, when there was one. */
+  message: string;
   requestId: string | undefined;
   retryAfterS: number | null;
   /** The question that produced it, so Retry can resend without retyping. */

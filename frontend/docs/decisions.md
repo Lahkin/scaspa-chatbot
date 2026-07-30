@@ -945,3 +945,112 @@ There is still **no `OPENAI_API_KEY`**. The backend runs, every shape is verifie
 and `/api/chat` returns a well-formed **no-answer refusal** — because retrieval
 scores zero without embeddings and the short-circuit fires. So the integration is
 proven; a real generated answer is not. Voice is skipped for the same reason.
+
+---
+
+## F008 — The streaming client, rebuilt
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+The highest-risk file in the frontend, split into three layers that fail
+separately and are tested separately: `lib/sse.ts` (bytes to frames),
+`features/chat/markerGuard.ts` (never show a half-arrived marker) and
+`features/chat/reducer.ts` (a whole answer as replayable data).
+
+### `@microsoft/fetch-event-source` was considered and not used
+
+It supports POST, which is the reason `EventSource` is unusable — GET only, no
+body. But the frame handling is the part that breaks, so it is written here where
+it can be read and tested rather than trusted. `lib/sse.ts` is 160 lines and has
+19 tests.
+
+### A bug in my own reducer, found by the replay tests
+
+`patchStreaming` finds the message by `state.streamingMessageId`. Every terminal
+action — `DONE`, `ABORT`, `STREAM_ERROR`, `REQUEST_FAILED`, `FALLBACK_ANSWER` —
+passed it a state object with that id **already nulled**, so the lookup failed and
+the final patch was a **silent no-op**.
+
+The visible consequence: the held tail was never flushed on `done`, so every
+answer ending near a citation marker lost its last few characters, and `grounded`
+/ `refusal` were never recorded. Nothing threw. It was caught within seconds of
+writing the first replay test, which is precisely the argument for a pure reducer.
+All five now patch first and clear second, and the helper says why.
+
+### The marker guard
+
+Tokens carry literal `[kb-014]` and the mock splits one deliberately. Without a
+guard the reader sees `The fare is XCD 44.44 [kb-0` for 20–40ms — long enough to
+notice, short enough that nobody can say what they saw, and in the middle of the
+sentence the product is asking to be trusted.
+
+Held-back tail, at most 12 characters, released the moment the next token
+completes the marker or proves it was never one. Two properties that matter: it is
+**bounded**, so a stream of `[[[[` cannot stall the display; and it is **flushed
+unconditionally on `done`**, so a genuinely truncated answer still appears —
+silently deleting the end of an answer is worse than the flicker.
+
+**Verified in a browser**, not just in jsdom: the DOM was sampled every animation
+frame through a whole answer — **139 frames, zero ending mid-marker, never a
+broken `[kb-0`**.
+
+### Cancellation does not rely on the read rejecting
+
+Measured in F003 and still true: under MSW's Node interceptor an abort does not
+reject a pending read. But this is not only a test concern — a reader part-way
+through a buffered chunk keeps delivering what it already holds, so a user
+pressing Stop would watch several more tokens arrive after they pressed it.
+
+So the signal is checked at the top of each loop iteration and again after each
+read. `reader.cancel()` is called in the `finally` (not awaited — under MSW-node it
+never settles) because that is the half that reaches the backend, which explicitly
+detects a live connection to decide whether to keep generating. A leaked reader
+keeps burning tokens on an answer nobody is reading.
+
+### Two deadlines, and a transparent fallback
+
+`meta` is the first thing the server sends, so its absence means the stream never
+started — usually a proxy buffering `text/event-stream`. That gets a short
+6-second deadline because there is a working alternative and no reason to spend the
+whole budget discovering it. Once `meta` arrives the deadline becomes
+`VITE_STREAM_TIMEOUT_MS`, re-armed by every event.
+
+On a stall — or on `NotAStream`, which is the same diagnosis arriving faster — the
+same question is re-asked over `POST /api/chat`, transparently. **Measured:** with
+a 2.5s timeout against the stalling mock, recovery took 3.35s and produced the
+full 321-character answer rather than the two tokens that had stalled. Which path
+answered is logged at `info`, because "the demo felt different on venue wifi" is
+otherwise unanswerable.
+
+### The content-type check distinguishes two very different problems
+
+`application/json` means the backend returned an error envelope with a 200 —
+parse it and throw a real `ApiError`. `text/html` means a proxy or captive portal
+intercepted the request, and the body is somebody else's HTML that must never be
+read or shown. Without the check both are fed to the frame parser, which finds no
+`data:` lines and reports "an empty stream" — a symptom pointing nowhere near
+either cause.
+
+### Spec details that are not pedantry
+
+Each of these is a real failure with a silent symptom, and each has a test:
+
+- **One leading space stripped, not `trim()`.** Trimming eats meaningful leading
+  whitespace inside a value.
+- **Multi-line `data:` joined with `\n`.** Taking the last line truncates the
+  payload.
+- **`:` comments ignored.** Keepalives arrive exactly when a proxy would otherwise
+  drop an idle connection — the worst possible moment to crash.
+- **`\r\n` tolerated.** A proxy that rewrites line endings would otherwise make
+  every frame boundary invisible and deliver the whole answer at once.
+- **A malformed frame is skipped with a dev warning.** One bad frame costs one
+  event; throwing costs the whole answer.
+- **`TextDecoder` with `{ stream: true }`.** Tested with an em dash cut in half
+  across a chunk: without it the answer renders `Basseterre ��� Charlestown`.
+
+### Mutation-tested
+
+Disabling the marker guard, parsing per chunk instead of buffering, using `trim()`
+instead of stripping one space, and dropping the held tail on `done` each make a
+test fail.
