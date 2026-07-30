@@ -242,6 +242,43 @@ No prompt, no error. The deployed frontend must be on HTTPS. This is in
 - **Voice degrades to nothing.** A provider failure returns a clean 503 and the
   text path is unaffected. If the mic dies on stage, keep typing.
 
+## Measuring retrieval
+
+Measurement came before improvement, and improvements were kept only if the
+numbers moved.
+
+```bash
+cd backend
+uv run python scripts/evaluate.py --label baseline
+uv run python scripts/evaluate.py --no-query-rewrite --no-category-filter
+uv run python scripts/evaluate.py --sweep-min-score
+```
+
+Writes `evals/runs/eval_<timestamp>.json`, appends to `evals/history.csv`
+(append-only — the accuracy-over-time line cannot be rebuilt later) and rewrites
+`evals/latest.md` with every failure, ready to file as issues.
+
+Retrieval is scored **separately** from answers: most failures are retrieval
+failures, and looking only at final answers means tuning prompts to fix a search
+problem.
+
+Four techniques, each independently toggleable so the eval can compare
+configurations and any one can be switched off before a demo:
+
+| Setting | Default | Why |
+| --- | --- | --- |
+| `RETRIEVAL_QUERY_REWRITE` | on | Kept — measured as part of the pair below |
+| `RETRIEVAL_CATEGORY_FILTER` | on | Kept — hit@3 82% → 100%, MRR 0.727 → 0.818 |
+| `RETRIEVAL_HYBRID` | **off** | Implemented, but not evaluable without real embeddings |
+| `RETRIEVAL_RERANK` | **off** | Costs a model call; unmeasured |
+
+**Read the numbers with their caveats.** Retrieval scores are real, but they come
+from a lexical stand-in embedding and 15 rows of fixture data, so they measure the
+harness and the mechanisms — not production accuracy. With 11 scored questions,
+one question is 9 percentage points, so anything smaller than that is noise. Full
+reasoning, including a technique that measured *worse* and had to be fixed, is in
+[docs/decisions.md](docs/decisions.md) 0015.
+
 ## Privacy: what this service stores
 
 **Nothing is persisted about a user. Not one thing.**

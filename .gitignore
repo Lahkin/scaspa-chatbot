@@ -32,6 +32,9 @@ data/index_meta.json
 # Synthesised speech, cached to avoid paying twice for the same sentence.
 data/tts_cache/
 
+# Eval runs and history ARE committed: the accuracy-over-time line cannot be
+# reconstructed later, so every run is kept from the first bad measurement on.
+
 # ---- OS / editor ----
 .DS_Store
 .idea/

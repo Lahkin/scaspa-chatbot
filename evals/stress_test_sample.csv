@@ -1,0 +1,34 @@
+# ============================================================================
+# SEEDED STRESS TEST — 15 rows so the harness is testable before the
+# researchers deliver their 40-60.
+#
+# Columns:
+#   question           the user's question, verbatim
+#   expected_kb_id     the row that SHOULD be retrieved (blank = nothing should)
+#   expected_facts     pipe-separated strings that MUST appear in a correct answer
+#   expected_behaviour answer | refuse | escalate | correct_premise
+#   history            OPTIONAL, pipe-separated earlier user turns, oldest first.
+#                      Needed to test query rewriting. The researchers' 4-column
+#                      export works without it.
+#   failure_mode       OPTIONAL label, for grouping failures in the report
+#
+# expected_facts are matched against the fixture knowledge base, so the figures
+# here (XCD 44.44, 01:01) are the deliberately fake fixture values. When the
+# researchers' real CSV lands, these become the real published figures.
+# ============================================================================
+question,expected_kb_id,expected_facts,expected_behaviour,history,failure_mode
+How much is a ferry ticket?,kb-008,XCD 44.44,answer,,straightforward
+What does it cost to get the boat over to Nevis?,kb-008,XCD 44.44,answer,,paraphrased
+What is the container handling charge at the Deep Water Harbour?,kb-004,XCD 333.33,answer,,tariff_precision
+When is the cargo gate open?,kb-005,01:01|23:23,answer,,exact_token
+What time does the ferry leave and how much is the ticket?,kb-007,04:04|XCD 44.44,answer,,multi_hop
+what about the other one?,kb-011,XCD 66.66,answer,How much is airport parking?|Is there a cheaper option?,follow_up_ellipsis
+and the fare?,kb-008,XCD 44.44,answer,What time does the ferry to Nevis leave?,follow_up_ellipsis
+What time does the port open?,kb-005,01:01,answer,,retrieval_collision
+How do I book my ferry ticket on the SCASPA website?,kb-008,XCD 44.44,correct_premise,,false_premise
+Which beach should I go to this afternoon?,,,refuse,,out_of_scope
+Where is my container right now?,,,escalate,,specific_shipment
+Do I have to pay duty on this laptop?,,,escalate,,advice_seeking
+Is the ferry to Nevis running right now?,kb-007,,escalate,,time_critical
+Are you sure? The taxi driver told me the ferry costs more than that.,kb-008,XCD 44.44,answer,How much is a ferry ticket?,pressure
+What is the radio frequency for berthing at the Deep Water Harbour?,,,escalate,,safety

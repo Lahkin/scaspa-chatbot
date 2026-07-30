@@ -973,3 +973,176 @@ the annual reports or the published tariff schedule. It is a separate file from
   mislead with, and three types are enough for every subject on the handbook list.
 - **Letting the model pass a pre-built ChartSpec as JSON.** Rejected: it puts the
   chart in model output, which is exactly where it cannot be trusted.
+
+
+---
+
+## 0015 — Measurement first, then two retrieval changes that survived the numbers
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+### The harness
+
+`scripts/evaluate.py` scores four things **separately**, because most failures are
+retrieval failures and looking only at final answers means tuning prompts to fix a
+search problem:
+
+1. **Retrieval** — hit@1/3/5 and MRR against `expected_kb_id`.
+2. **Answer correctness** — do the `expected_facts` appear.
+3. **Refusal behaviour** — false-accept and false-refuse, tracked separately
+   because they are not symmetric: answering something you must decline is
+   dangerous, declining something answerable is merely unhelpful.
+4. **Citations** — did every answer carry a validated source, and how many were
+   stripped as hallucinated.
+
+Every run persists to `evals/runs/eval_<timestamp>.json` with the git SHA, the
+kb_version and the full retrieval configuration, appends a row to
+`evals/history.csv`, and rewrites `evals/latest.md` with a per-failure table for
+filing as issues. History is append-only: the accuracy-over-time line cannot be
+reconstructed later, and the first point being poor is what makes it mean
+anything.
+
+### The noise floor, established before drawing any conclusion
+
+The seeded stress test has 15 rows, of which **11 have an expected row**. So one
+question is **9 percentage points**. Three consecutive identical runs gave
+identical numbers, but across index states the same configuration varied by one
+question (hit@5 82% vs 91%, MRR 0.727 vs 0.746).
+
+**Any difference smaller than one question is noise.** That single fact governs
+every claim below, and it is the most important output of this phase: with 11
+scored questions, most single-technique effects are not measurable. The
+researchers' 40–60 rows are needed before the smaller decisions can be made
+honestly.
+
+### Query rewriting: measured, found harmful, diagnosed, fixed
+
+First implementation, all techniques off vs rewriting on:
+
+| Config | hit@1 | hit@3 | MRR |
+| --- | --- | --- | --- |
+| baseline | 64% | 82% | 0.727 |
+| + rewriting (v1) | **55%** | 82% | **0.682** |
+
+It made retrieval **worse**. The recommended-first technique, and the numbers said
+no. Two diagnosable causes, both found by reading the per-case detail rather than
+the aggregate:
+
+1. **Over-triggering.** The referential pattern matched bare pronouns anywhere, so
+   *"The taxi driver told me the ferry costs more than that"* — a complete
+   question — was rewritten. The short-question threshold was 6 words, and
+   *"How much is a ferry ticket?"* is exactly 6.
+2. **Borrowing the intent, not the subject.** *"and the fare?"* after *"What time
+   does the ferry to Nevis leave?"* became *"and the fare? time ferry nevis
+   leave"*, and `time`/`leave` dragged it from the fare row to the schedule row.
+
+Fixes: trigger only on leading connectives, explicit "what about"/"the other
+one" phrases, or questions of four words or fewer; and borrow only the facility
+and topic vocabulary, so the subject carries forward and the previous question's
+intent does not.
+
+### What was kept, with numbers
+
+| Config | hit@1 | hit@3 | hit@5 | MRR |
+| --- | --- | --- | --- | --- |
+| baseline (all off) | 64% | 82% | 82% | 0.727 |
+| + rewriting (v2) | 55% | 91% | 91% | 0.727 |
+| **+ category filtering** | **64%** | **100%** | **100%** | **0.818** |
+| + hybrid | 64% | 100% | 100% | 0.818 |
+
+**Kept: query rewriting and category filtering, as a pair.** hit@3 82% → 100%
+(+2 questions) and MRR 0.727 → 0.818, both above the one-question floor.
+Verified stable over three consecutive runs.
+
+Attribution per case, which is why they are kept together:
+
+- *"What does it cost to get the boat over to Nevis?"* — not retrieved → rank 2.
+  The **category filter** did this: "Nevis" classified it as ferry and narrowed
+  the candidates.
+- *"what about the other one?"* — not retrieved → rank 1. **Rewriting** did this:
+  it borrowed "airport" from the previous turn.
+- *"and the fare?"* — rank 1 → rank 2. A genuine small regression, kept because
+  the net across the set is clearly positive.
+
+**Rewriting alone is within noise** (hit@1 −1 question, hit@3 +1). It is kept
+because the pair clears the floor and because the mechanism it fixes — a
+follow-up whose subject is in the previous turn — cannot be fixed anywhere else.
+That is a judgement, and it is labelled as one.
+
+### Hybrid search: implemented, cannot be evaluated here
+
+Zero change on every metric. That result is **uninformative, not negative**: with
+no API key the "semantic" leg is a local TF-IDF stand-in, and TF-IDF and BM25 are
+both lexical, so the ensemble adds no independent signal. The one thing hybrid
+exists for — exact tokens like `XCD 333.33` and `04:04` against a *semantic*
+embedding that ignores them — is exactly what cannot be tested without real
+embeddings.
+
+Shipped **off**, with the implementation complete and toggleable. There is also a
+real design tension recorded in `app/rag/hybrid.py`: `EnsembleRetriever` fuses
+**ranks**, so a fused result has no cosine similarity, while
+`RETRIEVAL_MIN_SCORE` is an absolute cosine threshold. Turning hybrid on silently
+changes what the refusal gate measures, which is a second reason not to default
+it on.
+
+### Reranking: implemented, off, unmeasured
+
+It is the only stage that costs a model call, so it cannot be measured without a
+key — and its whole justification is an accuracy gain worth a latency cost, which
+is a numbers decision. Shipped off. It degrades to plain semantic order on any
+failure, never to no results.
+
+### `RETRIEVAL_MIN_SCORE`: swept, and deliberately not changed
+
+`--sweep-min-score` scores every threshold from 0.00 to 1.00 on two counts:
+should-answer questions whose correct row is retrieved **and** clears the floor,
+and should-decline questions the floor rejects before the model is called.
+
+| Threshold | Answerable kept | Declines caught | Net |
+| --- | --- | --- | --- |
+| 0.30 (current) | 7/10 | 3/5 | 1.30 |
+| **0.35 (peak)** | 7/10 | 4/5 | **1.50** |
+| 0.40 | 5/10 | 4/5 | 1.30 |
+
+The measured optimum is **0.35**. The default stays at **0.30**.
+
+That is deliberate, and it is the one place where following the measurement would
+be wrong. An absolute score threshold is the *most* embedding-dependent number in
+the system: it depends entirely on the score distribution of the embedding model,
+and this sweep ran on a TF-IDF stand-in whose distribution has no relationship to
+`text-embedding-3-large`. Shipping 0.35 would be tuning to the wrong distribution
+and calling it evidence. The sweep command is documented so it is a one-liner to
+re-run with a real key, and that must happen before the number changes.
+
+### What the numbers do and do not cover
+
+Retrieval numbers are real numbers from a real pipeline over a real index — but
+with a lexical stand-in embedding, so they measure the *plumbing and the
+techniques' mechanisms*, not production semantic quality. Answer correctness,
+refusal rates and citation rates are **absent, not zero**: the report says so
+explicitly rather than printing 0%.
+
+The fixture knowledge base is also 15 rows of deliberately fake content. A hit@3
+of 100% over 11 questions and 15 rows is not a claim about production accuracy;
+it is evidence that the harness works and that two specific mechanisms do what
+they were meant to do.
+
+### One bug the harness had
+
+`passed` ignored retrieval entirely, so `evals/latest.md` reported *"None. Every
+case passed"* for a question whose expected row was never retrieved — a green
+light over a broken search, which is the worst possible failure for a measurement
+tool. A retrieval miss now fails the case.
+
+### Alternatives considered
+
+- **A model-based query rewriter.** Rejected for now: it costs a round trip on
+  every question, and it can invent a subject the user never mentioned. The cheap
+  version has not been shown to fail on the researchers' data yet, because that
+  data does not exist. Revisit against real numbers.
+- **A model classifier for the category.** Rejected on the handbook's own
+  guidance: a keyword rule is sufficient, and the measured gain came from the
+  keyword rule.
+- **Defaulting hybrid on because it is standard practice.** Rejected: "it seemed
+  better" is not a measurement, and here it was not even measurable.

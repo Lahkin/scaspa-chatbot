@@ -57,6 +57,17 @@ class Settings(BaseSettings):
     RETRIEVAL_FETCH_K: int = Field(default=20, gt=0)
     RETRIEVAL_MIN_SCORE: float = Field(default=0.30, ge=0.0, le=1.0)
 
+    # --- Retrieval techniques, each independently toggleable ---------------
+    # Independently toggleable so scripts/evaluate.py can compare configurations,
+    # and so one can be turned off if it misbehaves an hour before a demo.
+    # Defaults reflect what measurement actually supported — see
+    # docs/decisions.md 0015.
+    RETRIEVAL_QUERY_REWRITE: bool = True
+    RETRIEVAL_CATEGORY_FILTER: bool = True
+    RETRIEVAL_HYBRID: bool = False
+    RETRIEVAL_RERANK: bool = False
+    RETRIEVAL_HYBRID_SEMANTIC_WEIGHT: float = Field(default=0.5, ge=0.0, le=1.0)
+
     # --- Paths ------------------------------------------------------------
     KB_CSV_PATH: Path = Path("../data/knowledge/latest.csv")
     CHROMA_DIR: Path = Path("../data/chroma")
