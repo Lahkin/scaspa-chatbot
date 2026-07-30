@@ -122,3 +122,149 @@ tsconfig without it, so it was removed rather than silenced with
   client is built, is that a streamed `[kb-xxx]` marker can be briefly visible
   before the `citations` frame arrives — the contract already documents this and
   tells the client to reconcile, so it is a known cost rather than a defect.
+
+---
+
+## F002 — The design-system layer, and four things that looked fine and were not
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+No chat features. This prompt builds tokens, type, primitives, the accessibility
+baseline and the gallery — the layer everything later sits on.
+
+### Tokens are interim, and the file says so in a banner
+
+`src/styles/tokens.css` opens with a header saying it will be **replaced
+wholesale** when the designers deliver, not edited in place. That is a real
+constraint on how everything else is written: components reference semantic
+aliases (`--color-ink-muted`, `--color-border-strong`) rather than ramp steps, so
+a handover moves an alias instead of finding every usage.
+
+Two ambers, deliberately:
+
+| Token                 | Value     | Use                                       |
+| --------------------- | --------- | ----------------------------------------- |
+| `--color-amber-board` | `#F5A623` | **Fill only.** 2.03:1 on white.           |
+| `--color-amber-text`  | `#8A5A00` | The readable one, for text on a light bg. |
+
+Reaching for the brighter one is the natural mistake, so `tests/contrast.test.ts`
+asserts it specifically — the 2.03 figure is pinned, and a grep across `src/`
+fails if `text-amber-board` appears anywhere.
+
+### The contrast test found three defects in my own tokens
+
+It reads the real token file rather than a copy of the values, computes WCAG 2.1
+relative luminance, and it failed on first run:
+
+| Token                   | Was       | Measured                                                       | Now                   |
+| ----------------------- | --------- | -------------------------------------------------------------- | --------------------- |
+| `--color-ink-subtle`    | `#6B7887` | 4.50 on white, **4.27** on neutral-50, **4.00** on neutral-100 | `#5C6875`             |
+| `--color-border-strong` | `#C2CCD8` | **1.63:1** — an interactive boundary needs 3:1                 | neutral-400 `#87929F` |
+
+Both were fixed by changing the **tokens**, not the thresholds. A threshold that
+moves to accommodate a colour is not a test.
+
+### Two utilities compiled to nothing at all, and nothing said so
+
+This is the finding worth carrying forward. `min-h-touch-min` and `duration-fast`
+type-checked, linted, appeared in the rendered DOM, and produced **no CSS
+whatsoever**:
+
+- `min-h-*` resolves against Tailwind's **spacing** scale, not the `--size-*`
+  namespace. `--size-touch-min` gives `size-touch-min` (which is why `IconButton`
+  was fine) but never `min-h-touch-min`. **Every `Button`, `Input` and `Chip` had
+  silently lost its 44px minimum touch target** — the exact requirement the class
+  was added to satisfy.
+- `duration-*` reads `--transition-duration-*`. A token named `--duration-fast`
+  compiles to nothing.
+
+Neither is visible in jsdom, which does no layout and applies no stylesheet, so no
+component test could have caught it. The only place the truth exists is the built
+CSS. `tests/tokens-compile.test.ts` now asserts every token-derived utility emits a
+real rule, reading `dist/assets/*.css`, and includes a negative control so a broken
+matcher cannot report a clean sheet forever. `npm run verify` was reordered to
+build **before** test, because a test that skips for a missing artefact is a test
+that never runs.
+
+Explicit `@utility min-h-touch / min-w-touch / touch-target` declarations replaced
+the namespace guesswork.
+
+### `Button` was replacing its visible label while loading
+
+Caught by the gallery test, not the accessibility test. `<Button loading
+loadingLabel="Asking">Ask SCASPA</Button>` rendered "Asking" — contradicting the
+component's own header comment, which says the label stays because swapping it
+reflows the row and moves whatever is next to it under the user's thumb.
+
+The accessibility test had asserted `toHaveTextContent('Ask')`, which **substring
+matches** and is satisfied by "Asking". It now pins the visible span exactly and
+asserts the announcement separately. `loadingLabel` is now announcement-only: with
+several buttons on screen, "Asking" also loses which action is pending, where
+"Ask SCASPA" still says.
+
+### `useReducedMotion` uses `useSyncExternalStore`
+
+`useState` + `useEffect` reads matchMedia one render too late: the component
+renders once with motion enabled and again with it disabled — a cascading render
+(flagged by `react-hooks/set-state-in-effect`) and a visible flash of the
+animation the user explicitly asked not to see. matchMedia is an external store,
+so it uses the hook for external stores.
+
+Motion is gated twice: the CSS media query in `tokens.css` collapses durations,
+and JS animations check the hook. The CSS alone is not enough — a transition with
+a 0.01ms duration is still a transition that fires and still runs its callbacks.
+
+### `Tooltip` handles Escape on the document
+
+`onKeyDown` on the wrapper `<span>` was flagged by
+`jsx-a11y/no-static-element-interactions`, correctly. Rather than silence the rule,
+the listener moved to the document while open — which also **fixed a real bug**: a
+keydown bound to the wrapper only fires while focus is still inside it, so Escape
+did nothing the moment focus moved on, leaving the tooltip open.
+
+Standing limitation, documented in the component: **a tooltip is never the only
+place information lives.** It is unreachable by touch, which is how most of these
+users browse.
+
+### One font file, not four
+
+The four Inter weight files downloaded were **byte-identical** (one md5) because
+Inter is a variable font. Consolidated to a single `inter-latin-variable.woff2`:
+194KB → 48KB. "Preload only the body weight" therefore collapses into "preload the
+one file", which `index.html` does with `crossorigin` — required even same-origin,
+because a font is fetched in CORS mode and without it the browser downloads it
+twice.
+
+Self-hosted, no font CDN. Users are on metered roaming data and a third-party DNS
+
+- TLS round trip before first paint is a cost avoided by not incurring it. Asserted
+  in `tests/no-arbitrary-values.test.ts`.
+
+### The gallery ships as a chunk in production, and that is a deliberate trade
+
+`routes/dev.gallery.tsx` 404s in production via `beforeLoad` (asserted against a
+non-dev config, not by reading the source). But with `autoCodeSplitting` it is
+still emitted as a separate 19KB chunk that gets deployed.
+
+Excluding it properly means `routeFileIgnorePattern` gated on mode, which breaks
+`npm run build` — that script runs `tsc --noEmit` **before** `vite build`, so the
+next typecheck would run against a route tree missing a route the source still
+references. The chunk is lazy, the route 404s before it is ever fetched, and no
+user downloads it. Revisit if the gallery grows.
+
+### Accessibility baseline
+
+Skip link first in the DOM (asserted: it is `document`'s first focusable element,
+and `#main` actually exists), one `banner`/`main`/`contentinfo` per page, per-route
+`<title>` and description via TanStack Router's `head` + `<HeadContent />`, and the
+phone number in the footer of every page — when the assistant cannot help, the
+fallback must already be on screen rather than something to go and find.
+
+The `head` mechanism was mutation-tested: removing `head` from the index route
+makes the title test fail rather than silently inheriting the root default. So was
+`Sheet`'s focus trap and its focus restoration — both mutations are caught.
+
+One test was rewritten because it was a tautology: it set `document.documentElement.lang`
+and then asserted it. For a client-rendered app `<html lang>` can only come from the
+static shell, so it now reads `index.html` from disk.

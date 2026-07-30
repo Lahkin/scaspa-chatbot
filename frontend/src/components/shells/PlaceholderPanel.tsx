@@ -12,12 +12,12 @@ export function PlaceholderPanel({ title, note }: PlaceholderPanelProps) {
   return (
     <section
       aria-labelledby="placeholder-title"
-      className="rounded-card border border-dashed border-border-subtle bg-surface-muted p-6"
+      className="rounded-md border border-dashed border-border bg-surface-muted p-6"
     >
-      <h1 id="placeholder-title" className="text-xl font-semibold">
+      <h1 id="placeholder-title" className="text-h3 font-semibold">
         {title}
       </h1>
-      <p className="mt-2 text-sm text-ink-muted">{note}</p>
+      <p className="mt-2 text-small text-ink-muted">{note}</p>
     </section>
   );
 }

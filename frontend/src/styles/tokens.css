@@ -1,88 +1,224 @@
-/* Design tokens.
+/* ═══════════════════════════════════════════════════════════════════════════
  *
- * Tailwind v4 is CSS-first: there is no tailwind.config.js. Tokens declared in
- * @theme become both CSS variables AND utility classes, so `--color-brand-600`
- * gives `bg-brand-600`, `text-brand-600` and so on. That is why tokens live here
- * and not in JavaScript.
+ *   INTERIM TOKENS — REPLACED WHOLESALE WHEN THE DESIGNERS DELIVER
  *
- * INTERIM VALUES. The designers own this file and will replace it. Everything
- * below is a placeholder chosen to be legible and accessible, not final brand
- * colour. Do not hand-tune a hex here — change the token, or ask the designers.
+ *   Every value below is a placeholder. This file is a designer deliverable and
+ *   will be swapped out in full, not edited in place. Do not hand-tune a value
+ *   here, and do not write an arbitrary hex into a className — if you need a
+ *   colour that has no token, add a token and say so.
  *
- * CLAUDE.md style rule: no arbitrary hex values in className. If a colour is
- * needed and there is no token for it, add a token.
- */
+ *   Before merging a replacement, run:  npm run test
+ *   tests/contrast.test.ts computes real WCAG ratios for the pairs this UI
+ *   actually uses and fails on a regression in about ninety seconds, which is a
+ *   much better place to find one than the accessibility slide.
+ *
+ *   Tailwind v4 is CSS-first: there is no tailwind.config.js. A token declared
+ *   in @theme becomes BOTH a CSS variable and a utility class, so
+ *   `--color-blue-600` yields `bg-blue-600`, `text-blue-600`, `border-blue-600`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
 @import 'tailwindcss';
 
+/* ── Typeface ──────────────────────────────────────────────────────────────
+ * Self-hosted. No external font CDN: users are on metered roaming data, and a
+ * third-party DNS + TLS round trip before first paint is a cost avoided by not
+ * incurring it.
+ *
+ * ONE file for every weight — Inter is a variable font. See public/fonts/README.md.
+ */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/inter-latin-variable.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme {
-  /* --- brand -------------------------------------------------------------
-   * Interim maritime blue. SCASPA's real palette is a designer deliverable.
+  /* ══ Brand ═══════════════════════════════════════════════════════════════ */
+  --color-brand: #0069b4;
+  --color-navy: #003f6c;
+  --color-navy-deep: #002845;
+
+  /* ══ Blue ramp ═══════════════════════════════════════════════════════════
+   * 600 is SCASPA blue exactly. Lighter steps are surfaces and borders; darker
+   * steps carry white text.
    */
-  --color-brand-50: oklch(0.97 0.02 240);
-  --color-brand-100: oklch(0.93 0.04 240);
-  --color-brand-200: oklch(0.86 0.07 240);
-  --color-brand-300: oklch(0.76 0.1 240);
-  --color-brand-400: oklch(0.65 0.13 240);
-  --color-brand-500: oklch(0.56 0.15 240);
-  --color-brand-600: oklch(0.47 0.14 240);
-  --color-brand-700: oklch(0.39 0.12 240);
-  --color-brand-800: oklch(0.31 0.09 240);
-  --color-brand-900: oklch(0.24 0.06 240);
+  --color-blue-50: #e8f3fa;
+  --color-blue-100: #cbe4f4;
+  --color-blue-200: #9dcbe9;
+  --color-blue-300: #66acdb;
+  --color-blue-400: #308cca;
+  --color-blue-500: #0d76bd;
+  --color-blue-600: #0069b4;
+  --color-blue-700: #005490;
+  --color-blue-800: #003f6c;
+  --color-blue-900: #002845;
 
-  /* --- surfaces ---------------------------------------------------------- */
-  --color-surface: oklch(1 0 0);
-  --color-surface-muted: oklch(0.97 0.005 240);
-  --color-surface-sunken: oklch(0.94 0.008 240);
-  --color-border-subtle: oklch(0.89 0.01 240);
+  /* ══ Neutral ramp ════════════════════════════════════════════════════════ */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f7f9fb;
+  --color-neutral-100: #eef2f6;
+  --color-neutral-200: #dde4ec;
+  --color-neutral-300: #c2ccd8;
+  --color-neutral-400: #87929f;
+  --color-neutral-500: #5c6875;
+  --color-neutral-600: #515c69;
+  --color-neutral-700: #3d4650;
+  --color-neutral-800: #2a313a;
+  --color-neutral-900: #171c22;
 
-  /* --- text -------------------------------------------------------------- */
-  --color-ink: oklch(0.22 0.02 240);
-  --color-ink-muted: oklch(0.48 0.02 240);
-  --color-ink-inverse: oklch(0.99 0 0);
-
-  /* --- status -----------------------------------------------------------
-   * `verified` marks an answer whose citations and figures the backend
-   * confirmed. `unverified` marks one it could not. These are semantic, not
-   * decorative: the difference is the whole product.
+  /* ══ Status ══════════════════════════════════════════════════════════════
+   *
+   * TWO AMBERS, AND THE DIFFERENCE MATTERS.
+   *
+   *   --color-amber-board  #F5A623  departure-board amber. A FILL ONLY.
+   *                                 On white it measures 2.03:1. It is not a
+   *                                 text colour and never will be.
+   *   --color-amber-text   #8A5A00  the readable amber, for text and icons on
+   *                                 a light surface.
+   *
+   * tests/contrast.test.ts asserts this specifically, because reaching for the
+   * brighter one is the natural mistake.
    */
-  --color-verified: oklch(0.55 0.13 155);
-  --color-unverified: oklch(0.6 0.15 65);
-  --color-danger: oklch(0.55 0.2 25);
+  --color-amber-board: #f5a623;
+  --color-amber-text: #8a5a00;
+  --color-success: #0f7a3d;
+  --color-danger: #b3261e;
 
-  /* --- typography -------------------------------------------------------- */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Tinted surfaces for status messages. */
+  --color-amber-surface: #fff6e5;
+  --color-success-surface: #e8f5ed;
+  --color-danger-surface: #fdecea;
+
+  /* ══ Semantic aliases ════════════════════════════════════════════════════
+   * Components reference these, not the ramps, so a designer can restyle the UI
+   * by moving an alias instead of finding every usage.
+   */
+  --color-surface: var(--color-neutral-0);
+  --color-surface-muted: var(--color-neutral-50);
+  --color-surface-sunken: var(--color-neutral-100);
+  /* --color-border is a decorative divider and makes no contrast claim.
+   * --color-border-strong identifies an interactive component's boundary, so it
+   * must clear 3:1 — the contrast test asserts exactly that. They were the same
+   * shade until the test measured the boundary at 1.63:1. */
+  --color-border: var(--color-neutral-200);
+  --color-border-strong: var(--color-neutral-400);
+  --color-ink: var(--color-neutral-900);
+  --color-ink-muted: var(--color-neutral-600);
+  --color-ink-subtle: var(--color-neutral-500);
+  --color-ink-inverse: var(--color-neutral-0);
+  --color-focus: var(--color-blue-600);
+
+  /* ══ Spacing — 4px scale ═════════════════════════════════════════════════ */
+  --spacing-0: 0px;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+
+  /* ══ Radii — three ═══════════════════════════════════════════════════════ */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /* ══ Typography ══════════════════════════════════════════════════════════
+   * A 1.20 minor-third ratio from 14px, rounded to whole pixels. Body is 16px:
+   * anything smaller invites a mobile browser to zoom on focus, and the reader
+   * is standing up holding a bag.
+   */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  /* --- radius ------------------------------------------------------------ */
-  --radius-card: 0.75rem;
-  --radius-bubble: 1rem;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-small: 14px;
+  --text-small--line-height: 20px;
+  --text-body: 16px;
+  --text-body--line-height: 24px;
+  --text-lead: 18px;
+  --text-lead--line-height: 28px;
+  --text-h3: 20px;
+  --text-h3--line-height: 28px;
+  --text-h2: 24px;
+  --text-h2--line-height: 32px;
+  --text-h1: 30px;
+  --text-h1--line-height: 38px;
+  --text-display: 36px;
+  --text-display--line-height: 44px;
 
-  /* --- motion -----------------------------------------------------------
-   * Short. A traveller in a hurry does not want to watch an animation.
+  /* ══ Elevation ═══════════════════════════════════════════════════════════ */
+  --shadow-card: 0 1px 2px rgb(23 28 34 / 0.06), 0 1px 3px rgb(23 28 34 / 0.1);
+  --shadow-sheet: 0 -4px 24px rgb(23 28 34 / 0.14);
+  --shadow-popover: 0 4px 16px rgb(23 28 34 / 0.16);
+
+  /* ══ Motion ══════════════════════════════════════════════════════════════
+   * Short. Someone checking a sailing time is not here for the animation.
    */
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-fast: 120ms;
-  --duration-base: 200ms;
+  /* `--transition-duration-*`, NOT `--duration-*`. Tailwind reads durations from
+   * the transition-duration namespace; a token named --duration-fast compiles to
+   * nothing at all and `duration-fast` in a className silently does nothing. */
+  --transition-duration-fast: 120ms;
+  --transition-duration-base: 200ms;
+
+  /* ══ Layout ══════════════════════════════════════════════════════════════
+   * 44px minimum touch target: the primary user is standing, one-handed,
+   * possibly on a moving ferry.
+   */
+  --size-touch-min: 44px;
 }
 
 @layer base {
-  /* A visible focus ring on every interactive element — CLAUDE.md rule 10.
-   * :focus-visible, not :focus, so it appears for keyboard users without
-   * outlining everything a mouse touches. */
+  html {
+    font-family: var(--font-sans);
+    /* Never let a mobile browser silently inflate text and break a layout. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* A visible focus ring on everything focusable. Tailwind's preflight removes
+   * the UA outline, so this puts one back deliberately rather than leaving
+   * keyboard users with nothing. :focus-visible, not :focus, so a mouse click
+   * does not outline the world. */
   :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
-    outline: 2px solid var(--color-brand-500);
+    outline: 2px solid var(--color-focus);
     outline-offset: 2px;
     border-radius: 2px;
   }
 
-  /* Numbers in tables must line up: a fare column that jitters is hard to scan
-   * and easy to misread — CLAUDE.md rule 10. */
-  :where(td, th, .tabular) {
+  /* Figures must line up. A fare column that jitters between rows is hard to
+   * scan and easy to misread — CLAUDE.md rule 10. Applied by default to table
+   * cells; the .tabular utility covers quantities outside a table. */
+  :where(td, th) {
     font-variant-numeric: tabular-nums;
   }
 
-  /* Respect a user who has asked for less motion. */
+  ::placeholder {
+    color: var(--color-ink-subtle);
+    opacity: 1;
+  }
+
+  /* Respect a user who has asked their OS for less motion. Every animation is
+   * additionally gated in JS by useReducedMotion, because a transition that is
+   * merely instant is still a transition that fires. */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -93,11 +229,31 @@
       scroll-behavior: auto !important;
     }
   }
+}
 
-  body {
-    background-color: var(--color-surface);
-    color: var(--color-ink);
-    font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
-  }
+/* Quantities outside a table. Applied by every primitive that renders a figure. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The 44px minimum touch target, as utilities.
+ *
+ * These exist because `min-h-touch-min` does NOT work: Tailwind resolves `min-h-*`
+ * against the spacing scale, not the `--size-*` namespace, so the class compiled
+ * to nothing and every button silently lost its minimum height. `size-touch-min`
+ * happens to work — same token, different namespace — which is exactly what made
+ * it look fine. Declared explicitly here so there is nothing to get wrong.
+ *
+ * tests/tokens-compile.test.ts asserts every one of these emits a real rule. */
+@utility min-h-touch {
+  min-height: var(--size-touch-min);
+}
+
+@utility min-w-touch {
+  min-width: var(--size-touch-min);
+}
+
+@utility touch-target {
+  min-width: var(--size-touch-min);
+  min-height: var(--size-touch-min);
 }

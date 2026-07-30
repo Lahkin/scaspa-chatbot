@@ -15,4 +15,15 @@ function WidgetRoute() {
   );
 }
 
-export const Route = createFileRoute('/widget')({ component: WidgetRoute });
+export const Route = createFileRoute('/widget')({
+  component: WidgetRoute,
+  head: () => ({
+    meta: [
+      { title: 'SCASPA Assistant' },
+      {
+        name: 'description',
+        content: 'Embedded SCASPA Assistant.',
+      },
+    ],
+  }),
+});

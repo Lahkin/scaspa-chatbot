@@ -8,6 +8,18 @@
       name="description"
       content="Ask about ferries, cruise arrivals, cargo and Robert L. Bradshaw International Airport in St. Kitts. Answers come from verified SCASPA information and cite their source."
     />
+    <!-- Preload the one font file. Inter is a variable font, so every weight the
+         UI uses lives in this single 48KB file — "preload only the body weight"
+         collapses into "preload the one file". See public/fonts/README.md.
+         crossorigin is required even same-origin: a font is a CORS-mode fetch,
+         and without it the browser downloads the file twice. -->
+    <link
+      rel="preload"
+      href="/fonts/inter-latin-variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <title>SCASPA Assistant</title>
   </head>
   <body>

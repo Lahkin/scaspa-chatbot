@@ -11,4 +11,15 @@ function ChatRoute() {
   );
 }
 
-export const Route = createFileRoute('/chat')({ component: ChatRoute });
+export const Route = createFileRoute('/chat')({
+  component: ChatRoute,
+  head: () => ({
+    meta: [
+      { title: 'Chat \u2014 SCASPA Assistant' },
+      {
+        name: 'description',
+        content: 'Ask a question about SCASPA ferries, cruise arrivals, cargo or the airport.',
+      },
+    ],
+  }),
+});

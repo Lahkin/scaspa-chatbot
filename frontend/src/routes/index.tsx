@@ -11,7 +11,7 @@ function Landing() {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <h1 className="text-2xl font-semibold">Ask about ports and travel in St. Kitts</h1>
+        <h1 className="text-h1 font-semibold">Ask about ports and travel in St. Kitts</h1>
         <p className="text-ink-muted">
           Ferries, cruise arrivals at Port Zante, cargo at the Deep Water Harbour, and Robert L.
           Bradshaw International Airport. Answers come from verified SCASPA information and show
@@ -21,12 +21,12 @@ function Landing() {
 
       <Link
         to="/chat"
-        className="inline-block rounded-card bg-brand-600 px-5 py-3 font-medium text-ink-inverse"
+        className="inline-block rounded-md bg-blue-600 px-5 py-3 font-medium text-ink-inverse"
       >
         Ask a question
       </Link>
 
-      <section aria-labelledby="limits" className="rounded-card bg-surface-muted p-4 text-sm">
+      <section aria-labelledby="limits" className="rounded-md bg-surface-muted p-4 text-small">
         <h2 id="limits" className="font-medium">
           What it cannot do
         </h2>
@@ -41,4 +41,16 @@ function Landing() {
   );
 }
 
-export const Route = createFileRoute('/')({ component: Landing });
+export const Route = createFileRoute('/')({
+  component: Landing,
+  head: () => ({
+    meta: [
+      { title: 'SCASPA Assistant \u2014 ports and travel in St. Kitts' },
+      {
+        name: 'description',
+        content:
+          'Ask about ferries, cruise arrivals at Port Zante, cargo at the Deep Water Harbour and Robert L. Bradshaw International Airport.',
+      },
+    ],
+  }),
+});
