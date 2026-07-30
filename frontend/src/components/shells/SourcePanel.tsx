@@ -1,4 +1,6 @@
-import { Badge, Card } from '@/components/ui';
+import { Card } from '@/components/ui';
+import { SourceList } from '@/components/chat/SourceList';
+import type { CitationEntry } from '@/features/chat/citations';
 
 /**
  * The sources for the current answer.
@@ -10,21 +12,28 @@ import { Badge, Card } from '@/components/ui';
  *
  * Sources are not decoration. "Where did that come from, and when was it checked"
  * is the difference between an answer a passenger acts on and one they ring up to
- * confirm anyway, so `as_of` is shown on every entry.
+ * confirm anyway.
  */
-interface SourcePanelProps {
+export function SourcePanel({
+  headed = true,
+  entries = [],
+  highlighted,
+  onHighlight,
+  scrollTo,
+}: {
   /**
    * Omit the panel's own heading when the container already provides one.
    *
    * Inside a `Sheet` it does: the sheet renders "Sources" in its header, and the
    * panel rendering it again gave the dialog two identical `<h2>`s. Harmless to
-   * look at, confusing to hear — a screen-reader user navigating by heading finds
-   * the same section twice.
+   * look at, confusing to hear.
    */
   headed?: boolean;
-}
-
-export function SourcePanel({ headed = true }: SourcePanelProps) {
+  entries?: CitationEntry[];
+  highlighted?: string | null | undefined;
+  onHighlight?: ((id: string | null) => void) | undefined;
+  scrollTo?: string | null | undefined;
+}) {
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
       {headed ? (
@@ -40,20 +49,26 @@ export function SourcePanel({ headed = true }: SourcePanelProps) {
         </p>
       )}
 
-      <Card title="Nothing to show yet" tone="muted">
-        <p className="text-small text-ink-muted">
-          Citations appear here once an answer arrives. Each one links to the SCASPA page it came
-          from.
-        </p>
-      </Card>
+      {entries.length === 0 ? (
+        <Card title="Nothing to show yet" tone="muted">
+          <p className="text-small text-ink-muted">
+            Citations appear here once an answer arrives. Each one links to the SCASPA page it came
+            from.
+          </p>
+        </Card>
+      ) : (
+        <SourceList
+          entries={entries}
+          highlighted={highlighted}
+          onHighlight={onHighlight}
+          scrollTo={scrollTo}
+        />
+      )}
 
       <div className="mt-auto border-t border-border pt-3">
         <p className="text-caption text-ink-subtle">
-          Information is a snapshot, not a live feed.{' '}
-          <Badge tone="info" srPrefix="Status: ">
-            Verified
-          </Badge>{' '}
-          means checked on the date shown, not confirmed today.
+          Information is a snapshot, not a live feed. A date shown here is when that fact was last
+          checked — not confirmation that it is still true today.
         </p>
       </div>
     </div>

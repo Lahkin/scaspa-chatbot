@@ -7,7 +7,7 @@
  * surfaces as a compile error in one mapping function rather than as a redesign.
  */
 
-import type { ApiError, ChartSpec, Citation, ToolName } from '@/lib/types';
+import type { ApiError, ChartSpec, Citation, RefusalCategory, ToolName } from '@/lib/types';
 
 /** One tool step, assembled from a `tool_start` / `tool_end` pair. */
 export interface ToolActivity {
@@ -42,6 +42,15 @@ export interface Message {
    */
   grounded?: boolean;
   refusal?: boolean;
+  /**
+   * Which boundary was hit. Drives the explanation on the escalation card.
+   *
+   * Only present on the non-streaming endpoint: the `done` event carries
+   * `refusal` but not `refusal_category`. Raised with the backend team — see
+   * docs/decisions.md F005. The card falls back to the backend's own refusal
+   * text, which is approved copy, so nothing is invented when it is absent.
+   */
+  refusal_category?: RefusalCategory | undefined;
   /** A failure that arrived after the message existed, e.g. a mid-stream error. */
   error?: ApiError | null;
 }

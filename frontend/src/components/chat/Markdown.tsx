@@ -2,6 +2,8 @@ import { memo, useMemo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import { MARKER_ATTRIBUTE, rehypeCitations } from '@/lib/markdown/rehypeCitations';
+import { CitationChip } from './CitationChip';
 import { ScheduleTable } from './ScheduleTable';
 
 /**
@@ -169,6 +171,15 @@ function buildComponents(verifiedOn?: string | null, sourceId?: string | null): 
     // right-alignment and amber treatment quietly disappeared. Leaving these to
     // react-markdown keeps the tree intrinsic and the detection working.
 
+    // Citation markers, placed by `rehypeCitations` on the AST. Identified by the
+    // data attribute rather than a custom tag name, so react-markdown's component
+    // mapping (which is by tag) resolves it reliably.
+    span: ({ children, ...rest }) => {
+      const kbId = (rest as Record<string, unknown>)[MARKER_ATTRIBUTE];
+      if (typeof kbId === 'string') return <CitationChip kbId={kbId} />;
+      return <span {...rest}>{children}</span>;
+    },
+
     img: ({ alt }) => (
       // Answers are text. An image in model output is either a hallucination or
       // a remote fetch nobody authorised, so the alt text is shown instead.
@@ -183,7 +194,11 @@ function MarkdownImpl({ children, verifiedOn, sourceId }: MarkdownProps) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[[rehypeSanitize, schema]]}
+      // Order matters. Sanitise first, then insert citation elements: the nodes
+      // `rehypeCitations` creates would otherwise be stripped as unknown markup,
+      // and they are safe to add afterwards because each is built here from a
+      // strictly-matched id, not from arbitrary text.
+      rehypePlugins={[[rehypeSanitize, schema], rehypeCitations]}
       components={components}
     >
       {children}

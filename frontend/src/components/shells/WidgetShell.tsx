@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { ChatCore } from '@/components/chat/ChatCore';
+import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { IconButton, Sheet } from '@/components/ui';
 import { config } from '@/lib/config';
 import { SCASPA_PHONE_HREF, ScaspaMark } from './ScaspaMark';
@@ -34,7 +34,18 @@ import { SourcePanel } from './SourcePanel';
  * us, which is exactly the thing an allow-list is for.
  */
 export function WidgetShell() {
-  const [sourcesOpen, setSourcesOpen] = useState(false);
+  // The provider wraps both `ChatCore` and the source panel, because a chip
+  // rendered inside the transcript has to open a panel that is its sibling.
+  return (
+    <ChatSessionProvider>
+      <WidgetShellInner />
+    </ChatSessionProvider>
+  );
+}
+
+function WidgetShellInner() {
+  const { entries, highlighted, setHighlighted, scrollTo, panelOpen, setPanelOpen } =
+    useChatSessionContext();
 
   const close = () => {
     // Guard the same-window case: opened directly rather than embedded, there is
@@ -52,7 +63,7 @@ export function WidgetShell() {
 
         <span className="flex-1" />
 
-        <IconButton label="Show sources" variant="ghost" onClick={() => setSourcesOpen(true)}>
+        <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
           <span aria-hidden="true">☰</span>
         </IconButton>
 
@@ -80,8 +91,14 @@ export function WidgetShell() {
           means 380 × 600 and the sheet stays inside the widget. It also never
           reaches the `sm` breakpoint at 380px wide, so it is always a bottom
           sheet, never a side panel. */}
-      <Sheet open={sourcesOpen} onClose={() => setSourcesOpen(false)} title="Sources">
-        <SourcePanel headed={false} />
+      <Sheet open={panelOpen} onClose={() => setPanelOpen(false)} title="Sources">
+        <SourcePanel
+          headed={false}
+          entries={entries}
+          highlighted={highlighted}
+          onHighlight={setHighlighted}
+          scrollTo={scrollTo}
+        />
       </Sheet>
     </div>
   );

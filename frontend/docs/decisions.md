@@ -569,3 +569,128 @@ because a user on `/chat` needs it within seconds and a lazy load risks stalling
 the first token. Moving it behind a dynamic import prefetched when the composer is
 focused is a real option — but it should be made on a measurement, not on a guess,
 so it is recorded here rather than done speculatively.
+
+---
+
+## F005 — Citations, and a contract request
+
+**Date:** 2026-07-30
+**Status:** Accepted — with two items needing the backend team
+
+### ⚠️ Three fields the UI needs and the contract does not carry
+
+`volatility`, `label` and `snippet` are all columns on every knowledge-base row
+(`backend/app/rag/models.py`, `data/knowledge/sample_kb.csv`) and **none of them
+is on the `Citation` payload** in `docs/api-contract.md`.
+
+| field        | KB column           | why the UI wants it                                                                                              |
+| ------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `volatility` | `low\|medium\|high` | Decides whether a source shouts "confirm before you travel" or shows its date quietly. This is the safety story. |
+| `label`      | `question`          | A human name for the source. Without it the panel composes one from `category` + `subcategory`.                  |
+| `snippet`    | excerpt of `answer` | Lets a reader judge the source without leaving the page.                                                         |
+
+All three are typed optional, so the UI lights up the moment they arrive and needs
+no change when they do. **None is fabricated client-side.** `label` falls back to
+`Ferry — schedule`, composed only from fields that _are_ sent; `snippet` is
+omitted rather than invented — deriving an "excerpt" from the answer text would be
+the UI manufacturing evidence for itself.
+
+`refusal_category` is a fourth, smaller gap: it is on `POST /api/chat` but not on
+the stream's `done` event, so a streamed refusal cannot pick its specific
+explanation. The card falls back to the backend's own refusal text, which is
+approved copy.
+
+### A missing volatility is treated as `high`
+
+The cautious default, deliberately. A stale ferry departure shown quietly is the
+harm the handbook's schedule rule exists to prevent; an unnecessary confirmation
+line on a low-volatility row is mild noise. Given the field is absent today, **every
+source currently shows the confirmation treatment** — which is both safe and
+usefully uncomfortable: it keeps the missing field visible instead of letting it be
+forgotten.
+
+Deriving volatility from `category`/`subcategory` was considered and **rejected on
+the data**: the KB shows no such mapping. `ferry/schedule` is high but `ferry/fares`
+is medium and `ferry/luggage` is low; `general/contact` is low. A category-based
+guess would be confidently wrong, and wrong in a safety-relevant place.
+
+### The brief's volatility grouping disagrees with the knowledge base
+
+The brief describes high volatility as "schedules, fees, contact details". The
+knowledge base says otherwise:
+
+- **high** — `cruise/arrivals`, `ferry/schedule`
+- **medium** — `ferry/fares`, `cargo/tariffs`, `airport/parking`, `cargo/hours`, `cruise/taxis`
+- **low** — `general/contact`, `ferry/luggage`, `cargo/customs`, `cruise/facilities`, `airport/departures`
+
+So fees are _medium_ and contact details are _low_.
+
+Followed the brief's **intent** rather than its wording: `high` **and** `medium`
+both get a confirm line, because a fare is exactly the kind of figure someone
+budgets against; `high` additionally gets the prominent amber treatment and a
+`tel:` link. `low` shows its date quietly. If everything shouted, nothing would.
+
+### Markers are parsed on the AST, and that is not fussiness
+
+A string replace before parsing corrupts the document in ways that reach the user:
+a literal `[kb-014]` inside a code fence (an answer explaining the citation format)
+gets rewritten into a chip; `[kb-014](https://…)` is link syntax and replacing the
+label destroys the link. `rehypeCitations` runs over hast text nodes, after the
+parser has already decided what is code and what is prose, and skips any node
+under `code`, `pre` or `a`. All three are tested.
+
+It runs **after** `rehype-sanitize`, because the nodes it creates would otherwise
+be stripped as unknown markup. Safe, because each element is built here from a
+strictly-matched id (`kb-` + 3–4 digits) — no attacker-controlled string reaches an
+attribute, and the text was sanitised before this ran.
+
+### A silent flatten was deleting citations inside tables
+
+Found by the test for a marker in a table cell. `ScheduleTable` read its cells
+through `textOf()` to classify columns and then rendered _that text_, discarding
+the React tree — so a chip inside a fee table vanished completely, **chip and
+marker both**, leaving a bare figure with no attribution in the one place
+attribution matters most.
+
+A cell now carries `{ text, node }`: text drives classification (and correctly
+ignores the chip, so `44.44 [kb-014]` still reads as a figure), node is rendered.
+
+### The reconciliation rule has two halves, and the second is the easy one to get wrong
+
+Never render a chip the backend did not vouch for — _and_ never render the raw
+`[kb-047]` either. Falling back to the literal marker feels honest and is not: it
+exposes an internal row id inside an answer someone is being asked to trust, and
+looks like a bug. The marker is deleted; the sentence around it survives.
+
+Mutation-tested: rendering the raw marker, defaulting volatility to `low`, and
+letting an unmatched marker resolve to some citation each make a test fail.
+
+### The refusal must not look like an error
+
+`EscalationCard` has no `alert` role and no danger styling — asserted. A refusal is
+a successful 200 and the system working exactly as designed. Styling it as a
+failure teaches a judge that the product breaks when pushed; styling it as a
+deliberate handoff says the boundary was designed.
+
+The three phone lines are **three separate `tel:` links**. "8121 / 2 / 3" as a
+single link dials nothing at all.
+
+The email slot is rendered and visibly marked _pending from SCASPA_ rather than
+omitted. scaspa.com obfuscates the address and it **must not be guessed** — a wrong
+address sends a cargo query into a void and the sender never learns it did not
+arrive. Visible-and-marked keeps it a standing question at every demo; omitted, it
+is invisible to whoever has to chase it.
+
+### `grounded` only ever removes confidence
+
+There is no "verified ✓" badge anywhere, and there will not be. The contract is
+explicit that `grounded: true` is not a correctness guarantee — a false claim
+carrying a valid citation still passes. So the signal is used in one direction
+only: `false` suppresses every chip and adds the confirmation note. Asserted.
+
+### One dev warning per event, not four
+
+The dropped-marker `console.warn` fired four times per answer: `reconcile` runs
+from two `useMemo`s (the bubble and the session context) and StrictMode
+double-invokes both. Four lines for one event is how a warning gets ignored — the
+same lesson as the MSW request noise in F003. Deduped, with a reset seam for tests.

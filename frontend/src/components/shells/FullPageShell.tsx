@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { ChatCore } from '@/components/chat/ChatCore';
+import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { IconButton, Sheet } from '@/components/ui';
 import { SCASPA_PHONE_HREF, ScaspaMark } from './ScaspaMark';
 import { SourcePanel } from './SourcePanel';
@@ -31,7 +31,18 @@ import { SourcePanel } from './SourcePanel';
  * composer out of.
  */
 export function FullPageShell() {
-  const [sourcesOpen, setSourcesOpen] = useState(false);
+  // The provider wraps both `ChatCore` and the source panel, because a chip
+  // rendered inside the transcript has to open a panel that is its sibling.
+  return (
+    <ChatSessionProvider>
+      <FullPageShellInner />
+    </ChatSessionProvider>
+  );
+}
+
+function FullPageShellInner() {
+  const { entries, highlighted, setHighlighted, scrollTo, panelOpen, setPanelOpen } =
+    useChatSessionContext();
 
   return (
     // h-dvh + overflow-hidden: the document never scrolls, only the transcript does.
@@ -46,7 +57,7 @@ export function FullPageShell() {
               dock them. Hidden at lg because the panel is permanently visible
               there — two ways to reach the same panel is one too many. */}
           <span className="lg:hidden">
-            <IconButton label="Show sources" variant="ghost" onClick={() => setSourcesOpen(true)}>
+            <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
               <span aria-hidden="true">☰</span>
             </IconButton>
           </span>
@@ -92,15 +103,26 @@ export function FullPageShell() {
           aria-label="Sources"
           className="hidden w-80 shrink-0 border-l border-border bg-surface-muted lg:block"
         >
-          <SourcePanel />
+          <SourcePanel
+            entries={entries}
+            highlighted={highlighted}
+            onHighlight={setHighlighted}
+            scrollTo={scrollTo}
+          />
         </aside>
       </div>
 
       {/* The same panel below lg, as a bottom sheet. Same component, so the two
           placements cannot drift apart. */}
       <div className="lg:hidden">
-        <Sheet open={sourcesOpen} onClose={() => setSourcesOpen(false)} title="Sources">
-          <SourcePanel headed={false} />
+        <Sheet open={panelOpen} onClose={() => setPanelOpen(false)} title="Sources">
+          <SourcePanel
+            headed={false}
+            entries={entries}
+            highlighted={highlighted}
+            onHighlight={setHighlighted}
+            scrollTo={scrollTo}
+          />
         </Sheet>
       </div>
     </div>

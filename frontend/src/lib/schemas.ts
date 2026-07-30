@@ -22,6 +22,12 @@ export const citationSchema = z.object({
   source_type: z.string(),
   as_of: z.string(),
   confidence: z.string(),
+  // Not in the contract yet — see lib/types.ts. Optional so that a backend that
+  // starts sending them needs no frontend change, and one that does not still
+  // parses.
+  volatility: z.enum(['low', 'medium', 'high']).optional(),
+  label: z.string().optional(),
+  snippet: z.string().optional(),
 });
 
 export const toolNameSchema = z.enum([

@@ -26,6 +26,9 @@ import {
   ERROR_RATE_LIMITED,
   ERROR_UPSTREAM_TIMEOUT,
   ERROR_VALIDATION,
+  CITATIONS_WITH_VOLATILITY,
+  CITATION_LOW,
+  HALLUCINATED_ANSWER,
   HEALTH,
   TABLE_ANSWER,
   REFUSAL_RESPONSE,
@@ -87,6 +90,15 @@ export const handlers = [
 
       case 'table':
         return HttpResponse.json({ ...CHAT_RESPONSE, answer: TABLE_ANSWER });
+
+      case 'hallucinated_marker':
+        return HttpResponse.json({ ...CHAT_RESPONSE, answer: HALLUCINATED_ANSWER });
+
+      case 'volatility':
+        return HttpResponse.json({
+          ...CHAT_RESPONSE,
+          citations: [...CITATIONS_WITH_VOLATILITY, CITATION_LOW],
+        });
 
       // Neither of these has a non-streaming equivalent — they are stream-only
       // failures — so the JSON endpoint answers normally.
@@ -151,6 +163,17 @@ export const handlers = [
 
       case 'table':
         return new HttpResponse(chatStream({ answer: TABLE_ANSWER }), { headers: SSE_HEADERS });
+
+      case 'hallucinated_marker':
+        return new HttpResponse(chatStream({ answer: HALLUCINATED_ANSWER }), {
+          headers: SSE_HEADERS,
+        });
+
+      case 'volatility':
+        return new HttpResponse(
+          chatStream({ citations: [...CITATIONS_WITH_VOLATILITY, CITATION_LOW] }),
+          { headers: SSE_HEADERS }
+        );
 
       case 'empty_citations':
         return new HttpResponse(chatStream({ emptyCitations: true, grounded: false }), {

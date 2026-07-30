@@ -7,6 +7,8 @@ interface MessageListProps {
   messages: Message[];
   /** Rendered in place of the list when there are no messages. */
   emptyState?: React.ReactNode;
+  /** Activating a citation chip opens the source panel at that entry. */
+  onOpenSource?: ((kbId: string) => void) | undefined;
 }
 
 /** How far off the bottom still counts as "at the bottom". */
@@ -31,7 +33,7 @@ const BOTTOM_THRESHOLD_PX = 48;
  * `useLayoutEffect` for the scroll itself: after paint, the user would see one
  * frame at the old position and then a jump.
  */
-export function MessageList({ messages, emptyState }: MessageListProps) {
+export function MessageList({ messages, emptyState, onOpenSource }: MessageListProps) {
   const viewport = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
   /**
@@ -117,7 +119,9 @@ export function MessageList({ messages, emptyState }: MessageListProps) {
         <div className="mx-auto flex max-w-measure flex-col gap-4">
           {messages.length === 0
             ? emptyState
-            : messages.map((message) => <MessageBubble key={message.id} message={message} />)}
+            : messages.map((message) => (
+                <MessageBubble key={message.id} message={message} onOpenSource={onOpenSource} />
+              ))}
         </div>
       </div>
 

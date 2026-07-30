@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useChatSession } from '@/features/chat/useChatSession';
+import { useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { Composer } from './Composer';
 import { MessageList } from './MessageList';
 import { SuggestedQuestions } from './SuggestedQuestions';
@@ -16,7 +16,7 @@ import { SuggestedQuestions } from './SuggestedQuestions';
  * 600px minus a header in the other, and neither difference reaches here.
  */
 export function ChatCore() {
-  const { state, send, stop, dismissError } = useChatSession();
+  const { state, send, stop, dismissError, openSource } = useChatSessionContext();
   const [draft, setDraft] = useState('');
 
   const idle = !state.busy && state.messages.length > 0;
@@ -26,6 +26,7 @@ export function ChatCore() {
       <div className="min-h-0 flex-1">
         <MessageList
           messages={state.messages}
+          onOpenSource={openSource}
           emptyState={
             <div className="space-y-6 py-4">
               <div className="space-y-2">

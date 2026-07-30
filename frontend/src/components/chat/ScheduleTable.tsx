@@ -45,9 +45,23 @@ interface ScheduleTableProps {
   label?: string | undefined;
 }
 
+/**
+ * A cell keeps **both** representations.
+ *
+ * `text` drives column classification; `node` is what gets rendered. They have to
+ * be separate: flattening to text alone silently deleted any citation chip inside
+ * a cell — a `[kb-014]` in a fee table vanished completely, chip *and* marker,
+ * because the chip element carries no text of its own. Classification also wants
+ * the text without the chip, so "44.44 [kb-014]" still reads as a figure.
+ */
+interface Cell {
+  text: string;
+  node: ReactNode;
+}
+
 interface ParsedTable {
-  head: string[];
-  rows: string[][];
+  head: Cell[];
+  rows: Cell[][];
 }
 
 /**
@@ -66,17 +80,19 @@ function textOf(node: ReactNode): string {
   return '';
 }
 
-function rowCells(row: ReactNode): string[] {
-  const cells: string[] = [];
+function rowCells(row: ReactNode): Cell[] {
+  const cells: Cell[] = [];
   Children.forEach(row, (cell) => {
-    if (isValidElement<{ children?: ReactNode }>(cell)) cells.push(textOf(cell.props.children));
+    if (!isValidElement<{ children?: ReactNode }>(cell)) return;
+    const children = cell.props.children;
+    cells.push({ text: textOf(children), node: children });
   });
   return cells;
 }
 
 function parseTable(children: ReactNode): ParsedTable {
-  const head: string[] = [];
-  const rows: string[][] = [];
+  const head: Cell[] = [];
+  const rows: Cell[][] = [];
 
   Children.forEach(children, (section) => {
     if (!isValidElement<{ children?: ReactNode }>(section)) return;
@@ -99,12 +115,13 @@ export function ScheduleTable({ children, verifiedOn, sourceId, label }: Schedul
   const columnCount = Math.max(head.length, ...rows.map((row) => row.length), 0);
   const kinds: ColumnKind[] = [];
   for (let column = 0; column < columnCount; column += 1) {
-    kinds.push(classifyColumn(rows.map((row) => row[column] ?? '')));
+    kinds.push(classifyColumn(rows.map((row) => row[column]?.text ?? '')));
   }
   const quantity = quantityColumnIndex(kinds);
   const zebra = rows.length >= ZEBRA_MIN_ROWS;
 
-  const accessibleName = label ?? (head.length > 0 ? `Table: ${head.join(', ')}` : 'Table');
+  const accessibleName =
+    label ?? (head.length > 0 ? `Table: ${head.map((cell) => cell.text).join(', ')}` : 'Table');
 
   return (
     <figure className="my-3">
@@ -126,7 +143,7 @@ export function ScheduleTable({ children, verifiedOn, sourceId, label }: Schedul
                       index === quantity && 'text-amber-board'
                     )}
                   >
-                    {cell}
+                    {cell.node}
                   </th>
                 ))}
               </tr>
@@ -150,7 +167,7 @@ export function ScheduleTable({ children, verifiedOn, sourceId, label }: Schedul
                       column === quantity && 'font-semibold text-ink'
                     )}
                   >
-                    {row[column] ?? ''}
+                    {row[column]?.node ?? ''}
                   </td>
                 ))}
               </tr>

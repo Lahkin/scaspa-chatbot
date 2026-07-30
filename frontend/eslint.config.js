@@ -134,6 +134,17 @@ export default tseslint.config(
     },
   },
 
+  // A context module exports a Provider component *and* its hook. That is the
+  // standard React shape and splitting them across two files to satisfy a
+  // hot-reload heuristic makes the code worse, not better. Scoped to files named
+  // *Context.tsx so it cannot quietly cover anything else.
+  {
+    files: ['src/**/*Context.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+
   {
     files: ['src/routes/**/*.tsx'],
     rules: {

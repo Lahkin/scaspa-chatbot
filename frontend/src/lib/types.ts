@@ -31,15 +31,47 @@ export interface ChatRequest {
 
 // ── Citations ────────────────────────────────────────────────────────────────
 
+/** The five values the knowledge base actually uses. */
+export type SourceType =
+  'official-site' | 'official-pdf' | 'client-interview' | 'press' | 'regulator';
+
+/**
+ * How fast this fact goes stale. `high` is a schedule; `low` is "there is Wi-Fi".
+ *
+ * ⚠️ **Not currently sent by the API.** It is a column on every knowledge-base row
+ * (`backend/app/rag/models.py`) but is not part of the `Citation` payload in
+ * `docs/api-contract.md`. Raised with the backend team — see `docs/decisions.md`
+ * F005. Until it arrives, a citation without it is treated as **high**, because
+ * the failure that matters is a stale ferry time shown quietly.
+ */
+export type Volatility = 'low' | 'medium' | 'high';
+
 export interface Citation {
   kb_id: string;
   category: string;
   subcategory: string;
   source_url: string;
+  /**
+   * One of `SourceType` in practice, but typed `string`: a backend that adds a
+   * sixth kind should not fail zod parsing and cost someone their answer.
+   * `sourceTypeLabel` maps the known values and falls back for anything else.
+   */
   source_type: string;
   /** The date this row was verified. Rendered to the user — it is why they can trust it. */
   as_of: string;
   confidence: string;
+
+  // ── Not in the contract yet ────────────────────────────────────────────────
+  // All three exist on the knowledge-base row and none is exposed on the
+  // Citation. Typed optional so the UI lights up the moment the backend sends
+  // them, and degrades honestly until it does. Never fabricated client-side.
+
+  /** KB `volatility`. Absent → treated as `high`. */
+  volatility?: Volatility | undefined;
+  /** KB `question` — a human label for the row. Absent → derived from category. */
+  label?: string | undefined;
+  /** An excerpt of the KB `answer`. Absent → the excerpt slot is omitted, not invented. */
+  snippet?: string | undefined;
 }
 
 // ── Charts ───────────────────────────────────────────────────────────────────

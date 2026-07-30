@@ -22,7 +22,7 @@
  * cruise terminal's wifi.
  */
 
-import type { StreamEvent } from '@/lib/types';
+import type { Citation, StreamEvent } from '@/lib/types';
 import { ANSWER, CITATIONS, CONVERSATION_ID, KB_VERSION, REQUEST_ID, TOOL_CALLS } from './fixtures';
 import { sleep } from './scenarios';
 
@@ -103,6 +103,8 @@ export interface StreamOptions {
   answer?: string;
   /** Skip tool events (a refusal never reaches a tool). */
   skipTools?: boolean;
+  /** Override the citations payload — used by the volatility scenario. */
+  citations?: Citation[];
 }
 
 /**
@@ -119,6 +121,7 @@ export function chatStream(options: StreamOptions = {}): ReadableStream<Uint8Arr
     grounded = true,
     answer = ANSWER,
     skipTools = false,
+    citations = CITATIONS,
   } = options;
 
   let cancelled = false;
@@ -189,7 +192,7 @@ export function chatStream(options: StreamOptions = {}): ReadableStream<Uint8Arr
         // `citations` arrives after the last token: validation needs the finished
         // text, so it cannot come earlier.
         await sleep(30);
-        enqueue(frame('citations', { citations: emptyCitations ? [] : CITATIONS }));
+        enqueue(frame('citations', { citations: emptyCitations ? [] : citations }));
 
         enqueue(
           frame('done', {

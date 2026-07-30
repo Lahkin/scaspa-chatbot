@@ -97,6 +97,64 @@ export const TABLE_ANSWER =
 
 export const TABLE_RESPONSE_ANSWER = TABLE_ANSWER;
 
+/**
+ * An answer citing a row the backend does **not** vouch for.
+ *
+ * `[kb-047]` appears in the text and is absent from `CITATIONS`. The client must
+ * delete it from the display — not render a chip for it, and not fall back to the
+ * literal `[kb-047]`, which exposes an internal row id inside an answer someone is
+ * being asked to trust.
+ *
+ * The backend already strips these server-side. This scenario exists to exercise
+ * the second line of defence, which is otherwise unreachable and therefore
+ * untested.
+ */
+export const HALLUCINATED_ANSWER =
+  'The placeholder one-way adult fare is XCD 44.44 [kb-014]. The terminal opens at ' +
+  '06:00 [kb-047]. The last sailing back from Nevis is 18:00 [kb-008].';
+
+/**
+ * Citations carrying the **proposed** `volatility`, `label` and `snippet` fields.
+ *
+ * ⚠️ None of the three is in `docs/api-contract.md` today — see
+ * `frontend/docs/decisions.md` F005. Kept in its own scenario rather than added to
+ * the default fixtures on purpose: a mock that sends fields the real server does
+ * not is a mock that is kinder than production, which is exactly how a UI comes to
+ * depend on something that will not be there.
+ *
+ * Volatility values are the real ones from `data/knowledge/sample_kb.csv`:
+ * ferry/schedule is high, ferry/fares is medium.
+ */
+export const CITATIONS_WITH_VOLATILITY: Citation[] = [
+  {
+    ...CITATION_FARES,
+    volatility: 'medium',
+    label: 'How much is a ferry ticket?',
+    snippet:
+      'The placeholder one-way adult fare is XCD 44.44; a child under 12 travels for XCD 22.22.',
+  },
+  {
+    ...CITATION_SCHEDULE,
+    volatility: 'high',
+    label: 'What time does the ferry to Nevis leave Basseterre?',
+    snippet: 'The last placeholder sailing back from Nevis on a weekday is 18:00.',
+  },
+];
+
+/** A low-volatility row, so the quiet treatment is demonstrable too. */
+export const CITATION_LOW: Citation = {
+  kb_id: 'kb-009',
+  category: 'ferry',
+  subcategory: 'luggage',
+  source_url: 'https://example.invalid/ferry-terminal/luggage',
+  source_type: 'client-interview',
+  as_of: '2026-04-01',
+  confidence: 'confirmed',
+  volatility: 'low',
+  label: 'Is there a luggage limit on the ferry?',
+  snippet: 'There is no formal placeholder luggage limit for foot passengers.',
+};
+
 export const TOOL_CALLS: ToolCall[] = [
   {
     name: 'search_scaspa_knowledge',

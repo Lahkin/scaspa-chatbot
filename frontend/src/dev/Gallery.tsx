@@ -20,7 +20,17 @@ import { StreamingMarkdown } from '@/components/chat/StreamingMarkdown';
 import { AgentStatus } from '@/components/chat/AgentStatus';
 import { SuggestedQuestions } from '@/components/chat/SuggestedQuestions';
 import { MessageBubble } from '@/components/chat/MessageBubble';
-import { TABLE_ANSWER } from '@/mocks/fixtures';
+import {
+  CITATIONS_WITH_VOLATILITY,
+  CITATION_FARES,
+  CITATION_LOW,
+  CITATION_SCHEDULE,
+  TABLE_ANSWER,
+} from '@/mocks/fixtures';
+import { CitationProvider } from '@/components/chat/CitationContext';
+import { EscalationCard } from '@/components/chat/EscalationCard';
+import { SourceList } from '@/components/chat/SourceList';
+import { reconcile } from '@/features/chat/citations';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.
@@ -325,6 +335,53 @@ export function Gallery() {
         </div>
       </Section>
 
+      <Section
+        title="Citations — reconciliation"
+        note="The rule the credibility story rests on. [kb-047] is cited in the text and absent from the citations array."
+      >
+        <CitationDemo />
+      </Section>
+
+      <Section
+        title="Source panel entries"
+        note="Volatility drives emphasis. High shows the travel line and a tel: link; low shows the date quietly."
+      >
+        <div className="max-w-measure rounded-md border border-border bg-surface-muted p-3">
+          <SourceList
+            entries={[
+              { citation: CITATIONS_WITH_VOLATILITY[1]!, index: 1 },
+              { citation: CITATIONS_WITH_VOLATILITY[0]!, index: 2 },
+              { citation: CITATION_LOW, index: null },
+            ]}
+          />
+        </div>
+        <p className="text-caption text-ink-subtle">
+          A citation with <strong>no</strong> volatility field — which is every citation the API
+          sends today — is treated as high. The cautious default is deliberate.
+        </p>
+      </Section>
+
+      <Section
+        title="EscalationCard"
+        note="refusal: true. A successful 200 and the system working as designed — so it must not look like an error."
+      >
+        <div className="max-w-measure space-y-4">
+          <EscalationCard category="personal_record" />
+          <EscalationCard category="vessel_or_aircraft_operations" />
+        </div>
+      </Section>
+
+      <Section
+        title="The three assistant states"
+        note="Grounded, ungrounded and refusal, side by side — they must be tellable apart at a glance."
+      >
+        <div className="max-w-measure space-y-4">
+          {ASSISTANT_STATES.map((message) => (
+            <MessageBubble key={message.id} message={message} />
+          ))}
+        </div>
+      </Section>
+
       <Section title="Typography scale">
         <div className="space-y-1">
           <p className="text-display font-semibold">Display 36</p>
@@ -524,6 +581,65 @@ function StreamingPreview() {
     </div>
   );
 }
+
+const CITED_TEXT =
+  'The placeholder fare is XCD 44.44 [kb-014]. The terminal opens at 06:00 [kb-047]. ' +
+  'The last sailing back is 18:00 [kb-008].';
+
+/** Toggles between pending and reconciled so the transition is visible. */
+function CitationDemo() {
+  const [arrived, setArrived] = useState(true);
+  const citations = arrived ? [CITATION_FARES, CITATION_SCHEDULE] : null;
+  const reconciliation = reconcile(CITED_TEXT, citations);
+
+  return (
+    <div className="max-w-measure space-y-3">
+      <Chip selected={arrived} onClick={() => setArrived((value) => !value)}>
+        {arrived ? 'citations event received' : 'still streaming (pending)'}
+      </Chip>
+      <div className="rounded-md border border-border bg-surface-muted p-4">
+        <CitationProvider reconciliation={reconciliation}>
+          <Markdown>{CITED_TEXT}</Markdown>
+        </CitationProvider>
+      </div>
+      <p className="text-caption text-ink-subtle">
+        <strong>kb-047 is not in the citations array.</strong> It vanishes — no chip, and never the
+        raw <code>[kb-047]</code>, which would expose a row id inside an answer someone is being
+        asked to trust. The sentence around it survives intact.
+      </p>
+    </div>
+  );
+}
+
+const ASSISTANT_STATES = [
+  {
+    id: 'g-grounded',
+    role: 'assistant' as const,
+    text: 'The placeholder one-way adult fare is XCD 44.44 [kb-014].',
+    at: new Date('2026-04-01T14:30:00Z'),
+    grounded: true,
+    citations: [CITATION_FARES],
+    streaming: false,
+  },
+  {
+    id: 'g-ungrounded',
+    role: 'assistant' as const,
+    text: 'The placeholder one-way adult fare is XCD 44.44 [kb-014].',
+    at: new Date('2026-04-01T14:31:00Z'),
+    grounded: false,
+    citations: [CITATION_FARES],
+    streaming: false,
+  },
+  {
+    id: 'g-refusal',
+    role: 'assistant' as const,
+    text: 'That is not something I can advise on.',
+    at: new Date('2026-04-01T14:32:00Z'),
+    refusal: true,
+    refusal_category: 'personal_record' as const,
+    streaming: false,
+  },
+];
 
 /** The five widths the layout is verified at. */
 const BREAKPOINTS = [320, 390, 768, 1024, 1440];
