@@ -42,6 +42,16 @@ export function SourceEntry({
     <li
       id={`source-${citation.kb_id}`}
       data-kb-id={citation.kb_id}
+      /*
+       * Focusable programmatically, but not a tab stop.
+       *
+       * Activating a citation chip must move focus *into* the panel — otherwise a
+       * keyboard user presses the chip, the panel scrolls somewhere they cannot
+       * see, and their focus is still in the middle of the answer. `-1` makes it
+       * a valid focus target without adding an entry to the tab order for every
+       * source, which would bury the controls after it.
+       */
+      tabIndex={-1}
       onMouseEnter={() => onHighlight?.(citation.kb_id)}
       onMouseLeave={() => onHighlight?.(null)}
       className={cn(

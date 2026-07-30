@@ -46,3 +46,8 @@ jobs:
       # request is a hard failure by design.
       - name: Test
         run: npm run test
+
+      # Fails the build when the budget is exceeded. A budget nobody enforces is
+      # a preference — and every kilobyte here is money on a roaming plan.
+      - name: Performance budget
+        run: npm run check:budget

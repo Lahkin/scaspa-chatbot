@@ -1399,3 +1399,124 @@ tests failed for entirely the wrong reason. And a `await import('@/features/chat
 picked up a _fresh_ module instance because earlier tests in the file call
 `vi.resetModules()`, so it wrote to a different store from the one the rendered
 component was subscribed to.
+
+---
+
+## F012 — Finishing the product
+
+**Date:** 2026-07-30
+**Status:** Accepted — with two gaps named
+
+### The landing page answers one question
+
+"Will you make the last ferry?" — because that is what a visitor standing on a
+pier actually wants to know. No stock gradient, no headline about the future of
+AI, no robot. The hero shows a real answer _with a source under it_, because
+seeing one does more for trust than any sentence claiming trustworthiness.
+
+The example answer is static rather than a live call: the hero must not depend on
+the backend being up, and a visitor who arrives to a spinner has already formed an
+opinion. The figures are the obviously-placeholder fixture ones and the caption
+says so.
+
+The chips send the question on arrival, through an **in-memory** store rather than
+a query string — a URL would put the question in history, in the address bar and
+in every screenshot. A `useRef` guards StrictMode's double-invoked effect, or the
+question would be asked twice in dev and once in production, which is the worst
+kind of difference to debug.
+
+The footer's "Information verified as of …" comes from the running backend's
+`kb_updated_at`, not a build constant, and degrades to nothing when health is
+unavailable.
+
+### The streaming live-region bug, avoided and measured
+
+Wrapping the transcript in `aria-live="polite"` announces its **entire** contents
+on every change, and a streamed answer changes forty times a second. A
+screen-reader user hears the answer restart from the beginning on every token and
+never reaches the end of a sentence. It looks perfect in every visual test.
+
+`AnswerAnnouncer` is a separate region holding only the newest **finished**
+answer, derived rather than stored so it is stable throughout generation.
+**Measured: one change across a full answer, carrying 304 characters.**
+
+### A focus defect the audit found
+
+Activating a citation chip was supposed to move focus into the source panel. It
+did not — and the reason was a selector. `[data-kb-id]` matched the citation
+**chip**, which carries the same attribute and comes first in the document, so the
+code scrolled to and "focused" the element focus was already on, and reported
+success. Now `li[data-kb-id]`: entries are list items, chips are buttons.
+
+This is the second time a selector that matched the wrong element produced a
+convincing false pass in this project. Both were found by asserting the _outcome_
+(where is focus?) rather than the action.
+
+### Escape did nothing inside the embedded widget
+
+Found by the cross-browser check. `embed.js` listens for Escape on the **parent**
+document, but once the panel opens focus is inside the iframe, so the parent never
+sees the key. A keyboard user pressing the first key they would try had nothing
+happen. The widget now listens for it itself and posts the close message —
+skipped while the source sheet is open, since Escape there belongs to the sheet.
+
+That test also surfaced a production trap worth knowing: if
+`VITE_EMBED_ALLOWED_ORIGIN` does not match the site the snippet is pasted into,
+the panel opens, the assistant works, and **the close button silently does
+nothing** — the origin check refusing the message, correctly. It is in
+`docs/embed.md` as a symptom to recognise.
+
+### The performance budget, with numbers
+
+|                   | measured        | budget         |
+| ----------------- | --------------- | -------------- |
+| Initial JS        | **119.5 kB gz** | 200 kB         |
+| `embed.js`        | **2.84 kB gz**  | 3 kB           |
+| Recharts in entry | no              | must be lazy   |
+| Markdown in entry | no              | must be lazy   |
+| Voice in entry    | no              | must be lazy   |
+| MSW in entry      | no              | must be absent |
+
+Wired into CI as a step that **fails the build**. A budget nobody enforces is a
+preference. The negative checks matter as much as the number: without them,
+deleting a feature would "improve" the budget.
+
+Voice is route-lazy rather than component-lazy — it has no heavy dependency, so
+the win is keeping it off the landing page, which the chat chunk already achieves.
+Splitting the button itself would add a Suspense boundary to a control that should
+simply be present.
+
+### Cross-browser
+
+Chromium, WebKit and Firefox, at 390 px and 1280 px, plus the embed snippet pasted
+into a plain HTML page: landing renders, an answer streams, no horizontal
+overflow, no page errors, launcher appears exactly once, `allow="microphone"` is
+present, Escape closes, focus returns to the launcher. All three engines, all
+green.
+
+### ⚠️ Two gaps, named
+
+**1. No physical iPhone.** The definition of done requires it, and it has not
+happened. What _is_ verified: WebKit at an iPhone 13 profile keeps the composer
+inside the viewport (the `100dvh` check), negotiates `audio/mp4` under Safari's
+real format constraints, and renders with no overflow and no errors. What is
+**not**: real `MediaRecorder` output, the real iOS audio-unlock restriction, real
+safe-area insets, and the software keyboard. Four things this product depends on,
+none of them confirmed on hardware. This needs twenty minutes with a phone on an
+HTTPS URL and it is the single largest untested assumption in the frontend.
+
+**2. Lighthouse did not run.** It hangs indefinitely in this environment on every
+route and was killed with no output. axe-core — which is what Lighthouse runs
+internally for accessibility, and a superset of its checks — did run: **zero
+violations across five routes at two viewports**. Performance is covered by direct
+measurement instead. Recorded in `docs/accessibility.md` rather than omitted.
+
+### The drill is labelled, deliberately
+
+`/dev/rehearsal` carries a visible amber "recorded, not live" banner that must not
+be removed. Passing a replay off as a live answer is the one unrecoverable thing
+to be caught doing in front of judges — and the audience already knows the wifi
+has failed, so a labelled fallback reads as preparation rather than a cover-up.
+
+It is dev-only, so the presenting machine must run `npm run dev`. That is a
+deliberate trade: a recorded conversation on a public URL is a liability.

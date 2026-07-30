@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
 import type { Message } from '@/features/chat/types';
+import { AnswerAnnouncer } from './AnswerAnnouncer';
 import { MessageBubble } from './MessageBubble';
 
 interface MessageListProps {
@@ -115,6 +116,11 @@ export function MessageList({ messages, emptyState, onOpenSource }: MessageListP
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
+      {/* Outside the transcript on purpose — see AnswerAnnouncer. A live region
+          wrapping the messages themselves re-announces the whole answer on every
+          token, which is the standard bug here. */}
+      <AnswerAnnouncer messages={messages} />
+
       <div ref={viewport} className="flex-1 overflow-y-auto px-4 py-4" data-testid="transcript">
         <div className="mx-auto flex max-w-measure flex-col gap-4">
           {messages.length === 0

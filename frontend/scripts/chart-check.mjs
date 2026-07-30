@@ -13,8 +13,27 @@
  *   npm run build && npm run check:charts
  */
 
-import { chromium } from 'playwright';
 import { createServer } from 'vite';
+
+/**
+ * Playwright is deliberately NOT a saved dependency: CI has no browsers and
+ * `npm ci` should not download 300MB of them. It is installed on demand, and a
+ * bare "Cannot find package" is a confusing way to say so.
+ */
+async function requirePlaywright() {
+  try {
+    return await import('playwright');
+  } catch {
+    console.error(
+      '\nThis check needs Playwright, which is not a saved dependency.\n' +
+        '  npm i -D --no-save playwright@1.56.1\n' +
+        '  npx playwright install chromium webkit firefox\n'
+    );
+    process.exit(2);
+  }
+}
+
+const { chromium } = await requirePlaywright();
 
 const PORT = 4380;
 const WIDTHS = [320, 390, 768, 1280];

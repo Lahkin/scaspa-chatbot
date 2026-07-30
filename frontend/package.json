@@ -22,7 +22,10 @@
     "check:streaming": "node scripts/streaming-perf.mjs",
     "check:integration": "node scripts/integration-check.mjs",
     "check:slow": "node scripts/slow-network-check.mjs",
-    "check:charts": "node scripts/chart-check.mjs"
+    "check:charts": "node scripts/chart-check.mjs",
+    "check:budget": "node scripts/bundle-budget.mjs",
+    "check:a11y": "node scripts/a11y-check.mjs",
+    "check:browsers": "node scripts/cross-browser-check.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",

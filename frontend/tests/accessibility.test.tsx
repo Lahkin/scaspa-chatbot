@@ -61,10 +61,15 @@ describe('landmarks and the skip link', () => {
     renderRoute('/privacy');
     await screen.findByRole('main');
 
-    expect(screen.getByRole('link', { name: /869-465-8121/ })).toHaveAttribute(
-      'href',
-      'tel:+18694658121'
-    );
+    // `getAllBy`, not `getBy`: the privacy page now carries its own contact link
+    // as well as the footer's. Asserting every one is the stronger claim anyway —
+    // a phone number that is right in three places and wrong in the fourth is
+    // worse than one that is wrong everywhere, because nobody notices.
+    const links = screen.getAllByRole('link', { name: /869-465-8121/ });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute('href', 'tel:+18694658121');
+    }
   });
 });
 

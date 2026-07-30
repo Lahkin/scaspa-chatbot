@@ -37,7 +37,7 @@ import { createRootRoute, HeadContent, Link, Outlet, useRouterState } from '@tan
  * everything else. `<HeadContent />` stays in both branches: every route still
  * needs its title.
  */
-const SELF_CHROMED_ROUTES = ['/chat', '/widget'];
+const SELF_CHROMED_ROUTES = ['/chat', '/widget', '/dev/rehearsal'];
 
 /**
  * Dev-only mock controls.

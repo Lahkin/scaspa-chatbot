@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { ChatCore } from '@/components/chat/ChatCore';
 import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { IconButton, Sheet } from '@/components/ui';
@@ -54,6 +55,28 @@ function WidgetShellInner() {
     if (window.parent === window) return;
     window.parent.postMessage({ type: 'scaspa:widget:close' }, config.embedAllowedOrigin);
   };
+
+  /**
+   * Escape closes the widget, from inside the frame.
+   *
+   * The embed loader also listens for Escape, but that listener is on the *parent*
+   * document — and once the panel opens, focus is inside the iframe, so the
+   * parent never sees the key. A keyboard user pressing Escape in the assistant
+   * would have nothing happen at all, which is the first thing they will try.
+   *
+   * Skipped while the source sheet is open: Escape there belongs to the sheet,
+   * and closing the whole widget instead would be a surprising amount of
+   * dismissal for one key.
+   */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (document.querySelector('[role="dialog"]')) return;
+      close();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  });
 
   return (
     <div className="flex h-widget max-h-dvh w-widget max-w-full flex-col overflow-hidden bg-surface text-ink">

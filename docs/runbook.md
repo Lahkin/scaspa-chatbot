@@ -147,3 +147,41 @@ Voice is an enhancement. The text path is unaffected by any voice failure.
 3. If even that fails, present the architecture, `evals/latest.md` and the
    decisions log. **The engineering process is the substance.** A judge who hears
    an honest account of what broke and why learns more than one watching a demo.
+
+---
+
+## The demo failure drill (frontend)
+
+**If the venue wifi dies mid-presentation, switch to `/dev/rehearsal` and keep
+going.**
+
+It renders a recorded four-exchange conversation from a local fixture with **no
+network at all** — no fetch, no stream, no mock worker. It covers the four things
+worth showing: a cited answer, a fee table, a chart, and the refusal.
+
+### Before the session
+
+- Have the tab **already open in the background**. Typing a URL in front of an
+  audience is the part that looks like panic.
+- Confirm it renders once, as part of `frontend/scripts/preflight-frontend.md`.
+- Say the line out loud once: *"the venue wifi has gone — here is the same
+  conversation recorded earlier."*
+
+### Why it is labelled
+
+The page carries a visible amber banner reading **"Rehearsed conversation —
+recorded, not live"**. That is deliberate and must not be removed. Passing a
+replay off as a live answer is the one unrecoverable thing to be caught doing in
+front of judges; the audience already knows the wifi has failed, and showing a
+prepared fallback reads as preparation rather than as a cover-up.
+
+### It is dev-only
+
+`/dev/rehearsal` is behind `import.meta.env.DEV`, so the production build emits no
+chunk for it and the route 404s. **The presenting machine must therefore be
+running `npm run dev`, not a production build**, for the drill to be available.
+That is a deliberate trade: a recorded conversation on a public URL is a liability,
+and the drill is for the presenter's machine.
+
+Composure beats perfection. Having a rehearsed second option is what produces
+composure.

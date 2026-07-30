@@ -121,6 +121,22 @@ export default tseslint.config(
   //     a non-component export;
   //   - `throw redirect()` / `throw notFound()` is how the router does control
   //     flow, and they are not Error subclasses.
+  // `public/embed.js` is a standalone browser script pasted into someone else's
+  // page. It is not part of the module graph, is deliberately ES5-flavoured, and
+  // legitimately uses `console` and empty catch bindings.
+  {
+    files: ['public/*.js'],
+    languageOptions: {
+      globals: { ...globals.browser },
+      sourceType: 'script',
+      ecmaVersion: 2018,
+    },
+    rules: {
+      'no-console': 'off',
+      'no-unused-vars': ['error', { caughtErrors: 'none' }],
+    },
+  },
+
   // Node scripts. They run outside the browser bundle, and `page.evaluate`
   // callbacks are serialised and executed *in the browser* — so both global sets
   // are legitimately in scope here and nowhere else.

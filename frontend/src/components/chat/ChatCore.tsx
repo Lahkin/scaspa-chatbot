@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react';
 import { useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { setDraft } from '@/features/chat/draft';
+import { takePendingQuestion } from '@/features/chat/pending';
 import { Composer } from './Composer';
 import { ErrorState } from './ErrorState';
 import { MessageList } from './MessageList';
@@ -19,6 +21,21 @@ import { ThinkingIndicator } from './ThinkingIndicator';
 export function ChatCore() {
   const { state, busy, offline, send, stop, dismissError, openSource, thinkingSince } =
     useChatSessionContext();
+
+  /**
+   * A question chosen on the landing page is sent on arrival.
+   *
+   * `takePendingQuestion` reads and clears, and the ref guards StrictMode's
+   * double-invoked effect — without it the question would be asked twice in dev
+   * and once in production, which is the worst kind of difference to debug.
+   */
+  const consumed = useRef(false);
+  useEffect(() => {
+    if (consumed.current) return;
+    consumed.current = true;
+    const question = takePendingQuestion();
+    if (question) void send(question);
+  }, [send]);
 
   const idle = !busy && state.messages.length > 0;
 

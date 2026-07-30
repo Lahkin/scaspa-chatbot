@@ -30,10 +30,33 @@ export function SourceList({
 
   useEffect(() => {
     if (!scrollTo) return;
-    const target = listRef.current?.querySelector(`[data-kb-id="${CSS.escape(scrollTo)}"]`);
+    /*
+     * `li[data-kb-id]`, not `[data-kb-id]`.
+     *
+     * The citation *chip* carries the same attribute and appears earlier in the
+     * document, so the unscoped selector matched the chip — scrolling to where
+     * focus already was and then "focusing" it, which looked like success and
+     * moved nothing. Entries are list items; chips are buttons.
+     *
+     * Queried from the document rather than from this list because on a wide
+     * screen the docked panel and the sheet are both mounted.
+     */
+    const target = document.querySelector<HTMLElement>(`li[data-kb-id="${CSS.escape(scrollTo)}"]`);
+    if (!target) return;
+
     // `block: 'nearest'` so an entry already in view is not shunted around; the
     // point is to reveal it, not to re-centre the panel.
-    target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+    /*
+     * Focus follows.
+     *
+     * Without this a keyboard user presses a chip, the panel scrolls to an entry
+     * they cannot see, and their focus is still in the middle of the answer —
+     * the scroll happened for somebody else. `preventScroll` because the
+     * scrollIntoView above has already chosen the position.
+     */
+    target.focus({ preventScroll: true });
   }, [scrollTo]);
 
   if (entries.length === 0) return null;
