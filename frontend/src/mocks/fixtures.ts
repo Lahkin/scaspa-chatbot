@@ -212,6 +212,7 @@ export const CHAT_RESPONSE: ChatResponse = {
   refusal_category: null,
   citations: CITATIONS,
   chart: null,
+  card: null,
   tool_calls: TOOL_CALLS,
   meta: META,
 };
@@ -234,6 +235,7 @@ export const REFUSAL_RESPONSE: ChatResponse = {
   refusal_category: 'personal_record',
   citations: [],
   chart: null,
+  card: null,
   tool_calls: [],
   meta: {
     ...META,
@@ -351,6 +353,7 @@ export const NO_ANSWER_RESPONSE: ChatResponse = {
   refusal_category: null,
   citations: [],
   chart: null,
+  card: null,
   tool_calls: [],
   meta: { ...META, latency_ms: 2, retrieved_count: 5, best_score: 0, cited_ids: [] },
 };

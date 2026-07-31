@@ -53,6 +53,14 @@ import { LogoLockup } from '@/components/brand/LogoLockup';
 import { Sidebar } from '@/components/shells/Sidebar';
 import { SidebarDrawer } from '@/components/shells/SidebarDrawer';
 import { AboutScaspa } from '@/components/about/AboutScaspa';
+import { CardBlock } from '@/components/chat/CardBlock';
+import {
+  CARD_FLIGHTS,
+  CARD_TARIFF,
+  CARD_TICKET,
+  CARD_VESSELS,
+  CARD_VESSELS_EMPTY,
+} from '@/mocks/opsFixtures';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.
@@ -553,6 +561,8 @@ export function Gallery() {
       </Section>
 
       <NavigationSection />
+
+      <CardSection />
     </div>
   );
 }
@@ -684,6 +694,67 @@ function NavigationSection() {
         <Sheet open={aboutOpen} onClose={() => setAboutOpen(false)} title="About SCASPA">
           <AboutScaspa />
         </Sheet>
+      </Section>
+    </>
+  );
+}
+
+/**
+ * Every inline card, in every state.
+ *
+ * The pairing to look at is the first one: prose that says it cannot see live
+ * movements, above a board that shows them. Both are true — the assistant named
+ * a kind and nothing more, and the rows came from the feed with their own
+ * notice attached.
+ */
+function CardSection() {
+  return (
+    <>
+      <Section
+        title="Inline card — vessel arrivals"
+        note="The assistant supplies no rows. It names a kind; the backend fills the board from the feed and stamps the source on. That is what lets the sentence and the card disagree without either being wrong."
+      >
+        <div className="max-w-measure rounded-md border border-border p-3">
+          <p className="text-body text-ink">
+            I cannot see live vessel movements — this assistant answers from published information
+            and has no operational feed of its own. The arrivals board below comes straight from
+            SCASPA&rsquo;s feed and states its own source and age.
+          </p>
+          <CardBlock card={CARD_VESSELS} />
+        </div>
+      </Section>
+
+      <Section
+        title="Inline card — empty feed"
+        note="The production default. An answer promising a board with no board is worse than an empty one, so the card renders and the notice explains it."
+      >
+        <div className="max-w-measure">
+          <CardBlock card={CARD_VESSELS_EMPTY} />
+        </div>
+      </Section>
+
+      <Section title="Inline card — flight schedules">
+        <div className="max-w-measure">
+          <CardBlock card={CARD_FLIGHTS} />
+        </div>
+      </Section>
+
+      <Section
+        title="Inline card — fee calculator"
+        note="Arrives empty. No figure appears until the user asks for one, and the total comes back through the same QuoteResult the full page uses, so its disclaimer cannot be lost."
+      >
+        <div className="max-w-measure">
+          <CardBlock card={CARD_TARIFF} />
+        </div>
+      </Section>
+
+      <Section
+        title="Inline card — support ticket"
+        note="No name, email or attachment field, and it says so before it is filled in rather than after it is sent."
+      >
+        <div className="max-w-measure">
+          <CardBlock card={CARD_TICKET} />
+        </div>
       </Section>
     </>
   );

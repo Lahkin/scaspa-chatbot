@@ -412,3 +412,119 @@ def test_reading_a_board_does_not_spend_the_budget_for_asking_a_question() -> No
         assert limiter.check("198.51.100.7", scope="chat").allowed
     assert not limiter.check("198.51.100.7", scope="chat").allowed
     assert limiter.check("198.51.100.7", scope="ops").allowed
+
+
+# ─────────────────────────────────────────────────────────── assistant cards
+#
+# The safety property is one sentence: the model names a kind, and nothing it
+# writes reaches the rows. Everything below is a way of checking that.
+
+
+def test_the_card_tool_exposes_no_parameter_that_could_carry_data() -> None:
+    """The strongest guarantee available: it is not expressible.
+
+    A vessel name, an ETA, a berth, a status, a rate or a total cannot be passed
+    to `show_card` because there is no argument for one. This is checked against
+    the tool's actual signature rather than its docstring, because a docstring
+    promising it would not stop a future parameter from arriving.
+    """
+    from app.agent.tools import show_card
+
+    accepted = set(show_card.args.keys())
+    assert accepted == {"card", "direction", "department", "subject"}
+
+    forbidden = {
+        "vessel",
+        "vessels",
+        "name",
+        "imo",
+        "eta",
+        "ata",
+        "berth",
+        "status",
+        "flight",
+        "gate",
+        "rate",
+        "amount",
+        "total",
+        "rows",
+        "data",
+    }
+    assert accepted & forbidden == set()
+
+
+def test_a_vessel_card_is_populated_from_the_feed(fixture_api: TestClient) -> None:
+    from app.ops.cards import build_card
+    from app.ops.source import FixtureOpsSource
+    from app.schemas import CardRequest
+
+    source = FixtureOpsSource()
+    card = build_card(CardRequest(kind="vessel_arrivals"), source)
+
+    feed = {vessel.name for vessel in source.vessels()}
+    assert {vessel.name for vessel in card.vessels} <= feed, "a row appeared from nowhere"
+    assert card.source.kind == "fixture"
+    assert card.source.notice, "a card must carry its feed's provenance wherever it is shown"
+
+
+def test_a_card_from_an_empty_feed_still_renders_rather_than_vanishing(tmp_settings) -> None:
+    """An answer saying "here is the board" with no board is worse than an empty one.
+
+    The empty card carries the unavailable notice, which is the explanation.
+    """
+    from app.ops.cards import build_card
+    from app.ops.source import UnavailableOpsSource
+    from app.schemas import CardRequest
+
+    card = build_card(CardRequest(kind="vessel_arrivals"), UnavailableOpsSource())
+
+    assert card.vessels == []
+    assert card.total == 0
+    assert "not connected" in (card.source.notice or "")
+
+
+def test_the_calculator_card_carries_no_figures() -> None:
+    """A pre-totalled card would be the model producing an estimate — rule 4."""
+    from app.ops.cards import build_card
+    from app.ops.source import FixtureOpsSource
+    from app.schemas import CardRequest
+
+    card = build_card(CardRequest(kind="tariff_calculator"), FixtureOpsSource())
+    serialised = card.model_dump()
+
+    for key, value in serialised.items():
+        assert not isinstance(value, (int, float)) or isinstance(value, bool), (
+            f"{key} is a number on a card that must contain none"
+        )
+
+
+def test_a_ticket_subject_is_capped_not_trusted() -> None:
+    """It is the one string the model supplies, so it is bounded."""
+    from app.ops.cards import build_card
+    from app.ops.source import FixtureOpsSource
+    from app.schemas import CardRequest
+
+    card = build_card(CardRequest(kind="support_ticket", subject="x" * 500), FixtureOpsSource())
+    assert len(card.subject) == 200
+
+
+def test_an_unknown_card_kind_is_refused_with_a_usable_message() -> None:
+    from app.agent.tools import show_card, turn_context
+
+    with turn_context() as context:
+        reply = show_card.invoke({"card": "live_map"})
+        assert "Rejected" in reply
+        assert "vessel_arrivals" in reply, "the model needs to know what it may ask for"
+        assert context.card is None
+
+
+def test_a_valid_card_is_recorded_on_the_turn_not_returned_as_text() -> None:
+    """Same as make_chart: held on the turn so the model cannot edit it after."""
+    from app.agent.tools import show_card, turn_context
+
+    with turn_context() as context:
+        reply = show_card.invoke({"card": "vessel_arrivals"})
+        assert context.card is not None
+        assert context.card.kind == "vessel_arrivals"
+        # And the model is told not to narrate it.
+        assert "Do not describe its contents" in reply

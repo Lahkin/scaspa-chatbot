@@ -43,6 +43,9 @@ import {
 } from './fixtures';
 import { CHART_CRUISE_PASSENGERS } from './chartFixtures';
 import {
+  CARD_TARIFF,
+  CARD_TICKET,
+  CARD_VESSELS,
   FIXTURE_SOURCE,
   MOCK_DIRECTORY,
   MOCK_DISCLAIMER,
@@ -111,6 +114,41 @@ export const handlers = [
 
       case 'chart':
         return HttpResponse.json({ ...CHAT_RESPONSE, chart: CHART_CRUISE_PASSENGERS });
+
+      /*
+       * The prose and the card say different things, and both are true.
+       *
+       * "I cannot see live movements" is the assistant speaking, which is bound
+       * by prompt rule 10. The board beneath it is the feed speaking, with its
+       * own source notice. Getting this pairing wrong in either direction is the
+       * failure the whole card design exists to prevent, so it is a scenario.
+       */
+      case 'card_vessels':
+        return HttpResponse.json({
+          ...CHAT_RESPONSE,
+          answer:
+            "I cannot see live vessel movements — this assistant answers from published information and has no operational feed of its own. The arrivals board below comes straight from SCASPA's feed and states its own source and age.",
+          citations: [],
+          card: CARD_VESSELS,
+        });
+
+      case 'card_tariff':
+        return HttpResponse.json({
+          ...CHAT_RESPONSE,
+          answer:
+            "I do not have a single published figure that answers that. The calculator below applies SCASPA's published rates to the details you enter.",
+          citations: [],
+          card: CARD_TARIFF,
+        });
+
+      case 'card_ticket':
+        return HttpResponse.json({
+          ...CHAT_RESPONSE,
+          answer:
+            'I do not have a confident answer for that one. I can pass it to a SCASPA officer.',
+          citations: [],
+          card: CARD_TICKET,
+        });
 
       case 'no_answer':
         // HTTP 200. A no-answer is not an error.
@@ -205,6 +243,40 @@ export const handlers = [
         return new HttpResponse(chatStream({ chart: CHART_CRUISE_PASSENGERS }), {
           headers: SSE_HEADERS,
         });
+
+      case 'card_vessels':
+        return new HttpResponse(
+          chatStream({
+            answer:
+              "I cannot see live vessel movements — this assistant answers from published information and has no operational feed of its own. The arrivals board below comes straight from SCASPA's feed and states its own source and age.",
+            emptyCitations: true,
+            card: CARD_VESSELS,
+          }),
+          { headers: SSE_HEADERS }
+        );
+
+      case 'card_tariff':
+        return new HttpResponse(
+          chatStream({
+            answer:
+              "I do not have a single published figure that answers that. The calculator below applies SCASPA's published rates to the details you enter.",
+            emptyCitations: true,
+            card: CARD_TARIFF,
+          }),
+          { headers: SSE_HEADERS }
+        );
+
+      case 'card_ticket':
+        return new HttpResponse(
+          chatStream({
+            answer:
+              'I do not have a confident answer for that one. I can pass it to a SCASPA officer.',
+            skipTools: true,
+            emptyCitations: true,
+            card: CARD_TICKET,
+          }),
+          { headers: SSE_HEADERS }
+        );
 
       case 'no_answer':
         return new HttpResponse(

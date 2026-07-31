@@ -22,7 +22,7 @@
  * cruise terminal's wifi.
  */
 
-import type { ChartSpec, Citation, RefusalCategory, StreamEvent } from '@/lib/types';
+import type { AssistantCard, ChartSpec, Citation, RefusalCategory, StreamEvent } from '@/lib/types';
 import { ANSWER, CITATIONS, CONVERSATION_ID, KB_VERSION, REQUEST_ID, TOOL_CALLS } from './fixtures';
 import { sleep } from './scenarios';
 
@@ -114,6 +114,8 @@ export interface StreamOptions {
   citations?: Citation[];
   /** Emit a `chart` event after citations and before done, as the contract requires. */
   chart?: ChartSpec;
+  /** Emit a populated `card` event, after any chart and always before done. */
+  card?: AssistantCard;
 }
 
 /**
@@ -133,6 +135,7 @@ export function chatStream(options: StreamOptions = {}): ReadableStream<Uint8Arr
     refusalCategory = null,
     citations = CITATIONS,
     chart,
+    card,
   } = options;
 
   let cancelled = false;
@@ -209,6 +212,11 @@ export function chatStream(options: StreamOptions = {}): ReadableStream<Uint8Arr
         if (chart) {
           await sleep(20);
           enqueue(frame('chart', chart));
+        }
+
+        if (card) {
+          await sleep(20);
+          enqueue(frame('card', card));
         }
 
         enqueue(

@@ -4,6 +4,7 @@ import type { Message } from '@/features/chat/types';
 import { reconcile } from '@/features/chat/citations';
 import { AgentStatus } from './AgentStatus';
 import { ChartBlock } from './ChartBlock';
+import { CardBlock } from './CardBlock';
 import { CitationProvider } from './CitationContext';
 import { EscalationCard } from './EscalationCard';
 import { NoAnswerCard } from './NoAnswerCard';
@@ -143,6 +144,17 @@ export function MessageBubble({ message, onOpenSource }: MessageBubbleProps) {
             {!isUser && message.chart && grounded && !message.streaming && (
               <ChartBlock spec={message.chart} />
             )}
+
+            {/*
+              The card the assistant attached.
+
+              Not gated on `grounded`, unlike the chart above: a chart's figures
+              come from cited rows, so a failed citation invalidates it — a
+              card's rows come from the operational feed and carry their own
+              provenance, so a sentence going wrong above says nothing about
+              them. Withholding it would hide the better-sourced of the two.
+            */}
+            {!isUser && message.card && !message.streaming && <CardBlock card={message.card} />}
 
             {!isUser && !grounded && !message.streaming && <UngroundedNotice />}
 

@@ -29,15 +29,23 @@ def indexed(sample_csv, tmp_settings, fake_embeddings):
 # ------------------------------------------------------------------- wiring
 
 
-def test_exactly_five_tools() -> None:
-    """More tools means more confusion, latency and cost. Five is the budget."""
-    assert len(ALL_TOOLS) == 5
+def test_exactly_six_tools() -> None:
+    """More tools means more confusion, latency and cost. Six is the budget.
+
+    Was five. `show_card` is the sixth, and it earned the slot by removing a
+    worse option: without it the model's only way to help with "what is arriving
+    today" is prose, and prose about live operations is exactly what rule 10
+    forbids. A tool that attaches a board it cannot read is a narrower
+    capability than the sentence it replaces.
+    """
+    assert len(ALL_TOOLS) == 6
     assert {t.name for t in ALL_TOOLS} == {
         "search_scaspa_knowledge",
         "search_site_content",
         "make_chart",
         "calculate",
         "escalate_to_human",
+        "show_card",
     }
 
 

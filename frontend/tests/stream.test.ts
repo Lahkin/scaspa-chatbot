@@ -552,6 +552,7 @@ describe('reducer: a full recorded sequence', () => {
         text: 'The fare is XCD 44.44 [kb-014].',
         citations: CITATIONS,
         chart: null,
+        card: null,
         grounded: true,
         refusal: false,
         refusalCategory: null,

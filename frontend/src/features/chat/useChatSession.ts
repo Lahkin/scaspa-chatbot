@@ -145,6 +145,7 @@ export function useChatSession() {
         text: answer.answer,
         citations: answer.citations,
         chart: answer.chart,
+        card: answer.card,
         grounded: answer.grounded,
         refusal: answer.refusal,
         refusalCategory: answer.refusal_category ?? null,
@@ -259,6 +260,7 @@ export function useChatSession() {
             },
             onCitations: (data) => dispatch({ type: 'CITATIONS', citations: data.citations }),
             onChart: (data) => dispatch({ type: 'CHART', chart: data }),
+            onCard: (data) => dispatch({ type: 'CARD', card: data }),
             onReplace: (data) => dispatch({ type: 'REPLACE', text: data.text }),
             onDone: (data) => {
               disarm();
@@ -321,6 +323,7 @@ export function useChatSession() {
             text: thrown.message,
             citations: [],
             chart: null,
+            card: null,
             grounded: false,
             refusal: true,
             refusalCategory: null,

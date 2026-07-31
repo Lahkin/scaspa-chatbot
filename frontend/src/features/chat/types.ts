@@ -7,7 +7,14 @@
  * surfaces as a compile error in one mapping function rather than as a redesign.
  */
 
-import type { ApiErrorBody, ChartSpec, Citation, RefusalCategory, ToolName } from '@/lib/types';
+import type {
+  ApiErrorBody,
+  AssistantCard,
+  ChartSpec,
+  Citation,
+  RefusalCategory,
+  ToolName,
+} from '@/lib/types';
 import type { FailureKind } from './errorCopy';
 
 /** One tool step, assembled from a `tool_start` / `tool_end` pair. */
@@ -37,6 +44,16 @@ export interface Message {
   activity?: ToolActivity[];
   citations?: Citation[];
   chart?: ChartSpec | null;
+  /**
+   * A card rendered below the answer.
+   *
+   * Its rows never came from the model — see `AssistantCard`. Which is why,
+   * unlike the chart, it is **not** gated on `grounded`: a card's provenance is
+   * its own `DataSource`, not the prose's citations, and hiding a correctly
+   * sourced board because a sentence above it had an unverified figure would
+   * withhold the more trustworthy of the two.
+   */
+  card?: AssistantCard | null;
   /**
    * Internal integrity signal, never surfaced as a correctness warning — the
    * contract is explicit that `grounded: true` does not mean the answer is right.

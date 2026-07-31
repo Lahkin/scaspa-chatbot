@@ -139,6 +139,7 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 | `refusal_category` | `string \| null` | `vessel_or_aircraft_operations`, `personal_record`, or null |
 | `citations` | `Citation[]` | Verified sources, built from stored metadata |
 | `chart` | `ChartSpec \| null` | A chart to render, or null. Usually null |
+| `card` | `AssistantCard \| null` | An interactive card to render below the answer, or null |
 | `tool_calls` | `ToolCall[]` | Tools the agent used this turn, in order |
 | `meta` | `ResponseMeta` | Diagnostics |
 
@@ -367,6 +368,7 @@ event: token       → { "text": "..." }              (repeated)
 event: replace     → { "text": "..." }              (rare — see below)
 event: citations   → { "citations": [ Citation ] }
 event: chart       → ChartSpec                      (only when there is a chart)
+event: card        → AssistantCard                  (only when there is a card)
 event: done        → { "latency_ms", "grounded", "refusal", "refusal_category", "kb_version" }
 event: error       → { "code", "message", "request_id" }
 ```
@@ -398,6 +400,7 @@ The five tools, so you can pick an icon per `name`:
 | `make_chart` | Building a chart |
 | `calculate` | Doing arithmetic on retrieved figures |
 | `escalate_to_human` | Fetching SCASPA contact details |
+| `show_card` | Attaching an interactive card below the answer |
 
 ### The `chart` event
 
@@ -674,6 +677,45 @@ Two consequences for the client:
 Note: history is currently **stored but not fed back into the prompt**. Each
 answer is produced from the current question alone. Wiring history into
 generation is a deliberate, separately measured change.
+
+---
+
+## `AssistantCard`
+
+A structured card rendered beneath an answer. Discriminated on `kind`:
+`vessel_arrivals`, `flight_schedules`, `tariff_calculator`, `support_ticket`.
+
+Arrives on the `card` field of `POST /api/chat`, and as a `card` **event** on the
+stream — after `citations` and any `chart`, always before `done`. Same payload
+either way.
+
+> ### The model requests a card. It never fills one in.
+>
+> The `show_card` tool takes a kind and, at most, a filter. **There is no
+> parameter for a vessel name, an ETA, a berth, a status, a rate or a total**, so
+> the model cannot put one there. Every row is read from the operational feed
+> after the answer is written, and the card carries that feed's `DataSource`.
+>
+> This is why an answer can say *"I cannot see live vessel movements"* and carry
+> an arrivals board in the same breath, without contradicting itself. The
+> sentence is the assistant, bound by its rules. The board is the feed, labelled
+> as such.
+>
+> Two obligations for a client:
+>
+> 1. **Render `source.notice` on a data card**, exactly as on the standalone
+>    panels. A board without it is indistinguishable from a live one.
+> 2. **Do not gate the card on `grounded`.** A chart is gated, because its
+>    figures come from cited rows. A card's provenance is its own `DataSource`,
+>    so hiding it when the prose failed verification would withhold the
+>    better-sourced of the two.
+>
+> An unrecognised `kind` should drop the **card**, not the answer.
+
+`tariff_calculator` and `support_ticket` carry **no figures and no identity** —
+they are empty forms the user drives. The calculator's total comes from
+`POST /api/tariffs/quote` with its mandatory disclaimer; the ticket posts to
+`POST /api/support/ticket`, which accepts no name or email.
 
 ---
 

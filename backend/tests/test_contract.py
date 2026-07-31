@@ -38,6 +38,7 @@ CONTRACT_TOOL_NAMES = {
     "make_chart",
     "calculate",
     "escalate_to_human",
+    "show_card",
 }
 
 # Every error code the contract's table lists. The frontend switches on these.
@@ -346,9 +347,10 @@ def test_a_well_formed_id_is_still_honoured(api) -> None:
 
 
 def test_the_agent_exposes_exactly_the_documented_tool_names() -> None:
-    """The frontend maps an icon per name and the contract lists five.
+    """The frontend maps an icon per name and the contract lists them all.
 
-    A sixth tool is a contract change, not an implementation detail.
+    Adding one is a contract change, not an implementation detail — which is
+    what this test made true when `show_card` landed.
     """
     assert {tool.name for tool in ALL_TOOLS} == CONTRACT_TOOL_NAMES
 

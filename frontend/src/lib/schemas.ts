@@ -105,126 +105,6 @@ export const responseMetaSchema = z.object({
   kb_version: z.string().nullable(),
 });
 
-/**
- * Which refusal applied.
- *
- * `.catch(null)` because the backend's refusal gate is a list of patterns that
- * will grow. A category this build has not been taught means "a refusal, reason
- * unrecognised" — which the generic refusal copy already handles correctly. It
- * is not a reason to reject the response.
- */
-export const refusalCategorySchema = z
-  .enum(['vessel_or_aircraft_operations', 'personal_record'])
-  .nullish()
-  .catch(null);
-
-export const chatResponseSchema = z.object({
-  answer: z.string(),
-  conversation_id: z.string(),
-  grounded: z.boolean(),
-  refusal: z.boolean(),
-  // Optional: the contract's own no-answer sample omits the key. See lib/types.ts.
-  refusal_category: refusalCategorySchema,
-  citations: z.array(citationSchema),
-  chart: chartSpecSchema.nullable(),
-  tool_calls: z.array(toolCallSchema),
-  meta: responseMetaSchema,
-});
-
-export const apiErrorSchema = z.object({
-  code: z.enum([
-    // 429, this client. Distinct from UPSTREAM_RATE_LIMITED — see lib/types.ts.
-    'RATE_LIMITED',
-    'VALIDATION_ERROR',
-    'INDEX_MISSING',
-    'RETRIEVAL_EMPTY',
-    'UPSTREAM_RATE_LIMITED',
-    'UPSTREAM_TIMEOUT',
-    'NOT_FOUND',
-    'INTERNAL',
-  ]),
-  message: z.string(),
-  request_id: z.string(),
-});
-
-export const errorEnvelopeSchema = z.object({ error: apiErrorSchema });
-
-// ── Stream event payloads ────────────────────────────────────────────────────
-
-export const streamPayloadSchemas = {
-  meta: z.object({ conversation_id: z.string() }),
-  token: z.object({ text: z.string() }),
-  tool_start: z.object({ name: anyToolNameSchema, summary: z.string() }),
-  tool_end: z.object({ name: anyToolNameSchema, summary: z.string(), ms: z.number() }),
-  citations: z.object({ citations: z.array(citationSchema) }),
-  chart: chartSpecSchema,
-  replace: z.object({ text: z.string() }),
-  done: z.object({
-    latency_ms: z.number(),
-    grounded: z.boolean(),
-    refusal: z.boolean(),
-    /*
-     * Sent since the backend started carrying it, so a streamed refusal can pick
-     * the same specific copy the non-streaming endpoint allows. `.nullish()`
-     * because a plain no-answer has no category, and because a backend deployed
-     * before this field existed omits the key entirely — and a `done` that fails
-     * its schema would leave the answer stuck mid-stream forever.
-     */
-    refusal_category: refusalCategorySchema,
-    kb_version: z.string().nullable(),
-  }),
-  error: apiErrorSchema,
-} as const;
-
-export type KnownStreamEvent = keyof typeof streamPayloadSchemas;
-
-export function isKnownStreamEvent(name: string): name is KnownStreamEvent {
-  return name in streamPayloadSchemas;
-}
-
-// ── Health ───────────────────────────────────────────────────────────────────
-
-export const modelNamesSchema = z.object({
-  chat: z.string(),
-  embedding: z.string(),
-  transcribe: z.string(),
-  tts: z.string(),
-});
-
-/**
- * Every unknown value is `null`, never `0` — the contract is explicit, and a
- * client must not read "never built" as "built and empty". `.nullable()` rather
- * than `.optional()` says the key is expected and its value may be null; a
- * missing key is a contract change and should fail here.
- */
-export const indexStatusSchema = z.object({
-  ready: z.boolean(),
-  kb_version: z.string().nullable(),
-  kb_rows: z.number().nullable(),
-  kb_rows_rejected: z.number().nullable(),
-  kb_csv_filename: z.string().nullable(),
-  kb_updated_at: z.string().nullable(),
-  index_built_at: z.string().nullable(),
-  embedding_model: z.string().nullable(),
-  web_docs: z.number().nullable(),
-  message: z.string().nullable(),
-});
-
-export const healthResponseSchema = z.object({
-  status: z.enum(['ok', 'degraded']),
-  env: z.string(),
-  version: z.string(),
-  uptime_s: z.number(),
-  request_id: z.string(),
-  models: modelNamesSchema,
-  index: indexStatusSchema,
-});
-
-// ── Voice ────────────────────────────────────────────────────────────────────
-
-export const sttResponseSchema = z.object({ text: z.string() });
-export const ttsPreviewResponseSchema = z.object({ text: z.string() });
-
 // ── Operations ───────────────────────────────────────────────────────────────
 
 /**
@@ -364,6 +244,183 @@ export const tariffQuoteSchema = z.object({
   source: dataSourceSchema,
   request_id: z.string(),
 });
+
+// ── Assistant cards ──────────────────────────────────────────────────────────
+
+/**
+ * A discriminated union on `kind`, matching the backend exactly.
+ *
+ * `z.discriminatedUnion` rather than `z.union`: it fails with "unknown kind"
+ * instead of four stacked "expected literal" errors, which is the difference
+ * between a diagnosable contract mismatch and a wall of noise.
+ *
+ * Strict on the data cards' `source`. A card whose provenance is missing is
+ * refused at the boundary rather than rendered — the notice is the only thing
+ * telling a reader whether an arrivals board is a live feed or development
+ * fixtures, and a board without it is worse than no board.
+ */
+export const assistantCardSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('vessel_arrivals'),
+    title: z.string(),
+    source: dataSourceSchema,
+    vessels: z.array(vesselArrivalSchema),
+    total: z.number(),
+    href: z.string(),
+  }),
+  z.object({
+    kind: z.literal('flight_schedules'),
+    title: z.string(),
+    source: dataSourceSchema,
+    flights: z.array(flightSchema),
+    total: z.number(),
+    href: z.string(),
+  }),
+  z.object({
+    kind: z.literal('tariff_calculator'),
+    title: z.string(),
+    category: z.enum(['maritime', 'aviation', 'cargo', 'passenger']),
+    href: z.string(),
+  }),
+  z.object({
+    kind: z.literal('support_ticket'),
+    title: z.string(),
+    department: z.string(),
+    subject: z.string(),
+    href: z.string(),
+  }),
+]);
+
+/**
+ * Which refusal applied.
+ *
+ * `.catch(null)` because the backend's refusal gate is a list of patterns that
+ * will grow. A category this build has not been taught means "a refusal, reason
+ * unrecognised" — which the generic refusal copy already handles correctly. It
+ * is not a reason to reject the response.
+ */
+export const refusalCategorySchema = z
+  .enum(['vessel_or_aircraft_operations', 'personal_record'])
+  .nullish()
+  .catch(null);
+
+export const chatResponseSchema = z.object({
+  answer: z.string(),
+  conversation_id: z.string(),
+  grounded: z.boolean(),
+  refusal: z.boolean(),
+  // Optional: the contract's own no-answer sample omits the key. See lib/types.ts.
+  refusal_category: refusalCategorySchema,
+  citations: z.array(citationSchema),
+  chart: chartSpecSchema.nullable(),
+  /*
+   * `.catch(null)` — a card this build does not recognise drops the card, not
+   * the answer. The prose stands on its own; the card is an enhancement, and a
+   * client that refused a whole response over an unknown `kind` would lose a
+   * perfectly good answer to a feature it had not been taught yet.
+   *
+   * The strictness that matters is *inside* the card: a vessel card without its
+   * `source` fails, and the whole card is dropped rather than shown unsourced.
+   */
+  card: assistantCardSchema.nullish().catch(null),
+  tool_calls: z.array(toolCallSchema),
+  meta: responseMetaSchema,
+});
+
+export const apiErrorSchema = z.object({
+  code: z.enum([
+    // 429, this client. Distinct from UPSTREAM_RATE_LIMITED — see lib/types.ts.
+    'RATE_LIMITED',
+    'VALIDATION_ERROR',
+    'INDEX_MISSING',
+    'RETRIEVAL_EMPTY',
+    'UPSTREAM_RATE_LIMITED',
+    'UPSTREAM_TIMEOUT',
+    'NOT_FOUND',
+    'INTERNAL',
+  ]),
+  message: z.string(),
+  request_id: z.string(),
+});
+
+export const errorEnvelopeSchema = z.object({ error: apiErrorSchema });
+
+// ── Stream event payloads ────────────────────────────────────────────────────
+
+export const streamPayloadSchemas = {
+  meta: z.object({ conversation_id: z.string() }),
+  token: z.object({ text: z.string() }),
+  tool_start: z.object({ name: anyToolNameSchema, summary: z.string() }),
+  tool_end: z.object({ name: anyToolNameSchema, summary: z.string(), ms: z.number() }),
+  citations: z.object({ citations: z.array(citationSchema) }),
+  chart: chartSpecSchema,
+  card: assistantCardSchema,
+  replace: z.object({ text: z.string() }),
+  done: z.object({
+    latency_ms: z.number(),
+    grounded: z.boolean(),
+    refusal: z.boolean(),
+    /*
+     * Sent since the backend started carrying it, so a streamed refusal can pick
+     * the same specific copy the non-streaming endpoint allows. `.nullish()`
+     * because a plain no-answer has no category, and because a backend deployed
+     * before this field existed omits the key entirely — and a `done` that fails
+     * its schema would leave the answer stuck mid-stream forever.
+     */
+    refusal_category: refusalCategorySchema,
+    kb_version: z.string().nullable(),
+  }),
+  error: apiErrorSchema,
+} as const;
+
+export type KnownStreamEvent = keyof typeof streamPayloadSchemas;
+
+export function isKnownStreamEvent(name: string): name is KnownStreamEvent {
+  return name in streamPayloadSchemas;
+}
+
+// ── Health ───────────────────────────────────────────────────────────────────
+
+export const modelNamesSchema = z.object({
+  chat: z.string(),
+  embedding: z.string(),
+  transcribe: z.string(),
+  tts: z.string(),
+});
+
+/**
+ * Every unknown value is `null`, never `0` — the contract is explicit, and a
+ * client must not read "never built" as "built and empty". `.nullable()` rather
+ * than `.optional()` says the key is expected and its value may be null; a
+ * missing key is a contract change and should fail here.
+ */
+export const indexStatusSchema = z.object({
+  ready: z.boolean(),
+  kb_version: z.string().nullable(),
+  kb_rows: z.number().nullable(),
+  kb_rows_rejected: z.number().nullable(),
+  kb_csv_filename: z.string().nullable(),
+  kb_updated_at: z.string().nullable(),
+  index_built_at: z.string().nullable(),
+  embedding_model: z.string().nullable(),
+  web_docs: z.number().nullable(),
+  message: z.string().nullable(),
+});
+
+export const healthResponseSchema = z.object({
+  status: z.enum(['ok', 'degraded']),
+  env: z.string(),
+  version: z.string(),
+  uptime_s: z.number(),
+  request_id: z.string(),
+  models: modelNamesSchema,
+  index: indexStatusSchema,
+});
+
+// ── Voice ────────────────────────────────────────────────────────────────────
+
+export const sttResponseSchema = z.object({ text: z.string() });
+export const ttsPreviewResponseSchema = z.object({ text: z.string() });
 
 // ── Support ──────────────────────────────────────────────────────────────────
 

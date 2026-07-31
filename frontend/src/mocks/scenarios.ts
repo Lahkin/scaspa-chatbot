@@ -34,7 +34,10 @@ export type ScenarioId =
   | 'ungrounded'
   | 'empty_citations'
   | 'stream_stall'
-  | 'ops_unavailable';
+  | 'ops_unavailable'
+  | 'card_vessels'
+  | 'card_tariff'
+  | 'card_ticket';
 
 export interface ScenarioDescription {
   id: ScenarioId;
@@ -148,6 +151,27 @@ export const SCENARIOS: ScenarioDescription[] = [
     id: 'stream_stall',
     label: 'Stream stalls after 2 tokens',
     expected: 'No done, no error, no close. The client timeout is the only way out.',
+  },
+  {
+    id: 'card_vessels',
+    label: 'Answer with an arrivals card',
+    expected:
+      'The prose says it cannot see live movements; the card shows the feed with its own ' +
+      'source notice. Both are true at once — that is the whole design.',
+  },
+  {
+    id: 'card_tariff',
+    label: 'Answer with the fee calculator',
+    expected:
+      'An empty calculator. No figure until the user asks for one, and the total arrives ' +
+      'with its mandatory disclaimer.',
+  },
+  {
+    id: 'card_ticket',
+    label: 'Answer with a ticket form',
+    expected:
+      'Offered after a weak answer. No name or email field; the receipt says nobody will ' +
+      'make contact first.',
   },
   {
     id: 'ops_unavailable',

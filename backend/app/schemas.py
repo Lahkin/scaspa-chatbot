@@ -12,7 +12,7 @@ nowhere else — see `app/errors.py`.
 """
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -246,7 +246,14 @@ class ChatResponse(BaseModel):
     refusal: bool = Field(description="True when the assistant declined to answer")
     refusal_category: str | None = Field(default=None, description="Which refusal applied, if any")
     citations: list[Citation] = Field(default_factory=list, description="Verified sources")
-    chart: ChartSpec | None = Field(default=None, description="Always null today (Prompt 8)")
+    chart: ChartSpec | None = Field(default=None, description="A chart to render, or null")
+    card: "AssistantCard | None" = Field(
+        default=None,
+        description=(
+            "An interactive card to render below the answer, or null. Rows are populated "
+            "from the operational feed, never from model output — see the card block below."
+        ),
+    )
     tool_calls: list[ToolCall] = Field(
         default_factory=list, description="Always empty today (Prompt 5)"
     )
@@ -650,6 +657,104 @@ class SupportTicketResponse(BaseModel):
     )
     transcript_included: bool = Field(default=False)
     request_id: str = Field(default="")
+
+
+# ------------------------------------------------------------ assistant cards
+#
+# A structured card the interface renders beneath an answer: an arrivals board,
+# a fee calculator, a support ticket form.
+#
+# ## The model requests a card. It never fills one in.
+#
+# Exactly the `ChartSpec` bargain, for the same reason. `make_chart` lets the
+# model *describe* a chart and then checks every figure against a retrieved row;
+# a card works the same way, except the model supplies no figures at all. It
+# names a kind and, at most, a filter — and `app.ops.cards` populates the rows
+# from the operational feed and stamps the `DataSource` on.
+#
+# That is what keeps this consistent with prompt rule 10, which forbids the
+# assistant from claiming live status. It still cannot: nothing it writes ends
+# up in these rows, and the card carries its own provenance wherever it is
+# shown. The assistant may *attach* an arrivals board; it may not *say* what is
+# on one. See docs/decisions.md 0023.
+
+
+CardKind = Literal["vessel_arrivals", "flight_schedules", "tariff_calculator", "support_ticket"]
+
+
+class CardRequest(BaseModel):
+    """What the model asked for. Never leaves the server.
+
+    Deliberately tiny: a kind, and the few knobs a model could reasonably know
+    from the conversation. Every field a model could use to assert a fact is
+    absent by construction.
+    """
+
+    kind: CardKind
+    # Optional filters, passed to the feed. Not data.
+    direction: FlightDirection | None = None
+    category: TariffCategory | None = None
+    department: str | None = None
+    subject: str | None = None
+
+
+class VesselArrivalsCard(BaseModel):
+    """An arrivals board under an answer. Rows come from the feed, never the model."""
+
+    kind: Literal["vessel_arrivals"] = "vessel_arrivals"
+    title: str = "Vessel arrivals"
+    source: DataSource
+    vessels: list[VesselArrival] = Field(default_factory=list)
+    total: int = 0
+    href: str = "/vessels"
+
+
+class FlightSchedulesCard(BaseModel):
+    """A flight board under an answer. Same rule."""
+
+    kind: Literal["flight_schedules"] = "flight_schedules"
+    title: str = "Flight schedules"
+    source: DataSource
+    flights: list[Flight] = Field(default_factory=list)
+    total: int = 0
+    href: str = "/flights"
+
+
+class TariffCalculatorCard(BaseModel):
+    """The calculator, offered inline.
+
+    Carries **no figures** — not even a prefilled quantity. It is an empty form
+    the user drives, and the total comes back from `POST /api/tariffs/quote`
+    with its mandatory disclaimer attached. A card that arrived pre-totalled
+    would be the model producing an estimate, which rule 4 forbids outright.
+    """
+
+    kind: Literal["tariff_calculator"] = "tariff_calculator"
+    title: str = "Estimate port charges"
+    category: TariffCategory = "cargo"
+    href: str = "/tariffs"
+
+
+class SupportTicketCard(BaseModel):
+    """The escalation form, offered inline.
+
+    `subject` is a summary of the user's own question, written by the model.
+    That is model *text* about the conversation, not a claim about SCASPA, which
+    is why it is the one string here the model supplies. It is length-capped and
+    the user edits it before sending.
+    """
+
+    kind: Literal["support_ticket"] = "support_ticket"
+    title: str = "Raise a support ticket"
+    department: str = "Something else"
+    subject: str = Field(default="", max_length=200)
+    href: str = "/support"
+
+
+AssistantCard = Annotated[
+    VesselArrivalsCard | FlightSchedulesCard | TariffCalculatorCard | SupportTicketCard,
+    Field(discriminator="kind"),
+]
 
 
 # ------------------------------------------------------------------- health

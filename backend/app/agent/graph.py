@@ -52,7 +52,7 @@ from app.agent.prompts import render_system_prompt
 from app.agent.tools import ALL_TOOLS, RetrievedChunk, ToolCallRecord, TurnContext, turn_context
 from app.config import Settings, get_settings
 from app.rag.store import KB_COLLECTION, WEB_COLLECTION, get_store, search
-from app.schemas import ChartSpec
+from app.schemas import CardRequest, ChartSpec
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,9 @@ class AgentTurnResult:
     model_calls: int = 0
     hit_tool_limit: bool = False
     chart: ChartSpec | None = None
+    # The card the model asked for, unpopulated. Rows are filled in downstream
+    # from the operational feed — see app/ops/cards.py.
+    card: CardRequest | None = None
 
 
 def build_agent(
@@ -205,8 +208,10 @@ def _finish(context: TurnContext, answer: str, result: AgentTurnResult) -> Agent
     result.tool_calls = list(context.tool_calls)
     result.retrieved = dict(context.retrieved)
     # Taken from the turn, not from model output: make_chart already validated
-    # every figure against a retrieved row.
+    # every figure against a retrieved row, and a card request carries no data
+    # at all.
     result.chart = context.chart
+    result.card = context.card
     if answer.startswith(TOOL_LIMIT_MARKER):
         result.hit_tool_limit = True
         result.answer = ""

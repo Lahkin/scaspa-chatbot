@@ -15,6 +15,7 @@
 
 import type {
   ApiErrorBody,
+  AssistantCard,
   ChartSpec,
   Citation,
   ChartType,
@@ -85,6 +86,7 @@ export type ChatAction =
   | { type: 'TOOL_END'; name: ToolName; summary: string; ms: number }
   | { type: 'CITATIONS'; citations: Citation[] }
   | { type: 'CHART'; chart: ChartSpec }
+  | { type: 'CARD'; card: AssistantCard }
   | { type: 'REPLACE'; text: string }
   | {
       type: 'DONE';
@@ -110,6 +112,7 @@ export type ChatAction =
       text: string;
       citations: Citation[];
       chart: ChartSpec | null;
+      card: AssistantCard | null;
       grounded: boolean;
       refusal: boolean;
       refusalCategory: Message['refusal_category'];
@@ -159,6 +162,7 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
         activity: [],
         citations: [],
         chart: null,
+        card: null,
         error: null,
       };
       return {
@@ -233,6 +237,9 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
 
     case 'CHART':
       return patchStreaming(state, (message) => ({ ...message, chart: action.chart }));
+
+    case 'CARD':
+      return patchStreaming(state, (message) => ({ ...message, card: action.card }));
 
     case 'REPLACE':
       // The tool-call cap was hit: everything streamed so far was an internal
@@ -323,6 +330,7 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
         streaming: false,
         citations: action.citations,
         chart: action.chart,
+        card: action.card,
         grounded: action.grounded,
         refusal: action.refusal,
         refusal_category: action.refusalCategory,

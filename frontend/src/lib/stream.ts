@@ -20,6 +20,7 @@ import { SseParser, parseFrameData } from './sse';
 import { isKnownStreamEvent, streamPayloadSchemas } from './schemas';
 import type {
   ApiErrorBody,
+  AssistantCard,
   Category,
   ChartSpec,
   Citation,
@@ -43,6 +44,14 @@ export interface StreamHandlers {
   /** After the last token — validation needs the finished text. */
   onCitations?: (data: { citations: Citation[] }) => void;
   onChart?: (data: ChartSpec) => void;
+  /**
+   * A populated card, after `citations` and before `done`.
+   *
+   * The payload is identical to the `card` field on `POST /api/chat` — the
+   * backend fills the rows from the feed and re-emits, so a client cannot end up
+   * with a different card depending on which endpoint answered.
+   */
+  onCard?: (data: AssistantCard) => void;
   /**
    * The tool-call cap was hit. Everything streamed so far was an internal
    * message, not an answer: discard it and render this instead.
@@ -283,6 +292,9 @@ function dispatch(
       return false;
     case 'chart':
       handlers.onChart?.(parsed.data as ChartSpec);
+      return false;
+    case 'card':
+      handlers.onCard?.(parsed.data as AssistantCard);
       return false;
     case 'replace':
       handlers.onReplace?.(parsed.data as { text: string });

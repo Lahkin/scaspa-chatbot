@@ -50,7 +50,7 @@ from app.agent.prompts import (
 from app.config import Settings, get_settings
 from app.rag.grounding import check_numbers
 from app.rag.retriever import RetrievedChunk
-from app.schemas import ChartSpec
+from app.schemas import CardRequest, ChartSpec
 from app.upstream import call_with_retry
 
 logger = logging.getLogger(__name__)
@@ -133,6 +133,10 @@ class AnswerResult(BaseModel):
     hit_tool_limit: bool = False
     chart: ChartSpec | None = Field(
         default=None, description="Validated chart spec, or None. Never built from model text"
+    )
+    card: CardRequest | None = Field(
+        default=None,
+        description="The card the model asked for, unpopulated. Rows come from the feed",
     )
     best_score: float = 0.0
     model: str | None = None
@@ -611,6 +615,7 @@ def _from_turn(
     result.prompt_tokens = turn.prompt_tokens
     result.completion_tokens = turn.completion_tokens
     result.chart = turn.chart
+    result.card = turn.card
     return result
 
 
@@ -718,6 +723,10 @@ async def astream_answer(
     # render it in the same frame as the finished answer.
     if result.chart is not None:
         yield "chart", result.chart.model_dump()
+    # The card request, not the card. The router populates the rows from the feed
+    # and re-emits — the streaming layer has no business reading an ops source.
+    if result.card is not None:
+        yield "_card_request", {"request": result.card.model_dump()}
     yield "done", _done_payload(result, settings)
 
 

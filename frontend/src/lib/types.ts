@@ -119,7 +119,8 @@ export type KnownToolName =
   | 'search_site_content'
   | 'make_chart'
   | 'calculate'
-  | 'escalate_to_human';
+  | 'escalate_to_human'
+  | 'show_card';
 
 /**
  * A tool name as it arrives.
@@ -178,6 +179,15 @@ export interface ChatResponse {
   citations: Citation[];
   /** Usually null. */
   chart: ChartSpec | null;
+  /**
+   * An interactive card to render below the answer, or null.
+   *
+   * **Its rows never came from the model.** The assistant names a kind; the
+   * backend fills the rows from the operational feed and stamps the feed's
+   * `DataSource` on. That is what lets a card show a berth status in the same
+   * answer where the assistant declines to state one — see `AssistantCard`.
+   */
+  card: AssistantCard | null;
   /** Tools the agent used this turn, in order. */
   tool_calls: ToolCall[];
   meta: ResponseMeta;
@@ -330,6 +340,16 @@ export interface StreamChartEvent {
 }
 
 /**
+ * Payload is a complete, populated `AssistantCard` — the same shape as the
+ * `card` field on `POST /api/chat`, so the two endpoints cannot drift. Arrives
+ * after `citations` and always before `done`.
+ */
+export interface StreamCardEvent {
+  event: 'card';
+  data: AssistantCard;
+}
+
+/**
  * Rare, and not in the list this prompt asked for — but it is in the contract, so
  * it is here.
  *
@@ -374,6 +394,7 @@ export type StreamEvent =
   | StreamToolEndEvent
   | StreamCitationsEvent
   | StreamChartEvent
+  | StreamCardEvent
   | StreamReplaceEvent
   | StreamDoneEvent
   | StreamErrorEvent;
@@ -619,3 +640,77 @@ export interface SupportTicketResponse {
   transcript_included: boolean;
   request_id: string;
 }
+
+// ── Assistant cards ──────────────────────────────────────────────────────────
+//
+// A structured card rendered beneath an answer: an arrivals board, the fee
+// calculator, a ticket form.
+//
+// ## The model requests a card and never fills one in
+//
+// Exactly the `ChartSpec` bargain. `make_chart` lets the model describe a chart
+// and then checks every figure against a retrieved row; a card goes further —
+// the model supplies no figures at all, because `show_card` has no parameter
+// that could carry one. The rows come from the feed, server-side, after the
+// answer is written.
+//
+// So a `vessel_arrivals` card is not the assistant claiming a berth is
+// occupied. It is the interface showing a feed, with the feed's own provenance
+// attached, in the same breath as the assistant declining to describe it.
+
+export type CardKind =
+  'vessel_arrivals' | 'flight_schedules' | 'tariff_calculator' | 'support_ticket';
+
+export interface VesselArrivalsCard {
+  kind: 'vessel_arrivals';
+  title: string;
+  /** **Render the notice.** Same obligation as the standalone panels. */
+  source: DataSource;
+  vessels: VesselArrival[];
+  /** Matching records in the feed. The card shows the first few. */
+  total: number;
+  /** Where "see all" goes. */
+  href: string;
+}
+
+export interface FlightSchedulesCard {
+  kind: 'flight_schedules';
+  title: string;
+  source: DataSource;
+  flights: Flight[];
+  total: number;
+  href: string;
+}
+
+/**
+ * The calculator, offered inline.
+ *
+ * Carries **no figures** — not even a prefilled quantity. It is an empty form
+ * the user drives, and the total comes back from `POST /api/tariffs/quote` with
+ * its mandatory disclaimer. A pre-totalled card would be the model producing an
+ * estimate, which its own rules forbid outright.
+ */
+export interface TariffCalculatorCard {
+  kind: 'tariff_calculator';
+  title: string;
+  category: TariffCategory;
+  href: string;
+}
+
+/**
+ * The escalation form, offered inline.
+ *
+ * `subject` is the model's one-line summary of the user's own question — model
+ * text about the conversation, not a claim about SCASPA, and the user edits it
+ * before sending. Length-capped server-side.
+ */
+export interface SupportTicketCard {
+  kind: 'support_ticket';
+  title: string;
+  department: string;
+  subject: string;
+  href: string;
+}
+
+export type AssistantCard =
+  VesselArrivalsCard | FlightSchedulesCard | TariffCalculatorCard | SupportTicketCard;

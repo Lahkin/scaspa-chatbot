@@ -1915,3 +1915,88 @@ the assertion moved to what it was always about — no illustration, and every
 image either decorative or the brand mark.
 
 **No new dependency was added.**
+
+---
+
+## 0023 — Inline assistant cards, and the tool that cannot lie
+
+**Date:** 2026-07-31
+**Status:** Accepted
+
+The conversational half of the design import: an answer can now carry an
+arrivals board, a flight board, the fee calculator or a ticket form beneath it.
+Eight of the fifteen mockup screens, and the ones the design calls "the core
+conversational surface".
+
+### The problem this had to solve first
+
+`prompts.py` rule 10 forbids the assistant from claiming live status — it cannot
+see whether a berth is occupied, and it may not infer that from a published
+schedule. Rule 4 forbids it from estimating a fee. The design's central screen
+is an assistant answer with a live arrivals board under it, and the second is an
+assistant answer with a priced calculator under it.
+
+Read one way that is a direct contradiction. It is not, and the distinction is
+the whole design:
+
+**The sentence is the assistant. The card is the feed.**
+
+`show_card` takes a kind and, at most, a filter. There is **no parameter** for a
+vessel name, an ETA, a berth, a status, a rate or a total — so the model cannot
+supply one. The rows are read from the operational source *after* the answer is
+written, by `app/ops/cards.py`, and the card carries that source's own
+`DataSource` wherever it goes. So an answer can say "I cannot see live vessel
+movements" and carry a board showing them, and both statements are true, because
+they have different authors.
+
+This is `make_chart` taken one step further. A chart lets the model choose
+figures and then checks them against a retrieved row. A card does not let it
+choose any.
+
+`tests/test_operations.py` asserts the guarantee against the tool's **actual
+signature** rather than its docstring — a docstring promising no data parameter
+would not stop one being added.
+
+### The prompt had to say so explicitly
+
+Rules 4 and 10 each gained a clause. Without them the model reads "there is a
+board" as permission to describe it, which is precisely the failure. The wording
+is deliberate: *attaching* is allowed, *reading* is not, and "never write a
+sentence that summarises, previews or characterises what the card will contain".
+Pinned in `tests/test_prompts.py`.
+
+### Smaller decisions
+
+**The card is not gated on `grounded`; the chart still is.** A chart's figures
+come from cited rows, so a failed citation invalidates it. A card's provenance is
+its own `DataSource`, unrelated to the prose's citations — gating it would
+withhold the *better*-sourced of the two exactly when a sentence went wrong.
+
+**An empty board still renders.** An answer promising a board with no board is
+worse than an empty one; the notice is the explanation.
+
+**An unrecognised `kind` drops the card, not the answer.** `.catch(null)` at the
+zod boundary. But the strictness *inside* a card is absolute: a `vessel_arrivals`
+card without its `source` is refused, because a board with no provenance is
+indistinguishable from a live one. Both directions are mutation-tested.
+
+**The stream carries an internal event.** `astream_answer` yields
+`_card_request`; the router populates it from the feed and re-emits it as `card`.
+The streaming layer has no business reading an ops source, and the two endpoints
+must not be able to produce different cards for the same answer.
+
+**Six tools now, not five.** `show_card` earned the slot by removing a worse
+option: without it, the model's only way to help with "what is arriving today"
+is prose, and prose about live operations is what rule 10 forbids. A tool that
+attaches a board it cannot read is a *narrower* capability than the sentence it
+replaces.
+
+### A flaky test, found and fixed rather than re-run
+
+Adding the sidebar and the cards pushed the gallery's lazy-import graph past
+`findByRole`'s 1000ms default, and the suite began failing about one run in
+three — at **1044ms**, right on the boundary. Diagnosed from the timing rather
+than by retrying until green, and raised to five seconds with the reason
+recorded: the number was measuring Vite's cold transform of a dev-only module,
+not anything a user experiences. A flaky assertion is worse than a slow one.
+

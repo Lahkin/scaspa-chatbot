@@ -216,3 +216,54 @@ export const MOCK_DIRECTORY: SupportDirectory = {
   departments: ['Port operations', 'Tariffs and billing', 'Something else'],
   request_id: 'mock-directory',
 };
+
+// ── Assistant cards ──────────────────────────────────────────────────────────
+//
+// The populated shapes the backend sends on the `card` field and the `card` SSE
+// event. Same values as the panels above, because they come from the same feed —
+// a card fixture that disagreed with the panel fixture would hide a real bug.
+
+import type { AssistantCard } from '@/lib/types';
+
+export const CARD_VESSELS: AssistantCard = {
+  kind: 'vessel_arrivals',
+  title: 'Vessel arrivals',
+  source: FIXTURE_SOURCE,
+  vessels: MOCK_VESSELS,
+  total: MOCK_VESSELS.length,
+  href: '/vessels',
+};
+
+/** The production default: a feed that is not connected. Still renders. */
+export const CARD_VESSELS_EMPTY: AssistantCard = {
+  kind: 'vessel_arrivals',
+  title: 'Vessel arrivals',
+  source: UNAVAILABLE_SOURCE,
+  vessels: [],
+  total: 0,
+  href: '/vessels',
+};
+
+export const CARD_FLIGHTS: AssistantCard = {
+  kind: 'flight_schedules',
+  title: 'Arrivals',
+  source: FIXTURE_SOURCE,
+  flights: MOCK_FLIGHTS.filter((flight) => flight.direction === 'arrival'),
+  total: 3,
+  href: '/flights',
+};
+
+export const CARD_TARIFF: AssistantCard = {
+  kind: 'tariff_calculator',
+  title: 'Estimate port charges',
+  category: 'cargo',
+  href: '/tariffs',
+};
+
+export const CARD_TICKET: AssistantCard = {
+  kind: 'support_ticket',
+  title: 'Raise a support ticket',
+  department: 'Port operations',
+  subject: 'Query about container storage rates',
+  href: '/support',
+};

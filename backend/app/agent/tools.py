@@ -1,6 +1,6 @@
-"""The five tools the agent may use.
+"""The six tools the agent may use.
 
-Exactly five, and adding a sixth needs a good argument. Every extra tool widens
+Adding a seventh needs a good argument. Every extra tool widens
 the model's choice, and a wrong choice costs a round trip, tokens and latency
 before it even starts being wrong.
 
@@ -37,7 +37,7 @@ from app.agent.prompts import ESCALATION_BLOCK
 from app.config import Settings, get_settings
 from app.rag.retriever import RetrievedChunk, retrieve
 from app.rag.store import WEB_COLLECTION, get_store, search
-from app.schemas import ChartPoint, ChartSeries, ChartSpec
+from app.schemas import CardRequest, ChartPoint, ChartSeries, ChartSpec
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,10 @@ class TurnContext:
     # Set by make_chart after validation. The model never sees or edits this
     # object, so it cannot alter a chart once the figures have been checked.
     chart: "ChartSpec | None" = None
+    # Set by show_card. Holds only the *request* — a kind and a filter. The rows
+    # are filled in from the operational feed by `app.ops.cards`, so nothing the
+    # model wrote reaches them.
+    card: "CardRequest | None" = None
 
     def record_chunks(self, chunks: list[RetrievedChunk]) -> None:
         """Accumulate retrieved rows across every search in this turn.
@@ -589,12 +593,84 @@ def escalate_to_human() -> str:
         return ESCALATION_BLOCK
 
 
+# --------------------------------------------------------------------- 6 of 6
+
+
+@tool
+def show_card(
+    card: Annotated[
+        str,
+        "One of: vessel_arrivals, flight_schedules, tariff_calculator, support_ticket.",
+    ],
+    direction: Annotated[
+        str | None, "For flight_schedules only: 'arrival' or 'departure'. Default arrival."
+    ] = None,
+    department: Annotated[
+        str | None, "For support_ticket only: which SCASPA desk the query belongs to."
+    ] = None,
+    subject: Annotated[
+        str | None,
+        "For support_ticket only: a one-line summary of the user's question, for them to edit.",
+    ] = None,
+) -> str:
+    """Attach a card below your answer: an arrivals board, the fee calculator, or a ticket form.
+
+    Use it when the interface can do something you cannot:
+
+      - `vessel_arrivals` / `flight_schedules` — the user asked what is arriving.
+        You cannot see live operations and must not say what is on the board; this
+        shows them the board itself, with its own source and timestamp attached.
+        Say that you cannot see live movements, then attach this.
+      - `tariff_calculator` — the user wants to know what something will cost and
+        you do not have a single published figure that answers it. You must never
+        estimate a fee. The calculator applies published rates and shows its own
+        warning, so offer it instead of guessing.
+      - `support_ticket` — you could not answer, or the question needs a person.
+        Pass `department` and a one-line `subject` summarising what they asked.
+
+    **You supply no data.** There is no parameter for a vessel name, an ETA, a
+    berth, a flight status, a rate or a total, and there will not be. The rows are
+    read from SCASPA's own feed after you finish, and the card states where they
+    came from and how old they are. That is what makes attaching one honest while
+    describing one in a sentence is not.
+
+    One card per answer; the last call wins. Do not attach a card the user did not
+    ask for — an arrivals board under a question about baggage is clutter.
+    """
+    context = current_turn()
+    kind = card.strip().lower()
+    allowed = {"vessel_arrivals", "flight_schedules", "tariff_calculator", "support_ticket"}
+
+    summary = f"Preparing card — {kind}"
+    with _timed("show_card", summary):
+        if kind not in allowed:
+            return f"Rejected: {card!r} is not a card. Choose one of: {', '.join(sorted(allowed))}."
+        try:
+            request = CardRequest(
+                kind=kind,  # type: ignore[arg-type]  — validated against `allowed` above
+                direction=direction if direction in {"arrival", "departure"} else None,
+                department=department,
+                subject=subject,
+            )
+        except ValidationError as exc:
+            return f"Rejected: {exc.errors()[0]['msg']}"
+
+        # Held on the turn, not returned as text. The router fills in the rows
+        # from the feed, so the model cannot influence them after this point.
+        context.card = request
+        return (
+            f"Card accepted: a {kind} card will be shown below your answer, with its own "
+            "source and date. Do not describe its contents — the user can read it."
+        )
+
+
 ALL_TOOLS = [
     search_scaspa_knowledge,
     search_site_content,
     make_chart,
     calculate,
     escalate_to_human,
+    show_card,
 ]
 
 __all__ = [
@@ -610,5 +686,6 @@ __all__ = [
     "safe_eval",
     "search_scaspa_knowledge",
     "search_site_content",
+    "show_card",
     "turn_context",
 ]
