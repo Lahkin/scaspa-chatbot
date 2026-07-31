@@ -61,6 +61,7 @@ const ROUTES = [
   '/settings',
   '/ops/vessels',
   '/ops/flights',
+  '/about-scaspa',
 ];
 const VIEWPORTS = [
   { name: 'mobile', width: 390, height: 800 },

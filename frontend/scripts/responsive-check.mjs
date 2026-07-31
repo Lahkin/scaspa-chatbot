@@ -67,6 +67,7 @@ const ROUTES = [
   '/settings',
   '/ops/vessels',
   '/ops/flights',
+  '/about-scaspa',
 ];
 const HEIGHT = 780;
 

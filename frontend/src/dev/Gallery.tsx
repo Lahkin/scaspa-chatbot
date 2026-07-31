@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import {
   Badge,
   Button,
@@ -49,6 +49,10 @@ import {
   pickMimeType,
 } from '@/features/voice/capabilities';
 import { config as appConfig } from '@/lib/config';
+import { LogoLockup } from '@/components/brand/LogoLockup';
+import { Sidebar } from '@/components/shells/Sidebar';
+import { SidebarDrawer } from '@/components/shells/SidebarDrawer';
+import { AboutScaspa } from '@/components/about/AboutScaspa';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.
@@ -547,6 +551,159 @@ export function Gallery() {
           tokens={['bg-amber-board', 'bg-amber-text', 'bg-success', 'bg-danger']}
         />
       </Section>
+
+      <NavigationSection />
+    </div>
+  );
+}
+
+/**
+ * The sidebar, the lockup and the About panel — every state on one screen.
+ *
+ * The sidebar is rendered at its real docked width inside a fixed-height box,
+ * because its internal `min-h-0` scrolling only behaves when it has a bounded
+ * parent. Dropped into an unbounded page it looks correct and proves nothing.
+ */
+function NavigationSection() {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [lastAsked, setLastAsked] = useState<string | null>(null);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+
+  const sidebarProps = {
+    onAsk: (question: string) => setLastAsked(question),
+    onNewConversation: () => setLastAsked(null),
+    onOpenSources: () => {},
+    onOpenAbout: () => setAboutOpen(true),
+    busy: false,
+    hasConversation: true,
+  };
+
+  return (
+    <>
+      <Section
+        title="LogoLockup"
+        note="The asset is a documented placeholder — vector files, a reversed variant and written permission are outstanding client items. Below 32px the badge is dropped for a wordmark, because the real mark is a circular seal that turns to mud at that size."
+      >
+        <div className="flex flex-wrap items-end gap-6">
+          <Figure label="lg — 48px">
+            <LogoLockup size="lg" tagline="Ports and travel, St. Kitts" />
+          </Figure>
+          <Figure label="md — 32px, the sidebar header">
+            <LogoLockup size="md" tagline="Ports and travel, St. Kitts" />
+          </Figure>
+          <Figure label="sm — wordmark fallback, no badge">
+            <LogoLockup size="sm" />
+          </Figure>
+          <Figure label="nameHidden — the mark carries the name">
+            <LogoLockup size="lg" nameHidden />
+          </Figure>
+        </div>
+        <div className="rounded-md bg-navy p-4">
+          <Figure label="reversed on navy — badge withheld until the asset arrives" inverse>
+            <LogoLockup size="lg" variant="reversed" tagline="Ports and travel, St. Kitts" />
+          </Figure>
+        </div>
+      </Section>
+
+      <Section
+        title="Sidebar — docked"
+        note="From lg up. Four facility groups, collapsed. No conversation history: the backend keeps conversations in memory for 60 minutes, lists none of them, and the privacy page says message content never reaches the device."
+      >
+        <div className="h-160 w-sidebar overflow-hidden rounded-md border border-border">
+          <Sidebar {...sidebarProps} sourceCount={0} knowledgeVerifiedAt={null} />
+        </div>
+      </Section>
+
+      <Section
+        title="Sidebar — with sources and a verified date"
+        note="The source count is hidden at xl, where the panel is already docked. The verified-as-of line is omitted entirely when health is unavailable, rather than showing a placeholder."
+      >
+        <div className="h-160 w-sidebar overflow-hidden rounded-md border border-border">
+          <Sidebar {...sidebarProps} sourceCount={4} knowledgeVerifiedAt="2026-06-01" />
+        </div>
+      </Section>
+
+      <Section
+        title="Facility group — expanded"
+        note="A real disclosure: aria-expanded on the trigger, aria-controls pointing at a region that is unmounted when closed. Questions use the departure-board treatment, matching the starter chips."
+      >
+        <p className="text-caption text-ink-subtle">
+          Expand any group below. Last question sent: <strong>{lastAsked ?? 'none yet'}</strong>
+        </p>
+        <div className="h-160 w-sidebar overflow-hidden rounded-md border border-border">
+          <Sidebar {...sidebarProps} sourceCount={2} knowledgeVerifiedAt="2026-06-01" />
+        </div>
+      </Section>
+
+      <Section
+        title="Sidebar — as a drawer"
+        note="Below lg. Traps focus, closes on Escape, and returns focus to the hamburger that opened it."
+      >
+        <div className="flex items-center gap-3">
+          <IconButton
+            ref={hamburgerRef}
+            label="Open navigation"
+            variant="secondary"
+            aria-expanded={drawerOpen}
+            aria-controls="gallery-drawer"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <span aria-hidden="true">☰</span>
+          </IconButton>
+          <span className="text-caption text-ink-subtle">
+            {drawerOpen ? 'Open — press Escape to close' : 'Closed'}
+          </span>
+        </div>
+
+        <SidebarDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          returnFocusTo={hamburgerRef}
+          id="gallery-drawer"
+        >
+          <Sidebar
+            {...sidebarProps}
+            sourceCount={2}
+            knowledgeVerifiedAt="2026-06-01"
+            onNavigate={() => setDrawerOpen(false)}
+          />
+        </SidebarDrawer>
+      </Section>
+
+      <Section
+        title="About SCASPA"
+        note="One content component, two placements: this sheet and the /about-scaspa route. Low-volatility facts only — no fees, schedules, hours or statistics, which come from the assistant with a source and a date."
+      >
+        <Button variant="secondary" onClick={() => setAboutOpen(true)}>
+          Open the About sheet
+        </Button>
+        <div className="max-w-measure rounded-md border border-border p-4">
+          <AboutScaspa />
+        </div>
+        <Sheet open={aboutOpen} onClose={() => setAboutOpen(false)} title="About SCASPA">
+          <AboutScaspa />
+        </Sheet>
+      </Section>
+    </>
+  );
+}
+
+function Figure({
+  label,
+  inverse = false,
+  children,
+}: {
+  label: string;
+  inverse?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div>{children}</div>
+      <p className={inverse ? 'text-caption text-blue-100' : 'text-caption text-ink-subtle'}>
+        {label}
+      </p>
     </div>
   );
 }

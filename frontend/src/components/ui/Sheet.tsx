@@ -96,9 +96,21 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
         aria-labelledby={titleId}
         className={cn(
           'absolute bg-surface shadow-sheet',
-          // Mobile: bottom sheet. sm and up: right-hand side panel.
+          /*
+           * Bottom sheet below `md`, right-hand panel from `md` up.
+           *
+           * The switch was at `sm` (640px). It moved to `md` (768px) when the
+           * sidebar landed, because the shell's breakpoint table puts the
+           * source panel in a bottom sheet below 768 and an overlay above it —
+           * and two components disagreeing about where "narrow" ends is how a
+           * 700px tablet ends up with a side panel the layout was not designed
+           * for.
+           *
+           * No effect on the widget: it is 380px wide inside its iframe, so
+           * neither breakpoint was ever reached there.
+           */
           'inset-x-0 bottom-0 max-h-[85dvh] rounded-t-lg',
-          'sm:inset-y-0 sm:right-0 sm:left-auto sm:max-h-none sm:w-96 sm:rounded-t-none sm:rounded-l-lg',
+          'md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-96 md:rounded-t-none md:rounded-l-lg',
           'flex flex-col',
           reduced ? '' : 'motion-safe:animate-in'
         )}

@@ -28,7 +28,14 @@ thing that does not, while there is still time.
 > ```
 >
 > Without that it reports two manual failures that are about the missing backend,
-> not about the UI.
+> not about the UI. **Check the backend on :8000 is the one you just started** —
+> a stale instance from an earlier session holds the port, does not have :4400
+> in its origins, and produces exactly the same two failures.
+> `lsof -nP -iTCP:8000 -sTCP:LISTEN` names the owner.
+>
+> **Any later `npm install` prunes `--no-save` packages.** If a check suddenly
+> reports Playwright missing again, that is why — reinstall both, in one
+> command, and carry on.
 
 ---
 

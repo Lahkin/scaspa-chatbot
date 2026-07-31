@@ -1,17 +1,21 @@
+import { useId, useRef, useState } from 'react';
 import { ChatCore } from '@/components/chat/ChatCore';
 import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { IconButton, Sheet } from '@/components/ui';
+import { AboutScaspa } from '@/components/about/AboutScaspa';
+import { useHealth } from '@/features/chat/queries';
 import { SCASPA_PHONE_HREF, ScaspaMark } from './ScaspaMark';
 import { HealthBanner } from './HealthBanner';
+import { Sidebar } from './Sidebar';
+import { SidebarDrawer } from './SidebarDrawer';
 import { SourcePanel } from './SourcePanel';
 
 /**
  * The standalone chat page.
  *
  * **Designed at 390px first**, then widened. Not a slogan — what follows *is* the
- * mobile layout, and every desktop affordance is a `lg:` addition on top. Built
- * the other way round, the phone layout becomes a squeezed desktop layout and the
- * docked source panel becomes a 200px column nobody can read.
+ * mobile layout, and every desktop affordance is a breakpoint addition on top.
+ * Built the other way round, the phone layout becomes a squeezed desktop layout.
  *
  * ### `100dvh`, never `100vh`
  *
@@ -23,6 +27,23 @@ import { SourcePanel } from './SourcePanel';
  * an iPhone. `dvh` tracks the *dynamic* viewport and shrinks when the toolbar and
  * the software keyboard appear.
  *
+ * ### Three zones competing for one width
+ *
+ * Sidebar, conversation, sources. Resolved by giving the conversation priority
+ * and letting the other two dock only once there is room to spare:
+ *
+ * | Viewport      | Sidebar        | Sources          |
+ * | ------------- | -------------- | ---------------- |
+ * | ≥ 1280 (`xl`) | docked, 260px  | docked, 320px    |
+ * | 1024–1279     | docked, 260px  | right overlay    |
+ * | 768–1023      | drawer         | right overlay    |
+ * | < 768         | drawer         | bottom sheet     |
+ *
+ * The middle column **keeps a readable measure at every size** — `ChatCore`
+ * centres its content on `max-w-measure` rather than filling whatever the
+ * sidebar leaves behind. A 900px line of text is harder to read than a 600px
+ * one, so the extra width becomes margin, not measure.
+ *
  * ### Why the composer is not `position: sticky`
  *
  * It does not need to be. The document never scrolls: the shell is a fixed `dvh`
@@ -32,8 +53,9 @@ import { SourcePanel } from './SourcePanel';
  * composer out of.
  */
 export function FullPageShell() {
-  // The provider wraps both `ChatCore` and the source panel, because a chip
-  // rendered inside the transcript has to open a panel that is its sibling.
+  // The provider wraps the sidebar, `ChatCore` and the source panel: a chip
+  // rendered inside the transcript has to open a panel that is its sibling, and
+  // a starter question in the sidebar has to send through the same path.
   return (
     <ChatSessionProvider>
       <FullPageShellInner />
@@ -50,38 +72,107 @@ function FullPageShellInner() {
     panelOpen,
     setPanelOpen,
     state,
+    busy,
+    send,
     startNewConversation,
   } = useChatSessionContext();
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+  const drawerId = useId();
+  const health = useHealth();
+
+  const hasConversation = state.messages.length > 0;
+
+  /**
+   * Unique citations across the whole conversation.
+   *
+   * `entries` from the context is the *latest answer's* sources, which is what
+   * the panel shows. The sidebar count is a different question — "how much has
+   * this conversation been sourced from" — so it is computed over every message
+   * and deduplicated by `kb_id`. Counting the latest answer's entries instead
+   * would make the number drop when a follow-up cites fewer rows, which reads
+   * as sources being lost.
+   */
+  const sourceCount = new Set(
+    state.messages.flatMap((message) => (message.citations ?? []).map((c) => c.kb_id))
+  ).size;
+
+  const sidebar = (
+    <Sidebar
+      onAsk={(question) => void send(question)}
+      onNewConversation={startNewConversation}
+      onOpenSources={() => setPanelOpen(true)}
+      onOpenAbout={() => setAboutOpen(true)}
+      sourceCount={sourceCount}
+      knowledgeVerifiedAt={health?.index.kb_updated_at ?? null}
+      busy={busy}
+      hasConversation={hasConversation}
+    />
+  );
 
   return (
     // h-dvh + overflow-hidden: the document never scrolls, only the transcript does.
     <div className="flex h-dvh flex-col overflow-hidden bg-surface text-ink">
+      {/*
+        The skip link lands on the conversation, past the sidebar.
+        A skip link that drops you into the navigation has skipped nothing —
+        and with a sidebar of four expandable groups in front of the composer,
+        it is now doing real work rather than being a formality.
+
+        It lives here rather than in the root layout because `/chat` is
+        self-chromed and never renders the root's chrome, so until now this route
+        had no skip link at all.
+      */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:inline-flex focus:min-h-touch focus:items-center focus:rounded-sm focus:bg-blue-600 focus:px-4 focus:text-ink-inverse"
+      >
+        Skip to the conversation
+      </a>
+
       <HealthBanner />
 
       <header className="shrink-0 border-b border-border bg-surface">
         <div className="flex items-center gap-2 px-4 py-2">
-          <ScaspaMark />
+          {/* The hamburger only exists where the sidebar is a drawer. */}
+          <span className="lg:hidden">
+            <IconButton
+              ref={hamburgerRef}
+              label="Open navigation"
+              variant="ghost"
+              aria-expanded={drawerOpen}
+              aria-controls={drawerId}
+              onClick={() => setDrawerOpen(true)}
+            >
+              <span aria-hidden="true">☰</span>
+            </IconButton>
+          </span>
+
+          {/* Redundant beside the sidebar's own lockup, so it stands down there. */}
+          <span className="lg:hidden">
+            <ScaspaMark />
+          </span>
 
           <span className="flex-1" />
 
-          {/* Only offered once there is something to clear. On an empty screen it
-              would be a button that does nothing. */}
           {state.messages.length > 0 && (
             <button
               type="button"
               onClick={startNewConversation}
-              className="min-h-touch shrink-0 rounded-md px-2 text-caption font-medium text-ink-muted underline hover:text-ink"
+              className="min-h-touch shrink-0 rounded-md px-2 text-caption font-medium text-ink-muted underline hover:text-ink lg:hidden"
             >
               Start again
             </button>
           )}
 
-          {/* Sources open in a bottom sheet below lg, where there is no room to
-              dock them. Hidden at lg because the panel is permanently visible
-              there — two ways to reach the same panel is one too many. */}
-          <span className="lg:hidden">
+          {/* Sources are reachable from the header below xl, where the panel is
+              an overlay. At xl it is docked and permanently visible — two ways
+              to reach the same panel is one too many. */}
+          <span className="xl:hidden">
             <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
-              <span aria-hidden="true">☰</span>
+              <span aria-hidden="true">⌸</span>
             </IconButton>
           </span>
 
@@ -89,10 +180,6 @@ function FullPageShellInner() {
             "Talk to a person" is not a fallback tucked into a footer. Someone who
             has decided the assistant cannot help them has already spent patience
             they did not have, so the way out is on screen from the start.
-
-            Full label from sm up, dialling icon below it. The accessible name says
-            the same thing either way, so a screen-reader user gets the sentence
-            regardless of viewport.
           */}
           <a
             href={SCASPA_PHONE_HREF}
@@ -115,16 +202,19 @@ function FullPageShellInner() {
           engages, the whole page grows instead, and the composer leaves the
           screen. It is the single most common way this layout is got wrong. */}
       <div className="flex min-h-0 flex-1">
+        {/* Docked from lg. Its own landmark, so a screen-reader user can jump
+            straight to it — and skip past it, via the link above. */}
+        <div className="hidden w-sidebar shrink-0 border-r border-border lg:block">{sidebar}</div>
+
         <main id="main" className="min-w-0 flex-1">
           <ChatCore />
         </main>
 
-        {/* Docked source panel — wide screens only. `lg` (1024px) rather than
-            `md`, because at 768px the column steals width the conversation needs
-            more than the sources do. */}
+        {/* Docked sources at xl only. Below that the sidebar has the width, and
+            a third column would leave the conversation unreadable. */}
         <aside
           aria-label="Sources"
-          className="hidden w-80 shrink-0 border-l border-border bg-surface-muted lg:block"
+          className="hidden w-80 shrink-0 border-l border-border bg-surface-muted xl:block"
         >
           <SourcePanel
             entries={entries}
@@ -135,9 +225,35 @@ function FullPageShellInner() {
         </aside>
       </div>
 
-      {/* The same panel below lg, as a bottom sheet. Same component, so the two
-          placements cannot drift apart. */}
-      <div className="lg:hidden">
+      {/* The drawer, below lg. Same `sidebar` element as the docked rail, so the
+          two cannot drift. */}
+      <SidebarDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        returnFocusTo={hamburgerRef}
+        id={drawerId}
+      >
+        {/* `onNavigate` closes the drawer after any action that took the user
+            somewhere — sending a question, clearing the conversation, opening a
+            panel. Docked, this prop is absent and nothing closes. */}
+        <Sidebar
+          onAsk={(question) => void send(question)}
+          onNewConversation={startNewConversation}
+          onOpenSources={() => setPanelOpen(true)}
+          onOpenAbout={() => setAboutOpen(true)}
+          sourceCount={sourceCount}
+          knowledgeVerifiedAt={health?.index.kb_updated_at ?? null}
+          busy={busy}
+          hasConversation={hasConversation}
+          onNavigate={() => setDrawerOpen(false)}
+        />
+      </SidebarDrawer>
+
+      {/* Sources as an overlay below xl. Same component as the docked panel, so
+          the two placements cannot drift apart. `Sheet` is a bottom sheet below
+          `md` and a right-hand panel from `md` up, which is exactly the split
+          the table in this file's docstring calls for. */}
+      <div className="xl:hidden">
         <Sheet open={panelOpen} onClose={() => setPanelOpen(false)} title="Sources">
           <SourcePanel
             headed={false}
@@ -148,6 +264,18 @@ function FullPageShellInner() {
           />
         </Sheet>
       </div>
+
+      {/*
+        About SCASPA, as a sheet rather than a route.
+
+        A hurried user who wonders what SCASPA is should not lose the answer they
+        were reading to find out. A sheet keeps the conversation mounted behind
+        it; a navigation event would unmount it and there is no history to get it
+        back from. The same content is at `/about-scaspa` for deep links.
+      */}
+      <Sheet open={aboutOpen} onClose={() => setAboutOpen(false)} title="About SCASPA">
+        <AboutScaspa />
+      </Sheet>
     </div>
   );
 }

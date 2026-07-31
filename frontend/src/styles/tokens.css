@@ -226,6 +226,15 @@
   --size-widget-w: 380px;
   --size-widget-h: 600px;
 
+  /* The navigation sidebar, docked from lg and as a drawer below it.
+   *
+   * 260px is wide enough for the longest facility name on one line
+   * ("Basseterre Ferry Terminal") without truncation, and narrow enough that at
+   * 1024px it still leaves the conversation a readable measure once the source
+   * panel is an overlay rather than a third column. Both placements read this,
+   * so the docked rail and the drawer cannot drift apart. */
+  --size-sidebar: 260px;
+
   /* Chart heights.
    *
    * ResponsiveContainer needs a parent with a DETERMINATE height — a percentage

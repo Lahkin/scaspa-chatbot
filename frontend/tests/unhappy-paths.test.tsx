@@ -424,8 +424,23 @@ describe('the empty state', () => {
     // A visitor on a pier does not care what it is built from; they care whether
     // they will make the last ferry.
     expect(container.textContent).not.toMatch(/powered by ai|\bAI\b|robot|GPT|LLM/i);
-    expect(container.querySelector('img')).toBeNull();
-    expect(container.querySelector('svg')).toBeNull();
+
+    /*
+     * "No <img> at all" was the original assertion, and it was the right proxy
+     * while the shell had no imagery: any image would have been a mascot.
+     *
+     * The sidebar's SCASPA lockup is now a legitimate one, so the assertion
+     * moved to what it was always actually about — no *illustration*, and
+     * certainly no cartoon assistant. Every image here must be either the brand
+     * mark or decorative, and the brand mark is `aria-hidden` beside its own
+     * visible name.
+     */
+    for (const img of container.querySelectorAll('img')) {
+      const alt = img.getAttribute('alt') ?? '';
+      expect(alt).not.toMatch(/robot|assistant illustration|mascot|bot/i);
+      // Decorative, or the SCASPA mark. Nothing else belongs in this shell.
+      expect(alt === '' || alt === 'SCASPA Assistant').toBe(true);
+    }
   });
 });
 

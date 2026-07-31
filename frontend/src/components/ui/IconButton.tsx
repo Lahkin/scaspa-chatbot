@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '@/lib/cn';
 import { Spinner } from './Spinner';
 
@@ -10,6 +10,17 @@ interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
   variant?: Variant;
   loading?: boolean;
   children: ReactNode;
+  /**
+   * A ref to the underlying button.
+   *
+   * Needed so a drawer can restore focus to the exact control that opened it —
+   * recovering it from `document.activeElement` works until the drawer is
+   * closed by something other than the user, at which point focus lands
+   * somewhere arbitrary. React 19 passes `ref` as an ordinary prop to a function
+   * component, so no `forwardRef` wrapper is required; it just has to be typed
+   * and spread, which `...rest` already does.
+   */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 const VARIANTS: Record<Variant, string> = {

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   PLACEHOLDER — NOT THE SCASPA IDENTITY
+
+   This is a neutral geometric stand-in drawn for this repository. It is NOT
+   the SCASPA seal, it is not traced from it, and it must not be presented as
+   the organisation's mark.
+
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │ TODO(client) — three outstanding items, all blocking the real asset:    │
+   │                                                                          │
+   │  1. VECTOR FILES. The mark as SVG (or EPS/AI), not a PNG lifted from    │
+   │     the website. A raster logo cannot be shown crisply on a retina      │
+   │     phone or scaled for a projector.                                    │
+   │                                                                          │
+   │  2. A REVERSED WHITE VARIANT, for the navy sidebar header and any dark  │
+   │     ground. Recolouring the supplied mark ourselves is not an           │
+   │     acceptable substitute — see `variant="reversed"` in LogoLockup.     │
+   │                                                                          │
+   │  3. WRITTEN PERMISSION to use the identity in this application, and     │
+   │     confirmation of any usage rules that come with it (clear space,     │
+   │     minimum size, prohibited treatments).                               │
+   │                                                                          │
+   │ Until all three land, LogoLockup renders the wordmark and this file is  │
+   │ decorative only. Dropping in the real asset is a one-file change.       │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+   ON THE REAL MARK, for whoever does the swap: it is a circular seal with an
+   aircraft above and a ship below — two gateways in one authority. Circular
+   seals with internal detail turn to mud below about 32px, which is why
+   LogoLockup falls back to a wordmark at small sizes rather than rendering an
+   illegible badge. Keep that behaviour when the asset arrives.
+
+   Colour is hardcoded here rather than tokenised because an SVG file cannot
+   read CSS custom properties from the document when used as an <img> src.
+   `#003f6c` is --color-navy. If the token moves, move this with it.
+  ═══════════════════════════════════════════════════════════════════════════
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"
+     role="img" aria-label="Placeholder mark">
+  <rect width="48" height="48" rx="8" fill="#003f6c"/>
+  <!-- Two chevrons: a nod to sea and air without imitating the seal. -->
+  <path d="M12 20 L24 13 L36 20" fill="none" stroke="#ffffff" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M12 31 L24 24 L36 31" fill="none" stroke="#f5a623" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1803,3 +1803,115 @@ violations** across 12 routes × 2 viewports with all five manual-equivalent
 checks passing. The a11y check needs the backend running with
 `http://localhost:4400` in `ALLOWED_ORIGINS`, since it drives the real chat UI
 against a production build where the mocks are not bundled.
+
+---
+
+## 0022 — A navigation sidebar, a placeholder identity, and the one place chrome may duplicate the knowledge base
+
+**Date:** 2026-07-31
+**Status:** Accepted
+
+A sidebar, a SCASPA lockup and an "About SCASPA" panel for the full-page
+assistant. `WidgetShell` is untouched: it is a 380 × 600 iframe panel and a
+sidebar in it would be most of the conversation.
+
+### The sidebar holds no conversation history
+
+The obvious content for a sidebar like this is a list of past conversations.
+There cannot be one without reversing three deliberate choices at once: the
+backend holds conversations in memory with a sixty-minute TTL, it exposes no
+endpoint to list them, and `docs/privacy.md` tells users that message content is
+never written to their device.
+
+What it navigates instead is the thing users actually get wrong. **"The port" is
+four different places** — a cargo harbour, a cruise pier, a ferry terminal and
+an airport — and a question that names one retrieves far better than one that
+does not. Each facility is a disclosure revealing three starter questions,
+sending through the same path as a suggested chip.
+
+### The hard rule: what `src/lib/scaspa-facts.ts` may contain
+
+**Permitted:** what the organisation is, when it formed, what the four
+facilities are, the published telephone numbers and postal address.
+
+**Forbidden, without exception:** fees, fares, tariffs, rates; schedules,
+sailing times, flight times; opening hours; statistics of any kind.
+
+The boundary is *volatility*, not importance. A fact that changes needs a source
+and a verified date beside it, and the assistant is the only surface that can
+supply both — a figure typed into a TypeScript module drifts silently, cannot be
+corrected by a researcher updating a spreadsheet, and makes the product a second
+source of truth about itself. This whole system exists to have exactly one.
+
+Duplication is permitted at all only because the alternative is worse: "what is
+SCASPA?" answered by retrieval is a slow, cited paragraph for a question that is
+navigation, not a query. So the panel answers the stable question and ends by
+pointing at the assistant for everything else.
+
+`tests/sidebar.test.tsx` enforces the rule rather than trusting it — it strips
+comments and fails on a currency amount, a clock time, an hours/fees/schedule
+word, or any bare number outside an allow-list of the formation year and the
+phone digits. Starter questions are checked too: every one must end in a
+question mark and contain no figure, because a starter question carrying its own
+answer is the same failure wearing a different hat.
+
+### The logo is a documented placeholder
+
+Three client items are outstanding — vector files, a reversed white variant, and
+**written permission to use the identity** — all named in
+`src/assets/scaspa-logo.svg`. Tracing the mark off scaspa.com would put an
+unlicensed identity in front of judges and passengers.
+
+`LogoLockup` is built against the real mark's constraints so the swap is one
+file: it never distorts (width and height from one number), never recolours (the
+reversed variant is a *different file*, not a filter), and **falls back to a
+wordmark below 32px** because the real mark is a circular seal with an aircraft
+above a ship, and internal detail inside a circle turns to mud at that size.
+`variant="reversed"` currently draws no badge at all — recolouring would break
+one rule and putting navy on navy would break another, so the wordmark alone is
+the only honest option until the asset lands.
+
+### Layout: three zones, and the conversation wins
+
+| Viewport | Sidebar | Sources |
+| --- | --- | --- |
+| ≥ 1280 | docked 260px | docked 320px |
+| 1024–1279 | docked 260px | right overlay |
+| 768–1023 | drawer | right overlay |
+| < 768 | drawer | bottom sheet |
+
+`Sheet`'s breakpoint moved from `sm` (640) to `md` (768) so the primitive and
+this table agree about where "narrow" ends; two components disagreeing is how a
+700px tablet gets a side panel the layout was not designed for. No effect on the
+widget, which is 380px and never reached either.
+
+The conversation keeps `max-w-measure` at every width. Extra space becomes
+margin, not measure — a 900px line is harder to read than a 600px one.
+
+### Smaller decisions
+
+**The drawer is not `Sheet`.** `Sheet` anchors bottom-then-right and renders a
+title bar; a navigation drawer sliding in from the right over the conversation
+reads as a panel *about* the conversation. `SidebarDrawer` reproduces everything
+`Sheet` gets right — focus trap, Escape, scroll lock, focus restoration — and
+restores focus to **the hamburger passed as a ref**, not to
+`document.activeElement`, which is whatever happens to be focused if the drawer
+closes for any reason other than the user.
+
+**The skip link is new, not updated.** `/chat` is self-chromed, so the root
+layout's skip link never rendered there — the route had none at all. It now has
+one, landing past the sidebar on the conversation.
+
+**A `<Link>` was removed after it broke ten tests.** A privacy link in the
+footer looked free. A TanStack `<Link>` reads the router from context, so it made
+`FullPageShell` un-renderable without one and broke ten existing shell tests that
+had every right to expect otherwise — and it was not asked for. The sidebar is
+now router-free and takes callbacks for everything that navigates.
+
+**One mascot test was tightened rather than deleted.** `unhappy-paths` asserted
+"no `<img>` anywhere" as a proxy for "no cartoon AI assistant". That was the
+right proxy while the shell had no imagery; the lockup is a legitimate image, so
+the assertion moved to what it was always about — no illustration, and every
+image either decorative or the brand mark.
+
+**No new dependency was added.**
