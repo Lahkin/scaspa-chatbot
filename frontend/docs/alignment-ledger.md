@@ -12,8 +12,22 @@
 > add them to.
 
 Walked row by row against a **locally running backend** on 2026-07-30, with the
-index built. Re-walked on the same day against a real `OPENAI_API_KEY` and a real index — see "Standing limitation" at the foot. Automated rows are re-checkable with
-`npm run check:integration` (91 assertions).
+index built. Re-walked the same day against a real `OPENAI_API_KEY` and a real
+index, and again on 2026-07-31 in three real browsers — see "Standing
+limitation" at the foot.
+
+Re-checkable with, in order:
+
+```bash
+npm run check:integration   # 126 assertions — the contract, against a live backend
+npm run check:responsive    # 135 checks   — 12 routes × 5 widths
+npm run check:a11y          #   0 axe violations, 12 routes × 2 viewports
+npm run check:browsers      #  49 checks   — Chromium, WebKit, Firefox, iPhone 13
+npm run check:slow          #  Slow 3G, first content and layout shift
+```
+
+The last four need Playwright and `check:a11y` needs the backend on an allowed
+origin — `frontend/scripts/preflight-frontend.md` has the exact commands.
 
 Legend: ✅ verified · ⚠️ deviation, documented · ⏭️ cannot verify here, and why.
 
@@ -86,16 +100,20 @@ Legend: ✅ verified · ⚠️ deviation, documented · ⏭️ cannot verify her
 
 ## Resilience
 
-| #   | Row                                         | Status | Evidence                                                                    |
-| --- | ------------------------------------------- | ------ | --------------------------------------------------------------------------- |
-| 40  | Usable on Slow 3G                           | ✅     | first content 5.3s (`/`) and 6.2s (`/chat`), CLS 0.0000, no overflow        |
-| 41  | 429 shows a countdown and blocks sending    | ✅     | tested at the composer and at the hook                                      |
-| 42  | A 429 is never auto-retried                 | ✅     | mutation-tested                                                             |
-| 43  | A double tap fires one request              | ✅     | mutation-tested — the disabled button alone fires two                       |
-| 44  | A thrown render never leaves a white screen | ✅     | boundary per route, recovery resets the chat                                |
-| 45  | Offline is detected and stated honestly     | ✅     | verified with mocks off, both `navigator.onLine` false and a rejected fetch |
-| 46  | The stream falls back when it stalls        | ✅     | measured: recovered in 3.35s with the full answer                           |
-| 47  | No horizontal overflow at 320–1440px        | ✅     | `npm run check:responsive`                                                  |
+| #   | Row                                               | Status | Evidence                                                                                             |
+| --- | ------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| 40  | Usable on Slow 3G                                 | ✅     | re-measured 2026-07-31: first content 5.40s (`/`) and 6.41s (`/chat`), CLS 0.0000, no overflow       |
+| 41  | 429 shows a countdown and blocks sending          | ✅     | tested at the composer and at the hook                                                               |
+| 42  | A 429 is never auto-retried                       | ✅     | mutation-tested                                                                                      |
+| 43  | A double tap fires one request                    | ✅     | mutation-tested — the disabled button alone fires two                                                |
+| 44  | A thrown render never leaves a white screen       | ✅     | boundary per route, recovery resets the chat                                                         |
+| 45  | Offline is detected and stated honestly           | ✅     | verified with mocks off, both `navigator.onLine` false and a rejected fetch                          |
+| 46  | The stream falls back when it stalls              | ✅     | measured: recovered in 3.35s with the full answer                                                    |
+| 47  | No horizontal overflow at 320–1440px              | ✅     | `npm run check:responsive` — 135 checks, 12 routes × 5 widths                                        |
+| 48  | Every interactive control clears 44×44            | ✅     | same run. Found four undersized targets, incl. two that predated this work                           |
+| 49  | No axe violation on any route                     | ✅     | `npm run check:a11y` — 0 across 12 routes × 2 viewports, 5 manual checks                             |
+| 50  | It works in WebKit and Firefox, not just Chromium | ✅     | `npm run check:browsers` — 49 checks; **all three engines streamed a real model answer**, ~193 chars |
+| 51  | The embed works in all three engines              | ✅     | same run: one launcher, opens, mic permission passed to the iframe, Escape closes, focus returns     |
 
 ---
 
@@ -123,8 +141,16 @@ Stated rather than quietly ticked.
   countdown, ticked 30 → 28, stayed disabled, the composer stayed typable, and no
   code or status leaked. It also found #5 — the countdown was a guess, because
   `Retry-After` is not exposed cross-origin.
+- ~~**Only Chromium had ever run the app.**~~ **Now closed.** WebKit and Firefox
+  both render, both stream a real model answer, and both run the embed correctly
+  — 49 checks in `npm run check:browsers`. Until 2026-07-31 none of the browser
+  checks had ever been executed at all: Playwright was not installed, and every
+  one of them skips loudly rather than passing vacuously, so the whole suite had
+  been sitting green-by-absence. Running them found six real defects — see
+  `docs/decisions.md` 0021.
 - **A physical device.** Slow 3G is Chromium's emulation and the touch behaviour
   was checked on an emulated iPhone 13. No real phone, and no real venue wifi.
+  This is now the only unverified surface left besides voice.
 
 ## Standing limitation — lifted
 
@@ -147,5 +173,12 @@ Two things only that first real call could have found, both now fixed:
   so an explicit filter silently did nothing. The unit test passed either way —
   the fake model sends no category, and the real one always does.
 
+A third thing only a browser could find, added 2026-07-31 when the browser
+checks were run for the first time: **every operations route was rendering
+inside the marketing chrome**, giving each page two `<main>` landmarks and
+capping a 1440px console at `max-w-3xl`. jsdom has no layout, so no unit test
+could see it, and it looks correct in the source.
+
 What remains unverified: **voice against a real provider**, and the deployed
-build on a physical device over real venue wifi.
+build on a physical device over real venue wifi. Everything else in this ledger
+has now been measured in a real browser — three of them.
