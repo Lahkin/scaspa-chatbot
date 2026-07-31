@@ -119,7 +119,21 @@ export function ConsoleShell({
               {actions ? <div className="flex shrink-0 gap-2">{actions}</div> : null}
             </div>
 
-            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            {/*
+              `minmax(0,1fr)` at **every** width, not only at `xl`.
+
+              A single-column grid sizes its implicit column to `auto`, which is
+              max-content — so the 800px-min table inside pushed the column, the
+              grid and the document wider than a 320px screen, and the wrapper's
+              `overflow-x-auto` never engaged because there was nothing narrower
+              to overflow. `min-w-0` on the child is not enough; the *column* has
+              to be allowed to shrink.
+
+              Caught by check:responsive, and only once the backend was reachable
+              from the check's origin — until then the tables were empty and there
+              was nothing wide to overflow with.
+            */}
+            <div className="mt-5 grid gap-5 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-5">{children}</div>
               {aside ? <div className="min-w-0 space-y-5">{aside}</div> : null}
             </div>

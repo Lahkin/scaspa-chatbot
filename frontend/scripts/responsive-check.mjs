@@ -95,6 +95,46 @@ for (const route of ROUTES) {
       const doc = document.documentElement;
       const viewport = window.innerWidth;
 
+      /*
+       * Sticking out past the viewport is not the same as widening the page.
+       *
+       * A wide table inside `overflow-x-auto` sticks out on every measurement —
+       * that is what a scroll container is for — so reporting the widest
+       * protruding element named the table on a page whose real culprit was an
+       * invisible 1x1 `sr-only` span that had escaped the very same container.
+       * Hours went into the table. So work out what is actually clipped.
+       *
+       * The rule (CSS 2.1 §11.1.1): an overflow container clips an in-flow
+       * descendant, but clips an absolutely positioned one only when it is also
+       * that descendant's containing block, or sits below it. A `position:
+       * absolute` element whose containing block is an ancestor of the scroller
+       * passes straight through the clip — which is why `sr-only` inside an
+       * unpositioned scroller widens the document.
+       */
+      const clipsIt = (element) => {
+        const position = getComputedStyle(element).position;
+        // Approximation: a fixed element escapes scrollers, and it also does not
+        // extend the scrollable area, so it is not our concern either way.
+        if (position === 'fixed') return true;
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+          const style = getComputedStyle(parent);
+          const clips = style.overflowX !== 'visible';
+          if (position !== 'absolute') {
+            if (clips) return true;
+            continue;
+          }
+          const isContainingBlock =
+            style.position !== 'static' ||
+            style.transform !== 'none' ||
+            style.filter !== 'none' ||
+            style.contain.includes('paint') ||
+            style.contain.includes('layout');
+          // Above the containing block nothing can clip it, so stop here.
+          if (isContainingBlock) return clips;
+        }
+        return false;
+      };
+
       // Every element that sticks out past the viewport, widest first.
       const offenders = [];
       for (const element of document.querySelectorAll('*')) {
@@ -106,12 +146,32 @@ for (const route of ROUTES) {
             cls: (element.getAttribute('class') ?? '').slice(0, 70),
             right: Math.round(rect.right),
             left: Math.round(rect.left),
+            clipped: clipsIt(element),
           });
         }
       }
       offenders.sort((a, b) => b.right - a.right);
 
-      const composer = document.querySelector('textarea');
+      // Report the unclipped ones — the elements that genuinely widen the
+      // document. Fall back to the raw list rather than printing nothing, since
+      // "it overflows and no element is to blame" is itself worth seeing.
+      const unclipped = offenders.filter((o) => !o.clipped);
+      const blamed = unclipped.length > 0 ? unclipped : offenders;
+
+      /*
+       * The composer check is for the CHAT surfaces only.
+       *
+       * It exists for one failure: a `100vh` column putting the chat composer
+       * behind iOS Safari's toolbar, where the user cannot type. That is a
+       * property of a fixed-height app shell.
+       *
+       * A `<textarea>` on an ordinary scrolling document — the ticket form on
+       * /support — is *supposed* to be below the fold; you scroll to it.
+       * Asserting otherwise reported a failure on a page that was working
+       * correctly, which is how a check teaches people to ignore it.
+       */
+      const isAppShell = document.querySelector('.h-dvh, .h-widget') !== null;
+      const composer = isAppShell ? document.querySelector('textarea') : null;
       const composerBox = composer?.getBoundingClientRect() ?? null;
 
       // Touch targets. Links that are inline runs of text inside a paragraph are
@@ -182,15 +242,38 @@ for (const route of ROUTES) {
       }
 
       return {
+        // Console routes with no rows are a page with nothing wide on it, so
+        // every width check passes for the wrong reason. Reported below.
+        rows: document.querySelectorAll('tbody tr').length,
         scrollWidth: doc.scrollWidth,
         clientWidth: doc.clientWidth,
         viewport,
-        offenders: offenders.slice(0, 4),
+        offenders: blamed.slice(0, 4),
         composerBottom: composerBox ? Math.round(composerBox.bottom) : null,
         innerHeight: window.innerHeight,
         small,
       };
     });
+
+    /*
+     * A data route with no data measures nothing.
+     *
+     * The console's overflow bug survived every earlier run of this check
+     * because the backend rejected this preview server's origin, so the tables
+     * rendered empty and there was nothing wide to overflow with. Four green
+     * ticks on a page that was broken. The check must say when it had no data
+     * rather than pass quietly, in the same spirit as the jsdom note at the top
+     * of this file: a check that measures nothing is worse than no check.
+     */
+    if (route.startsWith('/ops/')) {
+      report(
+        result.rows > 0,
+        `${width}px  console table has rows`,
+        result.rows > 0
+          ? ''
+          : `0 rows — start the backend with OPS_DATA_SOURCE=fixture and ${base} in ALLOWED_ORIGINS`
+      );
+    }
 
     const overflows = result.scrollWidth > result.clientWidth + 0.5;
     report(

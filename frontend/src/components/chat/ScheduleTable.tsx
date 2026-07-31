@@ -241,7 +241,9 @@ function ScrollRegion({ label, children }: { label: string; children: ReactNode 
         {...(scrollable
           ? { role: 'region' as const, 'aria-label': `${label} (scrollable)`, tabIndex: 0 }
           : {})}
-        className="overflow-x-auto rounded-md border border-border"
+        // `relative`: the caller supplies `children`, so this scroller can hold
+        // `sr-only` content it does not control. See console/DataTable.tsx.
+        className="relative overflow-x-auto rounded-md border border-border"
       >
         {children}
       </div>

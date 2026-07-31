@@ -37,7 +37,23 @@ export function DataTable({
       role="region"
       aria-label={`${caption} (scrolls sideways)`}
       tabIndex={0}
-      className="overflow-x-auto rounded-lg border border-ops-outline-variant bg-ops-surface"
+      /*
+       * `relative` is load-bearing, not decoration.
+       *
+       * `sr-only` is `position: absolute`, and an overflow container does NOT
+       * clip an absolutely positioned descendant whose containing block lives
+       * outside it (CSS 2.1 §11.1.1). With no positioned ancestor the containing
+       * block is the initial one, so the screen-reader text inside these rows
+       * kept its static position ~720px into an 800px table and stuck out of the
+       * document — while the table itself, which everyone looks at first, was
+       * correctly clipped. A 1x1 invisible span widened the page to 723px at a
+       * 320px viewport.
+       *
+       * `relative` makes this container the containing block, so the clip
+       * applies. Any horizontally scrolling wrapper that may hold `sr-only`
+       * content needs it.
+       */
+      className="relative overflow-x-auto rounded-lg border border-ops-outline-variant bg-ops-surface"
     >
       <table className={`w-full border-collapse text-small ${minWidth}`}>
         <caption className="sr-only">{caption}</caption>

@@ -30,7 +30,9 @@ export function TariffTable({ rows }: { rows: TariffRow[] }) {
       role="region"
       aria-label="Published tariffs (scrolls sideways)"
       tabIndex={0}
-      className="overflow-x-auto rounded-lg border border-ops-outline-variant"
+      // `relative` so the `sr-only` caption is clipped with the table rather
+      // than escaping it. See the note in console/DataTable.tsx.
+      className="relative overflow-x-auto rounded-lg border border-ops-outline-variant"
     >
       <table className="w-full min-w-140 border-collapse text-small">
         <caption className="sr-only">

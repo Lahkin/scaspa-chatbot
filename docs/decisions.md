@@ -2000,3 +2000,57 @@ than by retrying until green, and raised to five seconds with the reason
 recorded: the number was measuring Vite's cold transform of a dev-only module,
 not anything a user experiences. A flaky assertion is worse than a slow one.
 
+## 0024 — A 1x1 invisible span was widening the console to 723px
+
+**Date:** 2026-07-31
+**Status:** Accepted
+
+`check:responsive` failed four ways after the cards landed: `/ops/vessels` and
+`/ops/flights` scrolled sideways at 320px and 390px. The failure was new but the
+bug was not — it had been there since the console shipped, and only became
+*visible* when port `4319` was added to `ALLOWED_ORIGINS` and the tables finally
+rendered with rows in the check.
+
+### What it was
+
+`sr-only` is `position: absolute`. An overflow container clips an absolutely
+positioned descendant only when it is also that descendant's containing block,
+or sits below it (CSS 2.1 §11.1.1) — an abspos element whose containing block is
+an *ancestor* of the scroller passes straight through the clip.
+
+`DataTable`'s scroll wrapper had no `position`, so the containing block of every
+`sr-only` inside it was the initial one. The screen-reader prefix inside each
+`StatusChip` kept its static position roughly 700px into an 800px-wide table and
+stuck out of the document. The table itself was clipped correctly. A 1x1 span
+nobody can see widened a 320px page to 723px.
+
+`relative` on the scroller fixes it, and is now on all four wrappers that can
+hold `sr-only` content: `console/DataTable`, `TariffTable`, `QuoteResult` and
+chat's `ScheduleTable` — the last because its rows come from a caller, so it
+cannot know what it contains.
+
+### The change that matters more than the fix
+
+The check reported the widest *protruding* element, and named the table. A wide
+table inside `overflow-x-auto` protrudes on every correct measurement — that is
+what a scroll container is for — so the report pointed at the one element that
+was working, and three separate hypotheses were spent on it: the grid's implicit
+`auto` column, `min-w-0` on the child, and whether `max-w-360` compiled at all.
+None were the cause. (The grid fix in `ConsoleShell` is kept: a single-column
+grid really does size its implicit column to `max-content`, so it was a genuine
+latent bug, just not this one.)
+
+`responsive-check.mjs` now works out whether each offender is actually clipped,
+following the containing-block rule above, and blames only the elements that
+genuinely widen the document. It falls back to the raw list rather than printing
+nothing, because "it overflows and no element is to blame" is worth seeing too.
+Re-running the same failure afterwards named it immediately:
+
+```
+FAIL  320px  no horizontal overflow — scrollWidth 723 > clientWidth 320;
+      widest: span.sr-only@722..723, span.sr-only@722..723
+```
+
+**Alternative considered:** redefining the `sr-only` utility itself. Rejected —
+containment is a property of the ancestor, not the element, so there is no
+change to `sr-only` that could fix this. The scroller has to opt in.

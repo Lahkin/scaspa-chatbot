@@ -35,7 +35,9 @@ export function QuoteResult({ quote }: { quote: TariffQuote }) {
           Nothing was priced from those details. Add a quantity or a length and try again.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
+        // `relative`: see the note in console/DataTable.tsx — without it the
+        // `sr-only` caption escapes this scroller and widens the document.
+        <div className="relative mt-3 overflow-x-auto">
           <table className="w-full min-w-120 border-collapse text-small">
             <caption className="sr-only">
               Each line shows the published rate, how many units it was applied to, and the

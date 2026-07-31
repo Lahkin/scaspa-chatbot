@@ -340,6 +340,39 @@ question, both voice endpoints, and that rate limiting is active.
 for someone nervous and in front of an audience: numbered steps, exact commands,
 no prose.
 
+### Browser checks
+
+`npm test` runs in jsdom, which does no layout: "nothing overflows at 320px" is
+not a claim it can make. These drive a real headless browser against the
+production build, and are separate from `npm test` because CI has no browser.
+
+```bash
+cd frontend
+npm i -D --no-save playwright@1.56.1 && npx playwright install chromium webkit firefox
+npm run build
+npm run check:responsive   # overflow, touch targets, the 100dvh composer bug
+npm run check:a11y         # axe, plus the manual-equivalent live-region checks
+npm run check:browsers     # WebKit and Firefox, and the embed script in a frame
+npm run check:slow         # Slow 3G: first content, layout shift
+```
+
+Playwright is deliberately not a saved dependency — `npm ci` should not download
+300MB of browsers. Note that `--no-save` packages are pruned by any later
+`npm install`, so re-run the first line if the check reports it is missing.
+
+**The `/ops/*` routes need a backend that allows the check's origin**, or the
+tables render empty and the width checks pass on a page with nothing on it. That
+is not hypothetical: it hid a real overflow bug until the origin was added
+([decision 0024](docs/decisions.md)). `check:responsive` now fails loudly with
+the exact variables to set instead of passing quietly.
+
+```bash
+cd backend
+OPS_DATA_SOURCE=fixture \
+ALLOWED_ORIGINS="http://localhost:5173,http://localhost:4319" \
+  uv run uvicorn app.main:app --port 8000
+```
+
 ---
 
 ## Architecture
