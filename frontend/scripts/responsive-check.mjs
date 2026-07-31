@@ -43,7 +43,11 @@ async function requirePlaywright() {
 const { chromium } = await requirePlaywright();
 
 const WIDTHS = [320, 390, 768, 1024, 1440];
-const ROUTES = ['/chat', '/widget'];
+// The console routes are here because they are the ones most likely to break
+// this: a 256px fixed-width rail and a seven-column table are exactly what
+// pushes a 320px document sideways. The rail is `hidden lg:block` and the table
+// scrolls inside its own container; this is what proves both still hold.
+const ROUTES = ['/chat', '/widget', '/ops/vessels', '/ops/flights', '/tariffs'];
 const HEIGHT = 780;
 
 const server = await preview({ preview: { port: 4319, strictPort: true } });

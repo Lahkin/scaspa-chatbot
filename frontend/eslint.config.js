@@ -67,6 +67,25 @@ export default tseslint.config(
 
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
       'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
+
+      /*
+       * A scroll container must be keyboard reachable.
+       *
+       * The rule's default allows `tabIndex` only on a `tabpanel`, which would
+       * forbid the one pattern WCAG actually asks for here: a region that
+       * scrolls horizontally has to be focusable, or a keyboard user cannot
+       * scroll it at all and the content past the fold is simply unreachable
+       * (SC 2.1.1). A wide arrivals table on a phone is exactly that case.
+       *
+       * `region` is added rather than the components carrying a disable
+       * comment, so the requirement stays visible in one place and the escape
+       * hatch does not spread. A focusable `region` still needs an accessible
+       * name, which `jsx-a11y/aria-props` and the recommended set enforce.
+       */
+      'jsx-a11y/no-noninteractive-tabindex': [
+        'error',
+        { tags: [], roles: ['tabpanel', 'region'], allowExpressionValues: true },
+      ],
     },
   },
   // CLAUDE.md absolute rules, enforced by the linter rather than by review.

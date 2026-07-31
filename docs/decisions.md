@@ -1659,8 +1659,100 @@ no check: it is actively misleading.
 
 ### What was not built
 
-The desktop operations console (`/ops/*`, 256px rail, 1440px tables), the
-interactive map panels, the activity feed, PDF and CSV export, and the "email me
-this quote" action. All are additive on top of the contract above and none of
-them raise a new question about what the product may claim. The data layer they
-would need exists.
+PDF and CSV export, and the "email me this quote" action. All are additive on
+top of the contract above and none raise a new question about what the product
+may claim. The data layer they would need exists.
+
+The desktop operations console was also outstanding at the time this was
+written. It landed next — see 0021.
+
+---
+
+## 0021 — The desktop operations console
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+`/ops/vessels` and `/ops/flights`, on a shared shell: 64px navy app bar, 256px
+rail, footer. Both read the endpoints 0020 added, so nothing new was needed on
+the backend.
+
+### Six nav links were dropped rather than stubbed
+
+The rail lists Chat History, Saved Reports and Live Map; the footer lists Terms
+of Service, Cargo Tracking and Aviation Safety. Nothing exists behind any of
+them, and two are worse than merely empty:
+
+- **Cargo Tracking** is the `personal_record` refusal wearing a nav label.
+  Someone's container is precisely what this assistant must not appear able to
+  look up, and a link promising it is read long before the refusal that follows.
+- **Chat History** would need server-side retrieval of past conversations. There
+  is none by design — history is per-process, capped, expiring, and holds
+  nothing that identifies a person to retrieve it *for*.
+
+A dead nav link is a promise made in the furniture and paid for with a click and
+a dead end. `tests/console.test.tsx` asserts every internal `href` in the shell
+resolves to a route that exists, so the list cannot rot back.
+
+### The activity feed restates records instead of inventing events
+
+The design's feed reads "successfully docked at Pier 4", "Berth assignment
+updated for X", "Security clearance pending for Y". Only the first is derivable
+from anything this system holds; the other two are events, and there is no event
+stream, no audit log and no record that either happened.
+
+`features/ops/activity.ts` derives entries from arrival records and nothing
+else, as a pure function taking `now` so the relative times are testable. It
+says "arrived", never "docked" — docking is an operational state this system
+cannot see, and arrival is what the record actually says. The panel states in
+its own footer that it is not an operations log.
+
+Relative times coarsen past a day: "in 3 days", not "in 74 hours". Precision the
+source cannot support reads as confidence it has not earned.
+
+### The two map panels say there is no map
+
+"Port Zante Traffic — real-time vessel proximity and AIS data" with a **Live
+AIS** badge is the most confident lie available on this screen. Both map panels
+render as a statement that no positioning feed is connected, plus the phone
+number. A panel rather than nothing, because the absence *is* the information:
+someone looking for a vessel's position should learn here that this tool does
+not have it, rather than concluding the map failed to load.
+
+### Smaller decisions
+
+**Previous/next, not numbered pages.** Numbered pages need a stable ordering to
+mean anything, and an arrivals board reorders as ETAs change — "page 3" is a
+different set of vessels five minutes later. The range label ("Showing 11–20 of
+42") makes position explicit without implying a bookmarkable page.
+
+**`/ops` redirects rather than showing a dashboard.** The design's breadcrumb
+implies a landing page above the sections. There is nothing to put on one: the
+stat tiles already summarise each source on its own screen, and an overview
+repeating them is a click between the user and the data. The breadcrumb says
+"Console", not "Dashboard", because it links nowhere and should not look as
+though it does.
+
+**An ESLint rule was widened, deliberately.** A horizontally scrolling table
+container must be keyboard focusable or the columns past the fold are
+unreachable (WCAG SC 2.1.1). `jsx-a11y/no-noninteractive-tabindex` allows
+`tabIndex` only on a `tabpanel` by default, which forbids the pattern that fixes
+it. `region` was added to the rule's allowed roles in one place, with the reason
+written there, rather than letting disable comments spread through the
+components.
+
+**`useNow()` exists because `Date.now()` during render is impure** — React may
+render twice and get two answers. Making it a hook also fixed a real bug the
+lint rule only hinted at: a timestamp read once on mount freezes "12 minutes
+ago" for as long as the tab is open, and a stale relative time misleads in a way
+a stale absolute one does not.
+
+### Verification gap, stated
+
+`npm run check:responsive` measures real layout at 320–1440px and is where a
+256px rail and a seven-column table would actually be caught. **It could not be
+run** — Playwright is not installed in this environment. The console routes are
+now in its `ROUTES` list for when it can be, and two jsdom tests pin the
+mechanisms it would be measuring: the rail carries `hidden lg:block`, and the
+table's scroll container carries `overflow-x-auto` and is focusable. That is
+weaker than measuring layout and is not a substitute for it.
