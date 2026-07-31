@@ -1747,12 +1747,59 @@ lint rule only hinted at: a timestamp read once on mount freezes "12 minutes
 ago" for as long as the tab is open, and a stale relative time misleads in a way
 a stale absolute one does not.
 
-### Verification gap, stated
+### The browser checks were finally run, and found six real bugs
 
-`npm run check:responsive` measures real layout at 320–1440px and is where a
-256px rail and a seven-column table would actually be caught. **It could not be
-run** — Playwright is not installed in this environment. The console routes are
-now in its `ROUTES` list for when it can be, and two jsdom tests pin the
-mechanisms it would be measuring: the rail carries `hidden lg:block`, and the
-table's scroll container carries `overflow-x-auto` and is focusable. That is
-weaker than measuring layout and is not a substitute for it.
+`check:responsive` and `check:a11y` had never been run in this project —
+Playwright was not installed, and both skip loudly rather than pass vacuously.
+Installing it (`npm i -D --no-save playwright@1.56.1 @axe-core/playwright`, kept
+out of `package.json` on purpose so `npm ci` does not fetch 300MB) turned up
+six defects that every jsdom test, every lint rule and every review had missed.
+
+**Four were mine.**
+
+1. **Every operations route rendered inside the marketing chrome.** They were
+   not added to `SELF_CHROMED_ROUTES`, so each page had **two `<main>`
+   landmarks** — the exact defect the comment above that constant warns about —
+   and a console designed for 1440px was capped at the marketing column's
+   `max-w-3xl`. Invisible in jsdom, which has no layout, and invisible in review
+   because nothing about `/ops/vessels` looks like it needs registering. The
+   list now takes prefixes, so `/ops/*` needs no upkeep.
+2. **Two scroll containers were not keyboard reachable** — the tariff table and
+   the metric row. The same `scrollable-region-focusable` failure the console's
+   `DataTable` had already been built to avoid; getting it right once did not
+   get it right everywhere. The metric row was fixed by *removing* the scroll
+   rather than making it focusable: three short stats wrap onto two lines at
+   320px, and no scroll container is better than an accessible one.
+3. **The console's brand link had no accessible name below `sm`.** Its label is
+   `hidden sm:inline`, leaving an `aria-hidden` anchor glyph and nothing else —
+   axe `link-name`, serious. A screen-reader user on a phone got "link" and no
+   idea where it went.
+4. **Undersized touch targets**: the brand link at 20×24, the tariff "All" chip
+   at 42 wide.
+
+**Two were pre-existing, and had been for the life of the project.** The root
+nav's four links measured 20px tall on `/`, `/about` and `/privacy`. They were
+never caught because those routes were never in either check's `ROUTES` list —
+only `/chat` and `/widget` were. Both lists now cover every reachable route,
+which is the actual fix; the sizes were the symptom.
+
+Two narrow exemptions were added to the responsive checker, both because it was
+measuring the wrong element rather than because the code was wrong:
+
+- **A checkbox or radio inside a `<label>` is measured on the label.** Clicking
+  the label activates the control — plain HTML — so the label is the target, and
+  WCAG 2.5.8 measures the region that accepts the pointer action. A native radio
+  is ~13px and cannot sensibly be made 44px. Narrow: only `input`, only with a
+  wrapping label, only when the label itself clears the threshold.
+- **A visually hidden control is not a pointer target.** The skip link is
+  clipped to 1×1 until focused, and is reached by Tab, never by a finger.
+  Matched on the clip declaration rather than a class name — and on *both*
+  spellings, since Tailwind v4 emits `clip-path: inset(50%)` where the classic
+  recipe emits `clip: rect(0,0,0,0)`. Checking one is how the exemption silently
+  stops working on an upgrade; the first attempt did exactly that.
+
+Final state: **135 responsive checks** across 12 routes × 5 widths, and **0 axe
+violations** across 12 routes × 2 viewports with all five manual-equivalent
+checks passing. The a11y check needs the backend running with
+`http://localhost:4400` in `ALLOWED_ORIGINS`, since it drives the real chat UI
+against a production build where the mocks are not bundled.

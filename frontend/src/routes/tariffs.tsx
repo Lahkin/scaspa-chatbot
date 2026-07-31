@@ -38,10 +38,12 @@ function TariffsRoute() {
             type="button"
             aria-pressed={category === value}
             onClick={() => setCategory(value as TariffCategory | '')}
+            // `min-w-touch` as well as `min-h-touch`: the "All" chip is short
+            // enough that padding alone left it 42px wide.
             className={
               category === value
-                ? 'min-h-touch rounded-sm bg-ops-navy px-3 text-small font-semibold text-ink-inverse'
-                : 'min-h-touch rounded-sm border border-ops-outline px-3 text-small font-medium text-ops-ink capitalize'
+                ? 'min-h-touch min-w-touch rounded-sm bg-ops-navy px-3 text-small font-semibold text-ink-inverse'
+                : 'min-h-touch min-w-touch rounded-sm border border-ops-outline px-3 text-small font-medium text-ops-ink capitalize'
             }
           >
             {value || 'All'}
@@ -115,9 +117,12 @@ function FeeCalculator() {
           <legend className="text-small font-medium text-ops-ink">Container size</legend>
           <div className="mt-1 flex gap-2">
             {(['20ft', '40ft'] as const).map((size) => (
+              // The label is the target: clicking it activates the radio, so it
+              // is what has to clear 44px — a native radio is ~13px and cannot
+              // be made bigger sensibly. See the note in responsive-check.mjs.
               <label
                 key={size}
-                className="inline-flex min-h-touch cursor-pointer items-center gap-2 rounded-sm border border-ops-outline px-3 text-small text-ops-ink"
+                className="inline-flex min-h-touch min-w-touch cursor-pointer items-center justify-center gap-2 rounded-sm border border-ops-outline px-3 text-small text-ops-ink"
               >
                 <input
                   type="radio"

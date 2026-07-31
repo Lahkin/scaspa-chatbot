@@ -5,7 +5,7 @@ import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
 import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
 import { Pagination } from '@/components/ops/console/Pagination';
 import { AdvisoryPanel, GatePanel } from '@/components/ops/console/SidePanels';
-import { MetricTile } from '@/components/ops/MetricTile';
+import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState } from '@/components/ops/OpsPage';
 import { SourceAge, SourceNotice } from '@/components/ops/SourceNotice';
 import { FlightStatusChip } from '@/components/ops/StatusChip';
@@ -59,7 +59,7 @@ function OpsFlightsRoute() {
         </>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <MetricRow>
         <MetricTile label="Flights" value={data?.metrics.total_flights ?? null} />
         <MetricTile label="On time" value={data?.metrics.on_time_percent ?? null} suffix="%" />
         <MetricTile
@@ -67,7 +67,7 @@ function OpsFlightsRoute() {
           value={data?.metrics.gates_active ?? null}
           suffix={data?.metrics.gates_total ? `/ ${data.metrics.gates_total}` : ''}
         />
-      </div>
+      </MetricRow>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div role="radiogroup" aria-label="Direction" className="flex gap-2">

@@ -47,7 +47,27 @@ const WIDTHS = [320, 390, 768, 1024, 1440];
 // this: a 256px fixed-width rail and a seven-column table are exactly what
 // pushes a 320px document sideways. The rail is `hidden lg:block` and the table
 // scrolls inside its own container; this is what proves both still hold.
-const ROUTES = ['/chat', '/widget', '/ops/vessels', '/ops/flights', '/tariffs'];
+// Every route a user can reach.
+//
+// The console routes matter most — a 256px fixed rail and a seven-column table
+// are what push a 320px document sideways — but the marketing routes are here
+// because they were *not*, and that silence hid 20px-tall nav links on three
+// public pages for the life of the project. An unchecked route is an unverified
+// one.
+const ROUTES = [
+  '/',
+  '/about',
+  '/privacy',
+  '/chat',
+  '/widget',
+  '/vessels',
+  '/flights',
+  '/tariffs',
+  '/support',
+  '/settings',
+  '/ops/vessels',
+  '/ops/flights',
+];
 const HEIGHT = 780;
 
 const server = await preview({ preview: { port: 4319, strictPort: true } });
@@ -105,6 +125,49 @@ for (const route of ROUTES) {
         if (style.visibility === 'hidden' || style.display === 'none') continue;
         const rect = element.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) continue;
+
+        /*
+         * A checkbox or radio inside a <label> is measured on the label.
+         *
+         * Clicking anywhere in a wrapping label activates the control — that is
+         * plain HTML, not a trick — so the label *is* the target, and WCAG 2.5.8
+         * measures the region that accepts the pointer action. A native radio is
+         * ~13px and the browser will not let it be otherwise; the accessible
+         * answer is a large label, not a 44px radio, which no design has ever
+         * wanted.
+         *
+         * Narrow on purpose: only `input`, only when a wrapping label exists,
+         * and only when that label itself clears the threshold. An unlabelled
+         * 13px checkbox is still a failure and still reported.
+         */
+        if (element.tagName === 'INPUT') {
+          const label = element.closest('label');
+          if (label) {
+            const labelRect = label.getBoundingClientRect();
+            if (labelRect.width >= 43.5 && labelRect.height >= 43.5) continue;
+          }
+        }
+
+        /*
+         * A visually hidden control is not a pointer target.
+         *
+         * The skip link is `sr-only` — clipped to 1x1 — until it receives
+         * keyboard focus, at which point it becomes a normal sized control. It
+         * is reached by Tab and never by a finger, so measuring its hidden state
+         * reports a failure that cannot happen.
+         *
+         * Matched on the clipping declaration rather than on a class name, so it
+         * recognises the visually-hidden recipe however it was written — and
+         * both spellings of it, since Tailwind v4 emits `clip-path: inset(50%)`
+         * where v3 and the classic recipe emit `clip: rect(0,0,0,0)`. Checking
+         * only one is how this exemption silently stops working on an upgrade.
+         *
+         * An element that is merely *small* is not exempt: the clip and the size
+         * must both hold.
+         */
+        const clipped =
+          style.clip === 'rect(0px, 0px, 0px, 0px)' || style.clipPath === 'inset(50%)';
+        if (clipped && rect.width <= 2 && rect.height <= 2) continue;
         if (rect.width < 43.5 || rect.height < 43.5) {
           small.push({
             tag: element.tagName.toLowerCase(),

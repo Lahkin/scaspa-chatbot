@@ -25,10 +25,12 @@ export function MetricTile({
 
   return (
     <div
-      className={cn(
-        'min-w-40 shrink-0 rounded-lg border border-ops-outline-variant',
-        'bg-ops-surface-low p-4'
-      )}
+      // No `min-w`, no `shrink-0`: the tile takes the width its container gives
+      // it. Those two turned the row into a horizontal scroller on a phone, and
+      // a scroll container that is not focusable is unreachable by keyboard
+      // (axe `scrollable-region-focusable`). Wrapping is both simpler and better
+      // than a focusable scroller for three short stats — see `MetricRow`.
+      className={cn('rounded-lg border border-ops-outline-variant', 'bg-ops-surface-low p-4')}
     >
       <p className="text-caption font-medium tracking-wide text-ops-ink-variant uppercase">
         {label}
@@ -52,4 +54,21 @@ function formatValue(value: number): string {
   // A percentage arrives as 94.8 and must not become "95". A count arrives as
   // 12450 and reads better grouped.
   return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(1);
+}
+
+/**
+ * The row of stat tiles.
+ *
+ * The design calls this a "MetricTileScroller" and scrolls it horizontally on a
+ * phone. It wraps instead, for two reasons: a scroll container has to be
+ * keyboard focusable or its contents are unreachable, and three short stats
+ * simply fit on two lines at 320px. Removing the scroll removes the problem
+ * rather than making the problem accessible.
+ *
+ * One tile per row at the narrowest width — two 160px tiles plus a gap do not
+ * fit 320px, and forcing them would trade an accessibility failure for a
+ * horizontal-overflow one.
+ */
+export function MetricRow({ children }: { children: React.ReactNode }) {
+  return <div className="grid gap-3 grid-cols-1 min-[420px]:grid-cols-3">{children}</div>;
 }

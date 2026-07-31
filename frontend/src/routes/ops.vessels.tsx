@@ -5,7 +5,7 @@ import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
 import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
 import { Pagination } from '@/components/ops/console/Pagination';
 import { ActivityPanel, MapPanel } from '@/components/ops/console/SidePanels';
-import { MetricTile } from '@/components/ops/MetricTile';
+import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState } from '@/components/ops/OpsPage';
 import { SourceAge, SourceNotice } from '@/components/ops/SourceNotice';
 import { VesselStatusChip } from '@/components/ops/StatusChip';
@@ -72,7 +72,7 @@ function OpsVesselsRoute() {
         </>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <MetricRow>
         <MetricTile
           label="Vessels at berth"
           value={data?.metrics.vessels_at_berth ?? null}
@@ -84,7 +84,7 @@ function OpsVesselsRoute() {
           value={data?.metrics.daily_cargo_teu ?? null}
           suffix="TEU"
         />
-      </div>
+      </MetricRow>
 
       <form
         className="flex items-end gap-2"

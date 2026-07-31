@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Button, Input } from '@/components/ui';
 import { FlightCard } from '@/components/ops/FlightCard';
-import { MetricTile } from '@/components/ops/MetricTile';
+import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState, OpsPage } from '@/components/ops/OpsPage';
 import { useFlights } from '@/features/ops/queries';
 import type { FlightDirection } from '@/lib/types';
@@ -39,7 +39,7 @@ function FlightsRoute() {
         </Button>
       }
     >
-      <div className="flex gap-3 overflow-x-auto pb-1">
+      <MetricRow>
         <MetricTile label="Flights" value={data?.metrics.total_flights ?? null} />
         <MetricTile label="On time" value={data?.metrics.on_time_percent ?? null} suffix="%" />
         <MetricTile
@@ -47,7 +47,7 @@ function FlightsRoute() {
           value={data?.metrics.gates_active ?? null}
           suffix={data?.metrics.gates_total ? `/ ${data.metrics.gates_total}` : ''}
         />
-      </div>
+      </MetricRow>
 
       {/* A radiogroup rather than two buttons: it is one choice with two values,
           and arrow keys should move between them. */}

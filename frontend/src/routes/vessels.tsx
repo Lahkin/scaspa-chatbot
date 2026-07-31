@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Button, Input } from '@/components/ui';
-import { MetricTile } from '@/components/ops/MetricTile';
+import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState, OpsPage } from '@/components/ops/OpsPage';
 import { VesselCard } from '@/components/ops/VesselCard';
 import { useVessels } from '@/features/ops/queries';
@@ -38,7 +38,7 @@ function VesselsRoute() {
         </Button>
       }
     >
-      <div className="flex gap-3 overflow-x-auto pb-1">
+      <MetricRow>
         <MetricTile
           label="Vessels at berth"
           value={data?.metrics.vessels_at_berth ?? null}
@@ -50,7 +50,7 @@ function VesselsRoute() {
           value={data?.metrics.daily_cargo_teu ?? null}
           suffix="TEU"
         />
-      </div>
+      </MetricRow>
 
       {/* `Input` and `Button` both omit `className` by design — the design system
           owns their appearance — so layout happens on wrappers around them. */}

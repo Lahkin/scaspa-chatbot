@@ -6,6 +6,30 @@ twenty minutes before presenting. It takes five minutes.
 The point is not to discover that everything works. It is to discover the one
 thing that does not, while there is still time.
 
+> **Running the browser checks** (`check:responsive`, `check:a11y`,
+> `check:charts`, `check:slow`, `check:browsers`)
+>
+> Playwright is deliberately not a saved dependency, so `npm ci` does not fetch
+> 300MB. Install what you need in **one** command — `--no-save` installs prune
+> each other, so installing them separately silently removes the first:
+>
+> ```bash
+> npm i -D --no-save playwright@1.56.1 @axe-core/playwright@4.11.0
+> npx playwright install chromium          # add webkit firefox for check:browsers
+> npm run build                            # the checks run the production build
+> ```
+>
+> `check:a11y` drives the real chat UI, and the production build does not bundle
+> the mocks — so it needs the backend up with its preview origin allowed:
+>
+> ```bash
+> ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173,http://localhost:4400" \
+>   uv run uvicorn app.main:app
+> ```
+>
+> Without that it reports two manual failures that are about the missing backend,
+> not about the UI.
+
 ---
 
 ## 0. Before you start

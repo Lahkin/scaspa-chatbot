@@ -21,7 +21,17 @@ export function TariffTable({ rows }: { rows: TariffRow[] }) {
   return (
     // Wide content scrolls inside its own container; the page never scrolls
     // sideways. A tariff table on a 320px phone is the case that breaks this.
-    <div className="overflow-x-auto rounded-lg border border-ops-outline-variant">
+    //
+    // `role="region"` + a name + `tabIndex` for the same reason as the console's
+    // DataTable: a scroll container that cannot be focused cannot be scrolled by
+    // keyboard, so the columns past the fold are unreachable. Missed here first
+    // time and caught by `npm run check:a11y` as `scrollable-region-focusable`.
+    <div
+      role="region"
+      aria-label="Published tariffs (scrolls sideways)"
+      tabIndex={0}
+      className="overflow-x-auto rounded-lg border border-ops-outline-variant"
+    >
       <table className="w-full min-w-140 border-collapse text-small">
         <caption className="sr-only">
           Published SCASPA tariffs, with the code, what the rate applies to, the amount, and the

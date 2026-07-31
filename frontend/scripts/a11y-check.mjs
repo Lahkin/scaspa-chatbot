@@ -44,7 +44,24 @@ const { chromium } = await requirePlaywright();
 const AxeBuilder = await requireAxe();
 
 const PORT = 4400;
-const ROUTES = ['/', '/about', '/privacy', '/chat', '/widget'];
+// Every route a user can reach. The operations surfaces are the ones with
+// tables, status chips and a scrolling region — the components most likely to
+// carry a landmark, contrast or name-role-value violation, and the ones axe is
+// best at catching.
+const ROUTES = [
+  '/',
+  '/about',
+  '/privacy',
+  '/chat',
+  '/widget',
+  '/vessels',
+  '/flights',
+  '/tariffs',
+  '/support',
+  '/settings',
+  '/ops/vessels',
+  '/ops/flights',
+];
 const VIEWPORTS = [
   { name: 'mobile', width: 390, height: 800 },
   { name: 'desktop', width: 1280, height: 900 },

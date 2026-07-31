@@ -136,9 +136,22 @@ function TopBar() {
   return (
     <header className="sticky top-0 z-20 h-16 bg-ops-navy text-ink-inverse">
       <div className="flex h-16 items-center gap-4 px-4 lg:px-6">
-        <Link to="/chat" className="flex shrink-0 items-center gap-2 font-semibold">
+        {/* `min-h-touch` and `min-w-touch`: at 320px this collapses to the anchor
+            glyph alone and measured 20×24, which is not a target anyone can hit
+            on a moving ferry. Caught by check:responsive. */}
+        <Link
+          to="/chat"
+          className="flex min-h-touch min-w-touch shrink-0 items-center justify-center gap-2 rounded-sm font-semibold"
+        >
           <span aria-hidden="true">⚓</span>
-          <span className="hidden sm:inline">SCASPA Assistant</span>
+          {/* The visible label collapses below `sm`, which left the link with
+              the aria-hidden glyph and nothing else — no accessible name at all
+              (axe `link-name`, serious). The sr-only copy is always present, so
+              the name survives the breakpoint. */}
+          <span className="sr-only">SCASPA Assistant</span>
+          <span className="hidden sm:inline" aria-hidden="true">
+            SCASPA Assistant
+          </span>
         </Link>
 
         {/* Horizontally scrollable rather than wrapped: a nav row that wraps

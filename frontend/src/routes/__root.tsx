@@ -37,7 +37,35 @@ import { createRootRoute, HeadContent, Link, Outlet, useRouterState } from '@tan
  * everything else. `<HeadContent />` stays in both branches: every route still
  * needs its title.
  */
-const SELF_CHROMED_ROUTES = ['/chat', '/widget', '/dev/rehearsal'];
+const SELF_CHROMED_ROUTES = [
+  '/chat',
+  '/widget',
+  '/dev/rehearsal',
+  // The operations surfaces. Every one renders through `OpsPage` or
+  // `ConsoleShell`, both of which supply their own header, `<main>` and footer —
+  // so nesting them here produced exactly the two-`<main>` defect described
+  // above, and additionally squeezed a console designed for 1440px into the
+  // marketing column's `max-w-3xl`.
+  //
+  // Found by `npm run check:responsive`, not by review: in jsdom the duplicate
+  // landmarks are present but harmless-looking, and the width constraint is
+  // invisible without layout.
+  '/vessels',
+  '/flights',
+  '/tariffs',
+  '/support',
+  '/settings',
+];
+
+/** Prefixes whose whole subtree is self-chromed, so `/ops/*` needs no upkeep. */
+const SELF_CHROMED_PREFIXES = ['/ops'];
+
+function isSelfChromed(pathname: string): boolean {
+  if (SELF_CHROMED_ROUTES.includes(pathname)) return true;
+  return SELF_CHROMED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
 
 /**
  * Dev-only mock controls.
@@ -67,7 +95,7 @@ function DevMockControls() {
 function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
-  if (SELF_CHROMED_ROUTES.includes(pathname)) {
+  if (isSelfChromed(pathname)) {
     return (
       <>
         <HeadContent />
@@ -93,19 +121,42 @@ function RootLayout() {
         Skip to main content
       </a>
 
+      {/* Every link clears the 44px minimum.
+       *
+       * They measured 20px tall until `npm run check:responsive` was pointed at
+       * these routes for the first time — the check only ever covered `/chat`
+       * and `/widget`, so three public pages carried undersized nav targets for
+       * the life of the project without anything saying so. The routes are in
+       * its list now.
+       */}
       <header className="border-b border-border">
-        <nav aria-label="Main" className="mx-auto flex max-w-3xl gap-4 px-4 py-3 text-small">
-          <Link to="/" className="font-semibold text-blue-700">
+        <nav
+          aria-label="Main"
+          className="mx-auto flex max-w-3xl items-center gap-2 px-4 text-small"
+        >
+          <Link
+            to="/"
+            className="inline-flex min-h-touch items-center rounded-sm font-semibold text-blue-700"
+          >
             SCASPA Assistant
           </Link>
           <span className="flex-1" />
-          <Link to="/chat" className="text-ink-muted hover:text-ink">
+          <Link
+            to="/chat"
+            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
+          >
             Chat
           </Link>
-          <Link to="/about" className="text-ink-muted hover:text-ink">
+          <Link
+            to="/about"
+            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
+          >
             About
           </Link>
-          <Link to="/privacy" className="text-ink-muted hover:text-ink">
+          <Link
+            to="/privacy"
+            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
+          >
             Privacy
           </Link>
         </nav>
