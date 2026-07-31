@@ -14,11 +14,18 @@
  * — it turns bytes into validated events and hands them to callbacks.
  */
 
-import { normaliseError, ApiError } from './api';
+import { normaliseError, ApiError, chatBody } from './api';
 import { config } from './config';
 import { SseParser, parseFrameData } from './sse';
 import { isKnownStreamEvent, streamPayloadSchemas } from './schemas';
-import type { ApiErrorBody, ChartSpec, Citation, ToolName } from './types';
+import type {
+  ApiErrorBody,
+  Category,
+  ChartSpec,
+  Citation,
+  RefusalCategory,
+  ToolName,
+} from './types';
 
 /**
  * One callback per event the contract defines.
@@ -45,7 +52,9 @@ export interface StreamHandlers {
     latency_ms: number;
     grounded: boolean;
     refusal: boolean;
-    kb_version: string;
+    /** Absent on a plain no-answer; present when a specific refusal gate fired. */
+    refusal_category?: RefusalCategory;
+    kb_version: string | null;
   }) => void;
   /** Once headers are sent the status is fixed at 200, so a failure arrives here. */
   onError?: (data: ApiErrorBody) => void;
@@ -54,6 +63,8 @@ export interface StreamHandlers {
 export interface StreamRequest {
   message: string;
   conversationId?: string | null;
+  /** Optional retrieval filter. Omitted from the body when absent. */
+  category?: Category | null | undefined;
 }
 
 /** Thrown when the response was not a stream at all. */
@@ -101,10 +112,13 @@ export async function streamMessage(
       },
       // No Authorization header and no cookie: there is no auth and no session
       // token — CLAUDE.md rule 2.
-      body: JSON.stringify({
-        message: request.message,
-        conversation_id: request.conversationId ?? null,
-      }),
+      //
+      // Body built by the same function `POST /api/chat` uses. The two endpoints
+      // promise identical content for the same question, and they cannot keep
+      // that promise if they can drift on what they send.
+      body: JSON.stringify(
+        chatBody(request.message, request.conversationId ?? null, request.category)
+      ),
       ...(signal ? { signal } : {}),
     });
   } catch (thrown) {
@@ -280,7 +294,8 @@ function dispatch(
           latency_ms: number;
           grounded: boolean;
           refusal: boolean;
-          kb_version: string;
+          refusal_category?: RefusalCategory;
+          kb_version: string | null;
         }
       );
       return false;

@@ -114,6 +114,48 @@
   --color-ink-inverse: var(--color-neutral-0);
   --color-focus: var(--color-blue-600);
 
+  /* ══ Operations console ══════════════════════════════════════════════════
+   *
+   * From the SCASPA Stitch design system (`St. Christopher Ports Interface`),
+   * adopted for the operations surfaces only — vessels, flights, tariffs,
+   * support. The chat surface keeps the blue ramp above; these sit alongside it
+   * rather than replacing it, so the shipped assistant is not restyled by a
+   * screen import.
+   *
+   * ── EVERY VALUE BELOW WAS MEASURED, AND TWO OF THEM ARE TRAPS ────────────
+   *
+   * The design marks #00AA58 as `on-tertiary-container` and uses it for the
+   * "Docked" and "Online" chips. Against white it measures **3.05:1** and fails
+   * AA for text. #2DBCFE, the cyan for "En route", measures **2.16:1**. Both
+   * are legible-looking and both are wrong, which is the same trap as
+   * --color-amber-board above.
+   *
+   * So the status colours are declared as MATCHED PAIRS: a fill, and the ink
+   * that is safe on that fill. Never put an -ops-*-fill on text, and never put
+   * -ops-*-ink on white. tests/contrast.test.ts asserts each pair.
+   */
+  --color-ops-navy: #001736; /* 17.86:1 on white — headers, primary buttons */
+  --color-ops-navy-soft: #002b5b; /* 14.03:1 — the container tone */
+  --color-ops-sky: #00658d; /* 6.47:1 — links and accents. Safe as text */
+  --color-ops-surface: #faf9fe;
+  --color-ops-surface-low: #f4f3f8;
+  --color-ops-surface-high: #e8e7ec;
+  --color-ops-ink: #1a1c1f; /* 17.08:1 */
+  --color-ops-ink-variant: #43474f; /* 9.32:1 — metadata, timestamps */
+  /* Interactive boundary; clears 3:1 against the ops surface at 4.27:1. */
+  --color-ops-outline: #747780;
+  /* Decorative divider ONLY — 1.63:1. Makes no contrast claim, exactly like
+   * --color-border. Do not use it to outline a control. */
+  --color-ops-outline-variant: #c4c6d0;
+
+  /* Status pairs. Fill first, then the only ink that is safe on it. */
+  --color-ops-active-fill: #6bfe9c; /* docked · on time · active */
+  --color-ops-active-ink: #003417; /* 10.83:1 on the fill above */
+  --color-ops-transit-fill: #2dbcfe; /* en route · expected */
+  --color-ops-transit-ink: #004866; /* 4.60:1 on the fill above */
+  --color-ops-alert-fill: #ffdad6; /* delayed · error */
+  --color-ops-alert-ink: #93000a; /* 7.24:1 on the fill above */
+
   /* ══ Spacing — 4px scale ═════════════════════════════════════════════════ */
   --spacing-0: 0px;
   --spacing-1: 4px;
@@ -249,6 +291,33 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+    }
+  }
+
+  /* Respect a user who has asked their OS for more contrast.
+   *
+   * This is why `/settings` has no high-contrast switch. The design's mockup has
+   * one, but a switch needs somewhere to remember itself and CLAUDE.md rule 5
+   * permits exactly one key in exactly one storage. Honouring the OS preference
+   * is strictly better anyway: it is set once and every site obeys it, and an
+   * accessibility setting that resets each visit is worse than none.
+   *
+   * Only the decorative tokens move. The text and status pairs already clear AA
+   * and are asserted in tests/contrast.test.ts — strengthening those would break
+   * the pairings the test pins.
+   */
+  @media (prefers-contrast: more) {
+    :root {
+      /* Dividers become real boundaries rather than hints. */
+      --color-border: var(--color-neutral-400);
+      --color-ops-outline-variant: var(--color-ops-outline);
+      /* The muted inks step up to the full-strength ones. */
+      --color-ink-subtle: var(--color-neutral-700);
+      --color-ops-ink-variant: var(--color-ops-ink);
+    }
+
+    :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+      outline-width: 3px;
     }
   }
 }

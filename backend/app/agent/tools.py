@@ -61,6 +61,11 @@ class TurnContext:
 
     settings: Settings
     embeddings: Embeddings | None = None
+    # The caller's `category` from the request body, if it sent one. Applied when
+    # the model does not name a category itself: a client that knows it is the
+    # ferry widget is more reliable than a keyword classifier, and without this
+    # the documented request field would reach the router and stop there.
+    category: str | None = None
     retrieved: dict[str, RetrievedChunk] = field(default_factory=dict)
     tool_calls: list[ToolCallRecord] = field(default_factory=list)
     # Set by make_chart after validation. The model never sees or edits this
@@ -88,9 +93,14 @@ _turn: ContextVar[TurnContext | None] = ContextVar("turn_context", default=None)
 def turn_context(
     settings: Settings | None = None,
     embeddings: Embeddings | None = None,
+    category: str | None = None,
 ) -> Iterator[TurnContext]:
     """Bind a fresh `TurnContext` for the duration of one turn."""
-    context = TurnContext(settings=settings or get_settings(), embeddings=embeddings)
+    context = TurnContext(
+        settings=settings or get_settings(),
+        embeddings=embeddings,
+        category=category,
+    )
     token = _turn.set(context)
     try:
         yield context
@@ -186,7 +196,15 @@ def search_scaspa_knowledge(
     with _timed("search_scaspa_knowledge", summary):
         chunks = retrieve(
             query,
-            category=category,
+            # The request's category wins over the model's.
+            #
+            # It is a constraint, not a hint: a caller that sends `airport` is a
+            # widget embedded on the airport page, and it is asking not to be
+            # answered from ferry rows. The model's own argument is a guess made
+            # from the question text, and it *will* guess "ferry" for "how much
+            # is a ferry ticket?" — so letting it win means the filter silently
+            # does nothing exactly when it was set deliberately.
+            category=context.category or category,
             embeddings=context.embeddings,
             settings=context.settings,
         )

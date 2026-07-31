@@ -35,6 +35,13 @@ const CONTACT_BLOCK =
 
 // ── Citations ────────────────────────────────────────────────────────────────
 
+/*
+ * Every citation carries `volatility`, `label` and `snippet`, because the real
+ * backend now does — `build_citations` in `app/rag/answer.py`, pinned by
+ * `backend/tests/test_contract.py`. Volatility values match
+ * `data/knowledge/sample_kb.csv`: ferry/schedule is high, ferry/fares is medium.
+ */
+
 export const CITATION_FARES: Citation = {
   kb_id: 'kb-014',
   category: 'ferry',
@@ -43,6 +50,10 @@ export const CITATION_FARES: Citation = {
   source_type: 'official-site',
   as_of: '2026-04-01',
   confidence: 'confirmed',
+  volatility: 'medium',
+  label: 'How much is a ferry ticket?',
+  snippet:
+    'The placeholder one-way adult fare is XCD 44.44; a child under 12 travels for XCD 22.22.',
 };
 
 export const CITATION_SCHEDULE: Citation = {
@@ -53,6 +64,29 @@ export const CITATION_SCHEDULE: Citation = {
   source_type: 'official-site',
   as_of: '2026-04-01',
   confidence: 'confirmed',
+  volatility: 'high',
+  label: 'What time does the ferry to Nevis leave Basseterre?',
+  snippet: 'The last placeholder sailing back from Nevis on a weekday is 18:00.',
+};
+
+/**
+ * A row the backend could not classify.
+ *
+ * Real: `volatility` is `str | None` server-side and arrives as null rather than
+ * a guess. The client must then apply its own cautious default — so this is the
+ * fixture that keeps `volatilityOf`'s fallback honest instead of dead code.
+ */
+export const CITATION_UNCLASSIFIED: Citation = {
+  kb_id: 'kb-021',
+  category: 'general',
+  subcategory: 'contact',
+  source_url: 'https://example.invalid/contact',
+  source_type: 'official-site',
+  as_of: '2026-04-01',
+  confidence: 'confirmed',
+  volatility: null,
+  label: null,
+  snippet: null,
 };
 
 export const CITATIONS = [CITATION_FARES, CITATION_SCHEDULE];
@@ -114,31 +148,27 @@ export const HALLUCINATED_ANSWER =
   '06:00 [kb-047]. The last sailing back from Nevis is 18:00 [kb-008].';
 
 /**
- * Citations carrying the **proposed** `volatility`, `label` and `snippet` fields.
+ * The default citations, kept under their old name.
  *
- * ⚠️ None of the three is in `docs/api-contract.md` today — see
- * `frontend/docs/decisions.md` F005. Kept in its own scenario rather than added to
- * the default fixtures on purpose: a mock that sends fields the real server does
- * not is a mock that is kinder than production, which is exactly how a UI comes to
- * depend on something that will not be there.
- *
- * Volatility values are the real ones from `data/knowledge/sample_kb.csv`:
- * ferry/schedule is high, ferry/fares is medium.
+ * The three fields now live on the defaults, because the server sends them on
+ * every citation. The scenario that used this name is still worth having — it
+ * puts all three volatility levels on screen at once — so it survives as
+ * `CITATIONS_EVERY_VOLATILITY` below and this alias keeps existing call sites
+ * pointing somewhere sensible.
  */
-export const CITATIONS_WITH_VOLATILITY: Citation[] = [
-  {
-    ...CITATION_FARES,
-    volatility: 'medium',
-    label: 'How much is a ferry ticket?',
-    snippet:
-      'The placeholder one-way adult fare is XCD 44.44; a child under 12 travels for XCD 22.22.',
-  },
-  {
-    ...CITATION_SCHEDULE,
-    volatility: 'high',
-    label: 'What time does the ferry to Nevis leave Basseterre?',
-    snippet: 'The last placeholder sailing back from Nevis on a weekday is 18:00.',
-  },
+export const CITATIONS_WITH_VOLATILITY: Citation[] = CITATIONS;
+
+/**
+ * High, medium, low and unclassified side by side.
+ *
+ * The point of the scenario: emphasis has to be visibly different per level, and
+ * an unclassified row has to get the *cautious* treatment rather than the quiet
+ * one. That is only checkable with all four on screen together.
+ */
+export const CITATIONS_EVERY_VOLATILITY: Citation[] = [
+  CITATION_SCHEDULE,
+  CITATION_FARES,
+  CITATION_UNCLASSIFIED,
 ];
 
 /** A low-volatility row, so the quiet treatment is demonstrable too. */

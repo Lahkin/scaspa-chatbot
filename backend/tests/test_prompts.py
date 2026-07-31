@@ -104,3 +104,29 @@ def test_no_answer_message_does_not_guess() -> None:
     lowered = NO_ANSWER_MESSAGE.lower()
     assert "guess" in lowered or "verified" in lowered
     assert "probably" not in lowered
+
+
+# ── The new surfaces must not contradict the rules they sit beside ───────────
+#
+# The interface now shows a fee calculator and an arrivals board. Both produce
+# exactly what rules 4 and 10 forbid the assistant from producing. The prompt has
+# to draw that line explicitly, or the model will read the screen as permission.
+
+
+def test_the_calculator_exception_is_stated_and_bounded() -> None:
+    """The assistant may point at the calculator. It may not read a total out of it."""
+    lowered = SYSTEM_PROMPT.lower()
+    assert "calculator" in lowered
+    assert "may not read a total out of it" in lowered
+    # And the original prohibition survives intact next to it.
+    assert "never estimate one" in lowered
+
+
+def test_the_arrivals_board_exception_is_stated_and_bounded() -> None:
+    """The assistant may point at the board. It may not describe what is on it."""
+    lowered = SYSTEM_PROMPT.lower()
+    assert "arrivals" in lowered
+    assert "you may not describe what is on it" in lowered
+    # A user quoting the screen back must not be able to get a confirmation.
+    assert "confirm or deny" in lowered
+    assert "never infer live status from a published schedule" in lowered

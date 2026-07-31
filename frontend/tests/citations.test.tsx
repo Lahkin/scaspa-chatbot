@@ -30,7 +30,12 @@ import {
   sourceTypeLabel,
   volatilityOf,
 } from '@/features/chat/citations';
-import { CITATION_FARES, CITATION_SCHEDULE, CITATION_LOW } from '@/mocks/fixtures';
+import {
+  CITATION_FARES,
+  CITATION_SCHEDULE,
+  CITATION_LOW,
+  CITATION_UNCLASSIFIED,
+} from '@/mocks/fixtures';
 import type { Message } from '@/features/chat/types';
 import type { Citation } from '@/lib/types';
 
@@ -195,8 +200,9 @@ describe('CitationChip', () => {
 
   it('carries a name that means something without the number', () => {
     const { chip } = renderChip();
-    // "1" alone tells a screen-reader user nothing.
-    expect(chip.getAttribute('aria-label')).toContain('Ferry — fares');
+    // "1" alone tells a screen-reader user nothing. The backend's own label for
+    // the row is the best available name for it.
+    expect(chip.getAttribute('aria-label')).toContain('How much is a ferry ticket?');
     expect(chip.getAttribute('aria-label')).toContain('2026-04-01');
   });
 
@@ -258,20 +264,20 @@ describe('SourceEntry', () => {
     expect(screen.getByText(/Verified on/)).toBeInTheDocument();
   });
 
-  it('treats a citation with no volatility as high', () => {
-    // The field is not in the contract yet. Defaulting to quiet would choose the
-    // harm: a stale ferry departure shown as a confident fact.
-    expect(volatilityOf(CITATION_SCHEDULE)).toBe('high');
-    expect(needsConfirmation(CITATION_SCHEDULE)).toBe(true);
-    renderEntry(CITATION_SCHEDULE);
+  it('treats a citation the backend could not classify as high', () => {
+    // The backend sends null rather than a guess. Defaulting to quiet here would
+    // choose the harm: a stale ferry departure shown as a confident fact.
+    expect(volatilityOf(CITATION_UNCLASSIFIED)).toBe('high');
+    expect(needsConfirmation(CITATION_UNCLASSIFIED)).toBe(true);
+    renderEntry(CITATION_UNCLASSIFIED);
     expect(screen.getByText(/Confirm with SCASPA before you travel/)).toBeInTheDocument();
   });
 
-  it('derives a label from fields that exist, and prefers the real one', () => {
-    expect(entryLabel(CITATION_FARES)).toBe('Ferry — fares');
-    expect(entryLabel({ ...CITATION_FARES, label: 'How much is a ferry ticket?' })).toBe(
-      'How much is a ferry ticket?'
-    );
+  it('prefers the backend label, and derives one only when there is none', () => {
+    expect(entryLabel(CITATION_FARES)).toBe('How much is a ferry ticket?');
+    // Null label — composed from category and subcategory, both of which are in
+    // the payload. Derived, never invented.
+    expect(entryLabel(CITATION_UNCLASSIFIED)).toBe('General — contact');
   });
 
   it('omits the excerpt rather than inventing one', () => {

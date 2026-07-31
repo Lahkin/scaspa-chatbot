@@ -418,7 +418,7 @@ describe('reducer: a full recorded sequence', () => {
       { type: 'TOKEN', text: '[kb-0' },
       { type: 'TOKEN', text: '14]. Confirm before you travel.' },
       { type: 'CITATIONS', citations: CITATIONS },
-      { type: 'DONE', grounded: true, refusal: false },
+      { type: 'DONE', grounded: true, refusal: false, refusalCategory: null },
     ]);
 
     expect(state.conversationId).toBe('conv-1');
@@ -444,7 +444,7 @@ describe('reducer: a full recorded sequence', () => {
       { type: 'TOKEN', text: 'Fare XCD 44.44 ' },
       { type: 'TOKEN', text: '[kb-0' },
       { type: 'TOKEN', text: '14]. Done.' },
-      { type: 'DONE', grounded: true, refusal: false },
+      { type: 'DONE', grounded: true, refusal: false, refusalCategory: null },
     ];
 
     let state = initialMachineState;
@@ -461,7 +461,7 @@ describe('reducer: a full recorded sequence', () => {
     const state = replay([
       send,
       { type: 'TOKEN', text: 'The fare is XCD 44.44 [kb-0' },
-      { type: 'DONE', grounded: false, refusal: false },
+      { type: 'DONE', grounded: false, refusal: false, refusalCategory: null },
     ]);
     // Holding it forever would delete the end of an answer, which is worse than
     // the flicker the guard exists to prevent.
@@ -536,7 +536,7 @@ describe('reducer: a full recorded sequence', () => {
       send,
       { type: 'TOKEN', text: 'Internal reasoning that is not an answer [kb-0' },
       { type: 'REPLACE', text: 'I could not complete that. Please call SCASPA.' },
-      { type: 'DONE', grounded: false, refusal: true },
+      { type: 'DONE', grounded: false, refusal: true, refusalCategory: null },
     ]);
     // The tokens were an internal message, not an answer.
     expect(state.messages[1]!.text).toBe('I could not complete that. Please call SCASPA.');
@@ -581,7 +581,7 @@ describe('reducer: a full recorded sequence', () => {
       { type: 'META', conversationId: 'c' },
       { type: 'TOKEN', text: 'a [kb-0' },
       { type: 'TOKEN', text: '14] b' },
-      { type: 'DONE', grounded: true, refusal: false },
+      { type: 'DONE', grounded: true, refusal: false, refusalCategory: null },
     ];
     expect(replay(actions)).toEqual(replay(actions));
   });

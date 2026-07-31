@@ -1449,3 +1449,218 @@ passed** → server starts → `/api/health` 200 → `/docs` 200.
 Documentation is not verified by reading it. Both bugs were invisible on the page
 and immediate on the command line, and the second one had survived nine prompts of
 review.
+
+---
+
+## 0019 — Connecting the two halves, and the four bugs only a real key could find
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+The task was to connect the frontend and the backend completely, and to build
+whatever either side expected of the other and did not get.
+
+### What was disconnected
+
+Most of the gap was already known and written down. `frontend/docs/backend-issues.md`
+listed five issues and `alignment-ledger.md` carried seven ⚠️ rows; the frontend
+had been built to degrade honestly around every one of them, which is why nothing
+looked broken. All five are now closed at the layer that was wrong — the citation
+payload gained `volatility`, `label` and `snippet`; the stream's `done` gained
+`refusal_category`; CORS exposes `Retry-After` and `X-TTS-Cache`; a malformed
+`conversation_id` is replaced rather than echoed; and the contract documents
+`RATE_LIMITED`.
+
+Three more were found by reading the two sides against each other:
+
+- **`category` was accepted and discarded.** `answer_question` and
+  `astream_answer` both took the parameter and passed it nowhere. The documented
+  retrieval filter had never worked. It now reaches the search tool through
+  `TurnContext`.
+- **`kb_version` is nullable server-side and was required client-side.** The
+  first answer from a freshly built index would have thrown `SchemaMismatch` and
+  lost the answer. Invisible against a seeded dev index; a new deploy is the
+  worst place to find it.
+- **The tool-name enum was strict.** A sixth tool would have failed
+  `tool_calls`, failed the whole chat response, and cost a user a good answer
+  over a progress indicator's icon.
+
+### Alternatives considered
+
+**Validate `category` or accept anything?** Validate. The filter is a Chroma
+metadata equality, so `"ferries"` matches no row and the caller gets a confident
+"I do not have that" for a question the knowledge base answers. A typo in a
+filter should be a 422.
+
+**Whose `category` wins — the caller's or the model's?** The caller's, and this
+was got wrong first. A widget embedded on the airport page is asking not to be
+answered from ferry rows, and it knows that better than a classifier reading the
+question. Letting the model win meant the filter silently did nothing at exactly
+the moment it had been set deliberately.
+
+**Store `label`/`snippet` in Chroma metadata, or parse them from the chunk?**
+Parse. `build_kb_text` writes every row in a fixed shape, so the two lines read
+back out are exactly the row's stored `question` and `answer` — no less verbatim
+than a metadata copy, and it works against an index built before the fields
+existed. No re-index needed for a presentation change.
+
+**Guess a `volatility` when a row has none?** No. Null, and the client applies
+`high` itself. A server-side default of `low` would have quietly downgraded a
+schedule nobody had classified, and the failure that matters is a stale ferry
+time shown as a confident fact.
+
+### The four bugs that needed a real API key
+
+Every prompt before this one ran without one. The first real request found four
+things no fake could have:
+
+1. **Every chat request 500'd.** OpenAI rejects **function tools combined with
+   reasoning** on `/v1/chat/completions`, and the configured chat model is a
+   reasoning model. This assistant is an agent, so the tools are not optional:
+   `OPENAI_REASONING_EFFORT` now defaults to `none`. The other route,
+   `/v1/responses`, supports both but returns content as typed blocks that
+   `app.agent.graph` would need to handle on two paths — worth doing
+   deliberately, not as a side effect of a bug fix.
+2. **Retrieval scored 0.0 on everything.** The Chroma index had been built with
+   the test's fake embeddings, so no real query could ever match it. Rebuilt.
+3. **The `category` precedence bug above**, which the unit test could not see
+   because the fake model passes no category and the real one always does.
+4. **`str(content)` on a model message.** Latent, not yet firing: on
+   `/v1/responses` content is a list of blocks and that fallback would have put
+   `[{'type': 'text', ...}]` in front of a user as the answer. Replaced with
+   `message_text`, which joins text blocks and drops reasoning blocks — the
+   model's private working must never be shown.
+
+### Two defaults changed
+
+`config.useMocks` was `true` in dev, so `npm run dev` served fixtures and never
+called the backend. It is now opt-in, and says so loudly in the console when it
+is on: the fixtures are convincing on purpose, which is exactly what makes
+demoing them by accident possible.
+
+`ALLOWED_ORIGINS` now lists both `localhost:5173` and `127.0.0.1:5173`. A browser
+treats them as different origins, and a CORS failure reaches JavaScript as a bare
+rejected fetch with no reason attached.
+
+### What is enforced rather than written down
+
+`backend/tests/test_contract.py` — new — asserts the things `docs/api-contract.md`
+promises: the citation field set, the `done` field set, both endpoints agreeing on
+`refusal_category`, the five tool names, the error-code set, category validation
+and precedence, and conversation-id handling. Prose does not fail a build.
+
+The CORS row is asserted on the **advertisement** rather than on a read, because
+Node does not enforce CORS and the original bug is structurally invisible from
+any server-side test. That is stated in the test, so nobody later "improves" it
+into something that cannot fail.
+
+---
+
+## 0020 — Importing the SCASPA design mockups, and the four things they asked for that this product will not say
+
+**Date:** 2026-07-30
+**Status:** Accepted
+
+Fifteen Stitch screens were imported from the `Scaspa AI chatbot mockups` design
+project: an assistant surface with inline data cards, expanded views for
+flights, vessels and tariffs, a desktop operations console, contact support, and
+a profile page. Most of it is ordinary work. Four parts of it, rendered
+literally, would have made the assistant say things it is explicitly built not
+to say.
+
+### The collisions, and how each was resolved
+
+**1. Live operational status.** The mockups are built around "Live AIS", "AT
+BERTH", "Delayed", "On Time 94.8%". `prompts.py` rule 10 says the assistant
+*cannot see live operations* and must never infer status from a published
+schedule.
+
+Resolved by architecture, not by softening the rule. `/api/vessels`,
+`/api/flights` and `/api/tariffs` are a **separate path with no model in them**,
+and every response carries a `DataSource` naming its origin and age. A panel may
+show "EN ROUTE" because a named feed said so at a stated time; the assistant
+still declines to say it in prose, because the assistant has no feed. Rules 4
+and 10 gained an explicit clause each saying the assistant may *point at* these
+surfaces and may not *read from* them — otherwise the model would eventually
+read the screen as permission.
+
+**2. A calculated total.** The design shows "Estimated Total $400.00". Rule 4
+says "never estimate one"; CLAUDE.md rule 10 says money must appear verbatim in
+a retrieved chunk.
+
+This one is a genuine exception, taken deliberately after the conflict was
+raised and the trade-off confirmed. It is bounded by three properties, all
+enforced rather than documented: every rate is looked up from the published
+table and a missing code is reported rather than guessed; the arithmetic is code
+with no model anywhere near it; and `derived` is a `Literal[True]` with a
+non-empty `disclaimer` that names what the figure is *not* — not an invoice, not
+an official customs assessment, not a valuation. The frontend's zod schema
+**refuses** a quote lacking either, so there is no code path that renders a bare
+total. Only XCD is accepted: converting a published fee applies a rate nobody
+published.
+
+**3. Identity.** The ticket form collects a name, an email and an attachment;
+the profile page is a signed-in "Verified Officer" with an Agent ID and
+"Terminate All Active Sessions".
+
+Neither shipped as drawn. `frontend/CLAUDE.md` rule 2 says there is no auth and
+no session token, and `docs/privacy.md` says nothing here can link a
+conversation to a person. The ticket endpoint therefore accepts no personal
+detail at all and returns a reference to quote — the `escalate_to_human` bargain
+with a written description attached — and the form says so *before* it is filled
+in, because discovering it on the receipt is discovering it too late. `/profile`
+became `/settings`: local preferences only, since calling it a profile promises
+the part that is not there.
+
+**4. Sample data that looks real.** The exports use real vessels (WONDER OF THE
+SEAS), real airlines and plausible IMO numbers. Seeding those would produce an
+arrivals board indistinguishable from a real one — CLAUDE.md rule 5, and the
+most consequential way to break it, because an operations table is believed on
+sight.
+
+Fixtures are `MV SAMPLE …`, `IMO 0000001` (fails the check-digit rule), airline
+code `ZZ` (unassigned), and money in the repeated-digit style the knowledge-base
+fixtures already use. `DataSource` refuses to exist without a notice when it is
+not live, and `OPS_DATA_SOURCE=fixture` is **refused at boot when `ENV=prod`**,
+like the wildcard origin.
+
+### Smaller decisions worth recording
+
+**The contrast trap repeated itself.** The design system marks `#00AA58` as the
+"Docked / Online" text colour. Measured, it is **3.05:1** on white and fails AA;
+`#2DBCFE` for "En route" is **2.16:1**. Exactly the `--color-amber-board`
+lesson. Status colours ship as **matched pairs** — a fill and the only ink that
+is safe on it — and `tests/contrast.test.ts` asserts each pair *and* asserts
+that the two fills fail as text, so nobody re-adopts the design's own value by
+reading the palette rather than the tokens.
+
+**The high-contrast switch became a system preference.** A switch needs
+somewhere to remember itself and CLAUDE.md rule 5 permits one key in one
+storage. Rather than weaken an absolute rule for a preference, the app honours
+`prefers-contrast`. Strictly better: set once, obeyed everywhere, stored
+nowhere.
+
+**ETA and ATA stayed separate.** The design's table has one "ETA / ATA" column.
+The payload has two fields and the cards render two labels, because a prediction
+read as a record is how someone drives to a port for a ship that has not
+arrived.
+
+**Reading a board got its own rate-limit budget.** The ops endpoints were
+briefly on the chat scope, which the integration check exposed by tripping the
+limiter on itself. Browsing is several requests and a chat turn costs a model
+call; sharing one budget would let page views exhaust the allowance for asking a
+question. `ops` is four times `chat`; `voice` stays at a third.
+
+**A vacuous assertion was found and fixed.** The integration check's "no
+invented extensions were published" test compared against `String(someObject)` —
+`"[object Object]"` — so it passed for every possible input. It now stringifies
+properly. Worth recording because a green check that tests nothing is worse than
+no check: it is actively misleading.
+
+### What was not built
+
+The desktop operations console (`/ops/*`, 256px rail, 1440px tables), the
+interactive map panels, the activity feed, PDF and CSV export, and the "email me
+this quote" action. All are additive on top of the contract above and none of
+them raise a new question about what the product may claim. The data layer they
+would need exists.

@@ -77,6 +77,19 @@ if (!rootElement) {
  */
 async function startMocks(): Promise<void> {
   if (!import.meta.env.DEV || !config.useMocks) return;
+  /*
+   * Say so, every time.
+   *
+   * Mocks are opt-in now, but someone who set VITE_ENABLE_MOCKS=true an hour ago
+   * and has since forgotten will otherwise demo fixture data and believe the
+   * backend is answering. The fixtures are convincing on purpose — that is what
+   * makes this worth a console line.
+   */
+  console.info(
+    `%c[mocks] Serving ${config.apiBaseUrl}/api/* from MSW fixtures. No backend is being ` +
+      `called. Unset VITE_ENABLE_MOCKS in .env.local to talk to the real one.`,
+    'color:#b45309;font-weight:600'
+  );
   const { worker } = await import('./mocks/browser');
   await worker.start({
     /**

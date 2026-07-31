@@ -14,6 +14,12 @@ changes, this file changes in the same pull request.
 | `POST /api/stt` | Transcribe recorded audio to text |
 | `POST /api/tts` | Synthesise text to MP3 audio |
 | `POST /api/tts/preview` | Show what TTS would say, free |
+| `GET /api/vessels` | Vessel arrivals and berth occupancy |
+| `GET /api/flights` | Flight arrivals and departures |
+| `GET /api/tariffs` | Published schedule of port charges |
+| `POST /api/tariffs/quote` | Estimate charges from published rates |
+| `GET /api/support/directory` | Published contact routes |
+| `POST /api/support/ticket` | Raise a ticket, get a reference |
 
 **`/api/chat` and `/api/chat/stream` return identical content.** They share the
 same retrieval, generation and verification path. Streaming changes *when* you
@@ -27,9 +33,18 @@ see the answer, never *what* it says.
 own, or one is generated. It comes back on the response header, in `meta.request_id`,
 and in every server log line for that request. Quote it in bug reports.
 
-**CORS.** Origins come from `ALLOWED_ORIGINS` (default `http://localhost:5173`).
-Methods `GET, POST, OPTIONS`. Headers `Content-Type, Accept, X-Request-ID`. A
-wildcard origin is rejected at boot when `ENV=prod`.
+**CORS.** Origins come from `ALLOWED_ORIGINS` (default
+`http://localhost:5173,http://127.0.0.1:5173` — a browser treats those two as
+different origins). Methods `GET, POST, OPTIONS`. Request headers
+`Content-Type, Accept, X-Request-ID`. A wildcard origin is rejected at boot when
+`ENV=prod`.
+
+**Readable response headers.** Only `X-Request-ID`, `Retry-After` and
+`X-TTS-Cache` are named in `Access-Control-Expose-Headers`. Everything else is
+invisible to cross-origin JavaScript no matter what the server sends — that is
+the browser, not this API. `Retry-After` matters most: without it a client
+counts down from a guess that looks exactly like a real countdown. Note that
+this is invisible to server-side testing, because Node does not enforce CORS.
 
 **Content type.** `application/json` in, `application/json` out, except the
 stream, which is `text/event-stream`.
@@ -59,13 +74,20 @@ Switch on `code`, never on `message`.
 
 | `code` | HTTP | Meaning | Suggested client behaviour |
 | --- | --- | --- | --- |
-| `VALIDATION_ERROR` | 422 | Message blank, or over 1000 characters | Show inline by the input; do not retry |
+| `VALIDATION_ERROR` | 422 | Message blank, over 1000 characters, or an unknown `category` | Show inline by the input; do not retry |
+| `RATE_LIMITED` | 429 | **This client** has sent too many requests | Show the message, count down `Retry-After`, disable send. **Never auto-retry** |
 | `INDEX_MISSING` | 503 | The knowledge index has not been built | Show the message; retry later |
 | `RETRIEVAL_EMPTY` | 503 | Index metadata exists but holds no rows | Show the message; retry later |
 | `UPSTREAM_RATE_LIMITED` | 503 | The model provider is throttling us | Show the message; offer a retry button |
 | `UPSTREAM_TIMEOUT` | 504 | The model did not answer in time | Show the message; offer a retry button |
 | `NOT_FOUND` | 404 | No such route | — |
 | `INTERNAL` | 500 | Anything else | Show the message; offer a retry button |
+
+`RATE_LIMITED` and `UPSTREAM_RATE_LIMITED` are **different things** and deserve
+different copy. The first is this client being limited by us, on a 429, and the
+user can fix it by waiting. The second is the model provider throttling *us*, on
+a 503, and the user can do nothing about it. Treating them as one is how someone
+gets told to slow down when the fault is entirely ours.
 
 The server already applies a bounded retry with exponential backoff on 429 and
 5xx before giving up, so by the time you see `UPSTREAM_*` it has genuinely
@@ -87,8 +109,18 @@ for when the *service* broke, not for when the *answer* is "I don't know".
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `message` | `string` | yes | 1–1000 characters. Whitespace-only is rejected |
-| `conversation_id` | `string \| null` | no | Omit on the first request; send back what you were given |
-| `category` | `string \| null` | no | Optional retrieval filter: `ferry`, `cargo`, `cruise`, `airport`, `general` |
+| `conversation_id` | `string \| null` | no | Omit on the first request; send back what you were given. Anything that is not a well-formed UUID is replaced with a fresh id |
+| `category` | `string \| null` | no | Optional retrieval filter: `ferry`, `cargo`, `cruise`, `airport`, `general`. Anything else is a **422** |
+
+**About `category`.** It is a hard constraint, not a hint. It restricts
+retrieval to rows in that area and it **overrides** the category the agent would
+have chosen for itself — a widget embedded on the airport page is asking not to
+be answered from ferry rows, and it knows that better than a classifier reading
+the question does. Omit the field entirely if you do not mean it; sending an
+area you did not intend produces a confident "I do not have that" for a question
+the knowledge base answers. An unknown value is rejected rather than applied,
+for the same reason: a filter that matches no row is indistinguishable from an
+empty knowledge base.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/chat \
@@ -110,11 +142,40 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 | `tool_calls` | `ToolCall[]` | Tools the agent used this turn, in order |
 | `meta` | `ResponseMeta` | Diagnostics |
 
-`Citation`: `kb_id`, `category`, `subcategory`, `source_url`, `source_type`,
-`as_of`, `confidence`.
-
 `ResponseMeta`: `request_id`, `latency_ms`, `retrieved_count`, `best_score`,
 `cited_ids`, `hallucinated_citations`, `unverified_figures`, `kb_version`.
+`kb_version` is `string | null` — an index built before versions were recorded
+has none. Do not require it.
+
+### `Citation`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `kb_id` | `string` | The row id, matching the `[kb-xxx]` marker |
+| `category` | `string` | `ferry`, `cargo`, `cruise`, `airport`, `general` |
+| `subcategory` | `string` | Narrower topic, e.g. `fares` |
+| `source_url` | `string` | The published source |
+| `source_type` | `string` | `official-site`, `official-pdf`, `client-interview`, `press`, `regulator` |
+| `as_of` | `string` | ISO date a researcher verified the fact |
+| `confidence` | `string` | Always `confirmed` for an indexed row |
+| `volatility` | `"low" \| "medium" \| "high" \| null` | How fast the fact goes stale |
+| `label` | `string \| null` | The row's own question — a readable name for the source |
+| `snippet` | `string \| null` | Short excerpt of the row's stored answer |
+
+Every field is copied from the stored metadata of a row that was really
+retrieved. **None of it is model output**, and none of it is inferred.
+
+> **`volatility` is `null` when the row has none, and that is not the same as
+> `low`.** Treat an absent or unrecognised value as `high`. The failure that
+> matters here is a stale ferry departure shown quietly as a confident fact, so
+> the unknown case has to be the cautious one. Do not let a missing field
+> downgrade a schedule.
+
+`snippet` is truncated server-side at 180 characters and **only ever cut at
+whitespace**, so a figure is never split — `XCD 44.44` cannot arrive as
+`XCD 44.4`. A source with no curated answer (a scraped page or a PDF) carries no
+snippet at all rather than an arbitrary slice of itself, and its `label` is the
+page title.
 
 `ChartSpec`:
 
@@ -194,7 +255,10 @@ directly, e.g. `"Searching SCASPA knowledge base — ferry fares"`.
       "source_url": "https://example.invalid/ferry-terminal/fares",
       "source_type": "official-site",
       "as_of": "2026-04-01",
-      "confidence": "confirmed"
+      "confidence": "confirmed",
+      "volatility": "medium",
+      "label": "How much is a ferry ticket?",
+      "snippet": "The placeholder one-way fare is XCD 44.44 for a fictional adult ticket."
     }
   ],
   "chart": null,
@@ -303,7 +367,7 @@ event: token       → { "text": "..." }              (repeated)
 event: replace     → { "text": "..." }              (rare — see below)
 event: citations   → { "citations": [ Citation ] }
 event: chart       → ChartSpec                      (only when there is a chart)
-event: done        → { "latency_ms", "grounded", "refusal", "kb_version" }
+event: done        → { "latency_ms", "grounded", "refusal", "refusal_category", "kb_version" }
 event: error       → { "code", "message", "request_id" }
 ```
 
@@ -347,6 +411,14 @@ Rare. If the agent hits its tool-call cap, the tokens already streamed were an
 internal message, not an answer. `replace` carries the text to show **instead**:
 discard everything accumulated from `token` so far and render `replace.text`.
 `done` will report `refusal: true`.
+
+### The `done` event
+
+Same fields the non-streaming response carries, including `refusal_category`, so
+a streamed refusal can pick the same specific copy. `kb_version` and
+`refusal_category` are both nullable. **Parse `done` tolerantly**: it is the last
+event, so a client that rejects it has no later event to recover on and the
+answer stays stuck mid-stream forever.
 
 Guarantees:
 
@@ -406,7 +478,7 @@ $ uv run python scripts/stream_demo.py "How much is a ferry ticket?"
     58.7ms  meta      {"conversation_id": "4e30517a-..."}
    103.1ms  token     (first) 'The place'
    786.1ms  citations ['kb-008']
-   786.7ms  done      {"latency_ms": 725, "grounded": true, "refusal": false, "kb_version": "2026-06-01"}
+   786.7ms  done      {"latency_ms": 725, "grounded": true, "refusal": false, "refusal_category": null, "kb_version": "2026-06-01"}
   time to first token : 103.1ms
 ```
 
@@ -605,7 +677,147 @@ generation is a deliberate, separately measured change.
 
 ---
 
-## Not yet implemented
+## Operations: vessels, flights and tariffs
 
-Voice endpoints (`app/routers/voice.py`) are placeholders and unregistered. This
-file will carry their contract when they land.
+`GET /api/vessels` · `GET /api/flights` · `GET /api/tariffs`
+
+**These are not the assistant, and that separation is the point.** The system
+prompt forbids the assistant from claiming live status — it cannot see whether a
+berth is occupied or a flight is delayed, and it may not infer either from a
+published schedule. These endpoints are a plain data path with no model in them:
+a feed comes in, it is validated, and it goes out saying where it came from.
+
+So a panel may show "EN ROUTE" — because a named feed said so at a stated time —
+while the assistant continues to decline to say it in a sentence. Both are true
+at once, and the `source` object is what makes that so.
+
+### `DataSource`, on every operations response
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `kind` | `"live" \| "fixture" \| "unavailable"` | Which of the three you are looking at |
+| `label` | `string` | Human-readable origin, safe to render |
+| `as_of` | `string \| null` | When the data was produced. **Not** when you fetched it |
+| `notice` | `string \| null` | **Render this whenever present** |
+
+> **`notice` is mandatory to display.** It is non-null for every `fixture` and
+> `unavailable` source and the server will not build one without it. A table of
+> vessel arrivals is believed on sight, and nothing in the rows tells a reader
+> whether they are looking at a real feed or at development sample data. This
+> string is the only thing that does.
+
+`kind: "unavailable"` is the **production default** and is a **200 with an empty
+list**, not an error. SCASPA has published no feed; that is a fact about the
+world, not a failure, and a 503 would put a red error panel in front of someone
+over a feature that was never switched on. Render your empty state.
+
+`kind: "fixture"` is obviously-fake development data and is **refused at boot**
+when `ENV=prod`.
+
+Every metric (`vessels_at_berth`, `on_time_percent`, …) is nullable. **Null is
+not zero**: "0 vessels at berth" describes an empty port, which is a completely
+different statement from "this feed does not report occupancy".
+
+`VesselArrival` carries `eta` and `ata` as **separate fields**. An ETA is a
+prediction and an ATA is a record. Do not collapse them into one "time" column —
+that is how a guess gets read as a fact by someone deciding whether to drive to
+the port.
+
+---
+
+## `POST /api/tariffs/quote`
+
+Applies published rates to the quantities you send and totals them.
+
+> ### The total is derived, and it must never appear without its disclaimer
+>
+> Every `rate` in `line_items` is a published SCASPA figure, quoted exactly.
+> **The total is not.** It is arithmetic this API did, and it appears in no
+> published source — which is why the assistant itself is forbidden from
+> producing such a figure at all.
+>
+> Three things make that exception safe, and a client must preserve all three:
+>
+> 1. **Show every line.** Each carries its code, rate, quantity and amount, so
+>    the arithmetic can be checked by hand. The lines always add up to the total
+>    exactly — each is rounded before summing.
+> 2. **Do not style it as a charge.** It is an estimate, not an invoice line.
+> 3. **Render `disclaimer` in full**, next to the total, never truncated and
+>    never behind a "show more".
+>
+> `derived` is always `true` and `disclaimer` is always non-empty. Treat both as
+> required: a quote arriving without them is a contract violation, and rendering
+> a bare total is worse than rendering nothing, because someone will budget a
+> shipment against it.
+
+Only `XCD` is accepted. Converting a published fee applies an exchange rate
+nobody published — a **422**, not a silent conversion.
+
+---
+
+## Support
+
+`GET /api/support/directory` returns published contact routes and the department
+values the ticket form accepts.
+
+`POST /api/support/ticket` takes `department`, `subject`, `details`, and
+optionally `include_transcript` with a `conversation_id`.
+
+> ### It takes no name, no email, no phone number and no attachment
+>
+> Not an oversight. `docs/privacy.md` states that nothing in this service can
+> link a conversation to a person, and a ticket carrying an email address would
+> make that false. Sending those fields anyway is harmless and pointless — they
+> are ignored, never stored and never echoed.
+>
+> The exchange is inverted instead: the user gets a `reference` to quote when
+> **they** contact SCASPA. **Always render `next_step`.** Nobody will make
+> contact first, and a receipt that omits that reads as "we'll be in touch".
+
+---
+
+## Rate limits by scope
+
+Three budgets, split by what a request costs rather than by which router it is
+in:
+
+| Scope | Endpoints | Limit |
+| --- | --- | --- |
+| `chat` | `/api/chat`, `/api/chat/stream` | `RATE_LIMIT_PER_MINUTE` |
+| `voice` | `/api/stt`, `/api/tts` | a third of it — billed per second and per character |
+| `ops` | vessels, flights, tariffs, support | four times it — no model, no embedding |
+
+The `ops` split matters to a client: browsing an arrivals board is naturally
+several requests, and if they came out of the chat budget then paging through
+vessels would leave someone unable to ask a question, having spent their
+allowance on page views they never thought of as requests.
+
+---
+
+## Not in this API
+
+Everything documented above is implemented and registered, voice included — the
+"not yet implemented" note that used to close this file was left behind by the
+prompt that added the voice endpoints, and `npm run check:integration` exercises
+them.
+
+Two things a client should not go looking for:
+
+- **`GET /api/admin/stats`** exists, but it is an operator endpoint behind
+  `X-Admin-Secret` and the route is **absent entirely** unless `ADMIN_SECRET` is
+  configured. It is not part of this contract and no browser client should call
+  it: doing so would mean shipping the secret in a bundle, which is worse than
+  having no stats page. Read it with `curl` from somewhere that already holds
+  the secret.
+- **Model names.** They appear in `GET /api/health` and nowhere else — never in
+  a chat response and never in an error.
+
+### If voice returns 503
+
+Voice is an enhancement and every failure in it is contained: the text path is
+completely unaffected. A 503 from `/api/stt` or `/api/tts` has two causes that
+look identical from the client, and both are configuration rather than code:
+`OPENAI_API_KEY` is unset, or the project behind the key has no access to the
+configured `OPENAI_TRANSCRIBE_MODEL` / `OPENAI_TTS_MODEL`. The backend log line
+`tts_failed` / `stt_failed` carries the provider's own reason. Do not block the
+chat UI on either.

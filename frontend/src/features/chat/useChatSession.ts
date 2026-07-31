@@ -262,7 +262,12 @@ export function useChatSession() {
             onReplace: (data) => dispatch({ type: 'REPLACE', text: data.text }),
             onDone: (data) => {
               disarm();
-              dispatch({ type: 'DONE', grounded: data.grounded, refusal: data.refusal });
+              dispatch({
+                type: 'DONE',
+                grounded: data.grounded,
+                refusal: data.refusal,
+                refusalCategory: data.refusal_category ?? null,
+              });
               logTurn(turn.finish('stream', tools, answerChars));
             },
             onError: (data) => {

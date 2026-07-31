@@ -38,11 +38,9 @@ export type SourceType =
 /**
  * How fast this fact goes stale. `high` is a schedule; `low` is "there is Wi-Fi".
  *
- * ⚠️ **Not currently sent by the API.** It is a column on every knowledge-base row
- * (`backend/app/rag/models.py`) but is not part of the `Citation` payload in
- * `docs/api-contract.md`. Raised with the backend team — see `docs/decisions.md`
- * F005. Until it arrives, a citation without it is treated as **high**, because
- * the failure that matters is a stale ferry time shown quietly.
+ * Sent on every citation. It arrives as `null` — never as a guess — for a row
+ * with no volatility on record, and `volatilityOf` then applies **high**,
+ * because the failure that matters is a stale ferry time shown quietly.
  */
 export type Volatility = 'low' | 'medium' | 'high';
 
@@ -61,17 +59,21 @@ export interface Citation {
   as_of: string;
   confidence: string;
 
-  // ── Not in the contract yet ────────────────────────────────────────────────
-  // All three exist on the knowledge-base row and none is exposed on the
-  // Citation. Typed optional so the UI lights up the moment the backend sends
-  // them, and degrades honestly until it does. Never fabricated client-side.
+  // ── Sent, but nullable ─────────────────────────────────────────────────────
+  // All three come from the indexed row, and the backend sends null rather than
+  // a guess when a row has none. Null and absent are handled identically, and
+  // neither is ever filled in client-side.
 
-  /** KB `volatility`. Absent → treated as `high`. */
-  volatility?: Volatility | undefined;
-  /** KB `question` — a human label for the row. Absent → derived from category. */
-  label?: string | undefined;
-  /** An excerpt of the KB `answer`. Absent → the excerpt slot is omitted, not invented. */
-  snippet?: string | undefined;
+  /** KB `volatility`. Null or absent → treated as `high`, the cautious default. */
+  volatility?: Volatility | null | undefined;
+  /** KB `question` — a human label for the row. Null → derived from category. */
+  label?: string | null | undefined;
+  /**
+   * An excerpt of the KB `answer`, truncated server-side on a word boundary so a
+   * figure can never be cut in half. Null → the excerpt slot is omitted, not
+   * invented. A scraped page has no curated answer and so has no snippet.
+   */
+  snippet?: string | null | undefined;
 }
 
 // ── Charts ───────────────────────────────────────────────────────────────────
@@ -112,12 +114,22 @@ export interface ChartSpec {
 // ── Tools ────────────────────────────────────────────────────────────────────
 
 /** The five tools, so a client can pick an icon per name. */
-export type ToolName =
+export type KnownToolName =
   | 'search_scaspa_knowledge'
   | 'search_site_content'
   | 'make_chart'
   | 'calculate'
   | 'escalate_to_human';
+
+/**
+ * A tool name as it arrives.
+ *
+ * The union with `string` is deliberate and it is not laziness: it keeps
+ * autocomplete on the five known names while making it a *type error* to write a
+ * `switch` over them without a default. A sixth tool must degrade to a generic
+ * icon, not throw away the answer it was reporting progress on.
+ */
+export type ToolName = KnownToolName | (string & {});
 
 export interface ToolCall {
   name: ToolName;
@@ -137,7 +149,8 @@ export interface ResponseMeta {
   cited_ids: string[];
   hallucinated_citations: string[];
   unverified_figures: string[];
-  kb_version: string;
+  /** Null when the index carries no version. Never read a missing version as "0". */
+  kb_version: string | null;
 }
 
 /** `vessel_or_aircraft_operations` | `personal_record` | null, per the contract. */
@@ -213,11 +226,10 @@ export interface HealthResponse {
 /** Switch on `code`, never on `message`. */
 export type ErrorCode =
   /**
-   * ⚠️ **Not in `docs/api-contract.md`.** The backend emits it (429, per-IP client
-   * rate limiting, `app/errors.py`) and the contract documents only
-   * `UPSTREAM_RATE_LIMITED`, which is a different thing — the model provider
-   * throttling *us*, on a 503. Verified against the running backend; see
-   * `docs/backend-issues.md` #1.
+   * 429, per-IP client rate limiting. A different thing from
+   * `UPSTREAM_RATE_LIMITED`, which is the model provider throttling *us* on a
+   * 503 — different cause, different copy, different retry advice. Both are in
+   * the contract's error table; `backend/tests/test_contract.py` pins the set.
    */
   | 'RATE_LIMITED'
   | 'VALIDATION_ERROR'
@@ -340,7 +352,9 @@ export interface StreamDoneEvent {
     latency_ms: number;
     grounded: boolean;
     refusal: boolean;
-    kb_version: string;
+    /** Lets a streamed refusal pick the same specific copy the JSON endpoint can. */
+    refusal_category?: RefusalCategory;
+    kb_version: string | null;
   };
 }
 
@@ -366,3 +380,242 @@ export type StreamEvent =
 
 /** The `event:` names, useful for parsing and for exhaustiveness checks. */
 export type StreamEventName = StreamEvent['event'];
+
+// ── Operations: vessels, flights, tariffs ────────────────────────────────────
+//
+// From `GET /api/vessels`, `/api/flights` and `/api/tariffs`, which are a
+// **separate, non-LLM path**. The assistant cannot see live operations and is
+// forbidden from claiming it can (`app/agent/prompts.py` rule 10); these
+// endpoints serve a feed and state where it came from. A panel may therefore
+// show a berth status that the assistant will not put in a sentence.
+
+/** Where a set of records came from, and how much to trust it. */
+export type SourceKind = 'live' | 'fixture' | 'unavailable';
+
+export interface DataSource {
+  kind: SourceKind;
+  /** Human-readable origin, safe to render as-is. */
+  label: string;
+  /** ISO timestamp. Null when the source did not say. */
+  as_of: string | null;
+  /**
+   * **Render this whenever it is present.**
+   *
+   * Non-null for every `fixture` and `unavailable` source — the backend's schema
+   * refuses to build one without it. A table of vessel arrivals is believed on
+   * sight, and nothing in the rows tells a reader they are looking at sample
+   * data. This string is the only thing that does.
+   */
+  notice: string | null;
+}
+
+export type VesselStatus = 'at_berth' | 'en_route' | 'scheduled' | 'departed' | 'unknown';
+
+export interface VesselArrival {
+  id: string;
+  name: string;
+  imo: string | null;
+  vessel_type: string;
+  agent: string;
+  berth: string;
+  status: VesselStatus;
+  /**
+   * `eta` is a prediction; `ata` is a record of something that happened. Two
+   * fields rather than one timestamp plus a flag, precisely so a UI cannot
+   * present a guess as a fact by losing the distinction.
+   */
+  eta: string | null;
+  ata: string | null;
+}
+
+/** Every field nullable: unknown is `null`, never `0`. */
+export interface VesselMetrics {
+  vessels_at_berth: number | null;
+  berth_capacity: number | null;
+  arrivals_next_24h: number | null;
+  daily_cargo_teu: number | null;
+}
+
+export interface VesselArrivalsResponse {
+  source: DataSource;
+  vessels: VesselArrival[];
+  metrics: VesselMetrics;
+  /** Matching records before paging, so pagination can be rendered. */
+  total: number;
+  request_id: string;
+}
+
+export type FlightStatus = 'on_time' | 'delayed' | 'landed' | 'arrived' | 'boarding' | 'cancelled';
+
+export type FlightDirection = 'arrival' | 'departure';
+
+export interface Flight {
+  id: string;
+  flight_no: string;
+  airline: string;
+  airline_code: string;
+  direction: FlightDirection;
+  /** The other end of the route: origin for an arrival, destination for a departure. */
+  port: string;
+  port_code: string;
+  gate: string | null;
+  status: FlightStatus;
+  scheduled_time: string | null;
+  /** Only present when it differs from scheduled — the revised time for a delay. */
+  estimated_time: string | null;
+}
+
+export interface FlightMetrics {
+  total_flights: number | null;
+  on_time_percent: number | null;
+  gates_active: number | null;
+  gates_total: number | null;
+}
+
+export interface OperationalAdvisory {
+  headline: string;
+  detail: string;
+  temperature_c: number | null;
+  systems_status: string;
+}
+
+export interface FlightSchedulesResponse {
+  source: DataSource;
+  flights: Flight[];
+  metrics: FlightMetrics;
+  advisory: OperationalAdvisory | null;
+  total: number;
+  request_id: string;
+}
+
+export type TariffCategory = 'maritime' | 'aviation' | 'cargo' | 'passenger';
+
+export interface TariffRow {
+  code: string;
+  service: string;
+  /** The unit the rate applies to, e.g. "per ft per 24h". */
+  basis: string;
+  amount: number;
+  currency: string;
+  category: TariffCategory;
+  /** The knowledge-base row this rate was published in, when it is indexed. */
+  kb_id: string | null;
+  as_of: string;
+}
+
+export interface TariffTableResponse {
+  source: DataSource;
+  tariffs: TariffRow[];
+  /** Category chips. Derived from the whole table, not the filtered slice. */
+  categories: string[];
+  total: number;
+  request_id: string;
+}
+
+// ── The fee calculator ───────────────────────────────────────────────────────
+
+export interface TariffQuoteRequest {
+  category: TariffCategory;
+  vessel_type?: string | null;
+  length_ft?: number | null;
+  stay_days?: number | null;
+  container_size?: '20ft' | '40ft' | null;
+  units?: number | null;
+  storage_days?: number | null;
+  /** XCD only. Converting a published fee applies a rate nobody published. */
+  currency?: 'XCD';
+}
+
+export interface TariffLineItem {
+  code: string;
+  label: string;
+  basis: string;
+  /** The published rate, exactly as published. */
+  rate: number;
+  quantity: number;
+  quantity_label: string;
+  /** `rate × quantity`, rounded — so the printed lines add up to the printed total. */
+  amount: number;
+  kb_id: string | null;
+}
+
+export interface TariffQuote {
+  line_items: TariffLineItem[];
+  subtotal: number;
+  total: number;
+  currency: string;
+  /**
+   * Always `true`, and typed as the literal so it cannot be read as optional.
+   *
+   * The total appears in no published source. Every `rate` above it is published
+   * and cited; the arithmetic on top is the tool's own.
+   */
+  derived: true;
+  /**
+   * **Mandatory to display with the total. Never collapse or truncate it.**
+   *
+   * It names what the figure is not — not an invoice, not an official customs
+   * assessment, not a valuation. A total shown without it is the product making
+   * exactly the claim it was built not to make.
+   */
+  disclaimer: string;
+  source: DataSource;
+  request_id: string;
+}
+
+// ── Support ──────────────────────────────────────────────────────────────────
+
+export interface ContactPoint {
+  label: string;
+  value: string;
+  kind: 'phone' | 'email' | 'post' | 'extension' | 'web';
+}
+
+export interface ContactLocation {
+  name: string;
+  address: string;
+  status: string;
+  contacts: ContactPoint[];
+}
+
+export interface SupportDirectory {
+  source: DataSource;
+  locations: ContactLocation[];
+  emergency: string | null;
+  /** The values the ticket form's department select may send. */
+  departments: string[];
+  request_id: string;
+}
+
+/**
+ * `POST /api/support/ticket`.
+ *
+ * **There is no name, email, phone or attachment field, and adding one here
+ * would not help** — the backend does not accept them. `docs/privacy.md` states
+ * that nothing in this service can link a conversation to a person, and a ticket
+ * carrying an email address would make that false.
+ *
+ * The exchange is inverted instead: describe the problem, get a reference, quote
+ * it when you contact SCASPA. `SupportTicketResponse.next_step` says so.
+ */
+export interface SupportTicketRequest {
+  department: string;
+  subject: string;
+  details: string;
+  /** Off by default. A transcript is the user's own words and goes only when asked. */
+  include_transcript?: boolean;
+  conversation_id?: string | null;
+}
+
+export interface SupportTicketResponse {
+  reference: string;
+  department: string;
+  expected_response: string;
+  /**
+   * **Always render this.** Nobody will make contact first, because no contact
+   * detail was taken. A receipt that omits it reads as "we'll be in touch".
+   */
+  next_step: string;
+  transcript_included: boolean;
+  request_id: string;
+}

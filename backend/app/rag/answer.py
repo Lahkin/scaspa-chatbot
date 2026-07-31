@@ -86,6 +86,9 @@ class Citation(BaseModel):
     source_type: str = ""
     as_of: str = ""
     confidence: str = ""
+    volatility: str | None = None
+    label: str | None = None
+    snippet: str | None = None
 
 
 class ToolCallInfo(BaseModel):
@@ -270,6 +273,58 @@ def _appears_verbatim(value: str, haystack: str) -> bool:
     return bool(pattern.search(haystack))
 
 
+# The `label` and `snippet` on a citation come from the chunk's own text rather
+# than from its Chroma metadata. `app.rag.chunking.build_kb_text` writes every
+# row in this fixed shape, so the two lines below are exactly the row's stored
+# `question` and `answer` — no less verbatim than a metadata copy would be, and
+# available against an index that was built before these fields existed. A
+# scraped web chunk has no such structure and simply yields None for both.
+_KB_QUESTION_LINE = re.compile(r"^Question:[ \t]*(.+)$", re.MULTILINE)
+_KB_ANSWER_BLOCK = re.compile(
+    r"^Answer:[ \t]*(.*?)(?=\n(?:Also known as:)|\Z)", re.MULTILINE | re.DOTALL
+)
+
+# Long enough to tell two fare rows apart, short enough not to reprint the answer
+# underneath the answer.
+SNIPPET_MAX_CHARS = 180
+
+
+def truncate_on_word(text: str, limit: int = SNIPPET_MAX_CHARS) -> str:
+    """Shorten `text` to `limit` characters, cutting only at whitespace.
+
+    The whitespace rule is not cosmetic. A mid-token cut would turn `XCD 44.44`
+    into `XCD 44.4` — a figure that is wrong, looks deliberate, and appears
+    directly under an answer the reader has been asked to trust. Cutting between
+    tokens can only ever drop a whole word.
+    """
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    head = collapsed[:limit]
+    cut = head.rfind(" ")
+    # A single token longer than the limit has no safe cut, so drop the snippet
+    # rather than publish a fragment of it.
+    if cut <= 0:
+        return ""
+    return f"{head[:cut].rstrip()}…"
+
+
+def kb_label_and_snippet(chunk: RetrievedChunk) -> tuple[str | None, str | None]:
+    """A human-readable label for this source, and a short excerpt of it.
+
+    For a knowledge-base row that is the stored `question` and `answer`. A
+    scraped page has neither, so it falls back to its `title` metadata and
+    carries no excerpt — an arbitrary 180 characters of a PDF is not an excerpt,
+    it is a fragment, and it would read as though someone chose it.
+    """
+    question = _KB_QUESTION_LINE.search(chunk.text)
+    answer = _KB_ANSWER_BLOCK.search(chunk.text)
+
+    label = question.group(1).strip() if question else chunk.metadata.get("title", "").strip()
+    snippet = truncate_on_word(answer.group(1)) if answer else ""
+    return (label or None), (snippet or None)
+
+
 def build_citations(chunks: list[RetrievedChunk], cited_ids: list[str]) -> list[Citation]:
     """Build the citations array from stored metadata only.
 
@@ -287,6 +342,7 @@ def build_citations(chunks: list[RetrievedChunk], cited_ids: list[str]) -> list[
             logger.warning("hallucinated_citation id=%s reason=not_in_retrieved_set", kb_id)
             continue
         meta = chunk.metadata
+        label, snippet = kb_label_and_snippet(chunk)
         citations.append(
             Citation(
                 kb_id=kb_id,
@@ -296,6 +352,12 @@ def build_citations(chunks: list[RetrievedChunk], cited_ids: list[str]) -> list[
                 source_type=meta.get("source_type", ""),
                 as_of=meta.get("as_of", ""),
                 confidence=meta.get("confidence", ""),
+                # Null, never a guess. A client is told to treat an unknown
+                # volatility as the cautious case; inventing "low" here would
+                # quietly downgrade a schedule that nobody has classified.
+                volatility=meta.get("volatility") or None,
+                label=label,
+                snippet=snippet,
             )
         )
     return citations
@@ -307,6 +369,10 @@ def build_chat_model(settings: Settings | None = None) -> BaseChatModel:
     Model id and temperature always come from settings — CLAUDE.md rule 2.
     """
     settings = settings or get_settings()
+    # `omit` means send no reasoning_effort at all, for a model that does not
+    # accept the parameter. See the setting's comment for why the default is
+    # `none` — it is what lets a reasoning model use function tools.
+    effort = settings.OPENAI_REASONING_EFFORT.strip().lower()
     return ChatOpenAI(
         model=settings.OPENAI_CHAT_MODEL,
         temperature=settings.CHAT_TEMPERATURE,
@@ -316,6 +382,7 @@ def build_chat_model(settings: Settings | None = None) -> BaseChatModel:
         # Retries are handled by app.upstream so the policy is ours, uniform
         # across chat and embeddings, and testable.
         max_retries=0,
+        **({} if effort in {"", "omit"} else {"reasoning_effort": effort}),
     )
 
 
@@ -504,6 +571,7 @@ def answer_question(
             chat_model=chat_model,
             embeddings=embeddings,
             today=today,
+            category=category,
         ),
         settings=settings,
     )
@@ -624,6 +692,7 @@ async def astream_answer(
         chat_model=chat_model,
         embeddings=embeddings,
         today=today,
+        category=category,
     ):
         if await disconnected():
             logger.info("client_disconnected question=%r", query)
@@ -653,7 +722,13 @@ async def astream_answer(
 
 
 def _done_payload(result: AnswerResult, settings: Settings) -> dict:
-    """The `done` frame. Deliberately excludes the model name — see errors.py."""
+    """The `done` frame. Deliberately excludes the model name — see errors.py.
+
+    `refusal_category` is here so a *streamed* refusal can pick the same specific
+    copy the non-streaming endpoint allows. Without it a boundary refusal ("I
+    cannot look up your container") and a plain no-answer arrive
+    indistinguishable, and the client has to frame both as the latter.
+    """
     from app.rag.ingest import read_index_meta
 
     meta = read_index_meta(settings)
@@ -661,6 +736,7 @@ def _done_payload(result: AnswerResult, settings: Settings) -> dict:
         "latency_ms": result.latency_ms,
         "grounded": result.grounded,
         "refusal": result.refusal,
+        "refusal_category": result.refusal_category,
         "kb_version": meta.kb_version if meta else None,
     }
 

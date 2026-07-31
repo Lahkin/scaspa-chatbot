@@ -285,3 +285,59 @@ describe('amber-board is only ever used on a dark ground', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// ── The operations palette, imported from the SCASPA design system ───────────
+//
+// Two of these colours are traps, in the same way --color-amber-board is: the
+// design uses #00AA58 and #2DBCFE as status *text*, and both fail AA against a
+// light surface. They ship as fills with a matched ink, and this is what keeps
+// them that way.
+
+describe('operations status chips — each fill with its matched ink', () => {
+  const pairs = [
+    ['--color-ops-active-ink', '--color-ops-active-fill', 'docked / on time'],
+    ['--color-ops-transit-ink', '--color-ops-transit-fill', 'en route / expected'],
+    ['--color-ops-alert-ink', '--color-ops-alert-fill', 'delayed / error'],
+  ] as const;
+
+  for (const [ink, fill, meaning] of pairs) {
+    it(`${meaning}: ${ink} on ${fill}`, () => {
+      expect(ratio(ink, fill)).toBeGreaterThanOrEqual(AA_TEXT);
+    });
+  }
+
+  it('the chip fills are NOT usable as text on a light surface', () => {
+    // Asserting the failure on purpose. If a future palette edit made one of
+    // these pass, the pairing above would be over-cautious and someone should
+    // say so deliberately — but until then this records exactly why the design's
+    // own colour is not the one on the text.
+    expect(Number(ratio('--color-ops-active-fill', '--color-ops-surface'))).toBeLessThan(AA_TEXT);
+    expect(Number(ratio('--color-ops-transit-fill', '--color-ops-surface'))).toBeLessThan(AA_TEXT);
+  });
+});
+
+describe('operations text and surfaces — AA 4.5:1', () => {
+  const inks = ['--color-ops-ink', '--color-ops-ink-variant', '--color-ops-sky'] as const;
+  const surfaces = [
+    '--color-ops-surface',
+    '--color-ops-surface-low',
+    '--color-ops-surface-high',
+  ] as const;
+
+  for (const ink of inks) {
+    for (const surface of surfaces) {
+      it(`${ink} on ${surface}`, () => {
+        expect(ratio(ink, surface)).toBeGreaterThanOrEqual(AA_TEXT);
+      });
+    }
+  }
+
+  it('white reads on the navy app bar and its container tone', () => {
+    expect(ratio('--color-ink-inverse', '--color-ops-navy')).toBeGreaterThanOrEqual(AA_TEXT);
+    expect(ratio('--color-ink-inverse', '--color-ops-navy-soft')).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+
+  it('the ops outline is discernible as a control boundary — 3:1', () => {
+    expect(ratio('--color-ops-outline', '--color-ops-surface')).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+});

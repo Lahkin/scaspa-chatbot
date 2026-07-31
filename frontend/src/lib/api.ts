@@ -18,12 +18,33 @@ import { config } from './config';
 import {
   chatResponseSchema,
   errorEnvelopeSchema,
+  flightSchedulesResponseSchema,
   healthResponseSchema,
   parseOrThrow,
   sttResponseSchema,
+  supportDirectorySchema,
+  supportTicketResponseSchema,
+  tariffQuoteSchema,
+  tariffTableResponseSchema,
   ttsPreviewResponseSchema,
+  vesselArrivalsResponseSchema,
 } from './schemas';
-import type { ApiErrorBody, ChatResponse, ErrorCode, HealthResponse, SttResponse } from './types';
+import type {
+  ApiErrorBody,
+  Category,
+  ChatResponse,
+  ErrorCode,
+  FlightSchedulesResponse,
+  HealthResponse,
+  SttResponse,
+  SupportDirectory,
+  SupportTicketRequest,
+  SupportTicketResponse,
+  TariffQuote,
+  TariffQuoteRequest,
+  TariffTableResponse,
+  VesselArrivalsResponse,
+} from './types';
 
 /**
  * A failure, typed.
@@ -291,17 +312,37 @@ async function request(options: RequestOptions): Promise<Response> {
 export async function sendMessage(
   message: string,
   conversationId: string | null,
-  init?: { signal?: AbortSignal | undefined }
+  init?: { signal?: AbortSignal | undefined; category?: Category | null | undefined }
 ): Promise<ChatResponse> {
   const response = await request({
     path: '/api/chat',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, conversation_id: conversationId }),
+    body: JSON.stringify(chatBody(message, conversationId, init?.category)),
     timeoutMs: config.requestTimeoutMs,
     signal: init?.signal,
   });
   return parseOrThrow(chatResponseSchema, await response.json(), 'chat') as ChatResponse;
+}
+
+/**
+ * The `POST /api/chat` body, shared with `lib/stream.ts` so the two endpoints
+ * cannot start sending different requests for the same question.
+ *
+ * `category` is **omitted when absent**, not sent as null. The backend rejects an
+ * unknown category with a 422 rather than filtering retrieval down to nothing —
+ * so the key is only present when there is a real value to put in it.
+ */
+export function chatBody(
+  message: string,
+  conversationId: string | null,
+  category?: Category | null
+): Record<string, unknown> {
+  return {
+    message,
+    conversation_id: conversationId,
+    ...(category ? { category } : {}),
+  };
 }
 
 export async function getHealth(init?: {
@@ -388,6 +429,154 @@ export async function previewSpeech(
     signal: init?.signal,
   });
   return parseOrThrow(ttsPreviewResponseSchema, await response.json(), 'speech preview').text;
+}
+
+// ── Operations ───────────────────────────────────────────────────────────────
+//
+// A separate, non-LLM path. Every response carries a `source` saying where the
+// records came from and how old they are, and a `notice` the UI must render for
+// anything that is not a live feed.
+//
+// None of these throws when there is no feed configured: the backend answers 200
+// with an empty list and an explanatory notice, which the UI renders as its empty
+// state. A 503 would put a red error panel in front of someone over a feature
+// that was never switched on.
+
+/**
+ * Build a query string, dropping every empty value so the URL stays readable.
+ *
+ * Takes `object` rather than an index-signature type so the typed `*Query`
+ * interfaces below can be passed straight in — an interface has no implicit
+ * index signature, and widening each of them to `Record<string, …>` would throw
+ * away the field names that make a typo a compile error.
+ */
+function queryString(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    search.set(key, String(value));
+  }
+  const encoded = search.toString();
+  return encoded ? `?${encoded}` : '';
+}
+
+export interface VesselQuery {
+  q?: string | undefined;
+  vessel_type?: string | undefined;
+  berth?: string | undefined;
+  status?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
+export async function getVessels(
+  params: VesselQuery = {},
+  init?: { signal?: AbortSignal | undefined }
+): Promise<VesselArrivalsResponse> {
+  const response = await request({
+    path: `/api/vessels${queryString(params)}`,
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(vesselArrivalsResponseSchema, await response.json(), 'vessel arrivals');
+}
+
+export interface FlightQuery {
+  q?: string | undefined;
+  airline?: string | undefined;
+  status?: string | undefined;
+  direction?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
+export async function getFlights(
+  params: FlightQuery = {},
+  init?: { signal?: AbortSignal | undefined }
+): Promise<FlightSchedulesResponse> {
+  const response = await request({
+    path: `/api/flights${queryString(params)}`,
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(flightSchedulesResponseSchema, await response.json(), 'flight schedules');
+}
+
+export interface TariffQuery {
+  q?: string | undefined;
+  category?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
+export async function getTariffs(
+  params: TariffQuery = {},
+  init?: { signal?: AbortSignal | undefined }
+): Promise<TariffTableResponse> {
+  const response = await request({
+    path: `/api/tariffs${queryString(params)}`,
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(tariffTableResponseSchema, await response.json(), 'tariff table');
+}
+
+/**
+ * Price a movement against the published rates.
+ *
+ * The returned `total` is **derived** and its `disclaimer` is mandatory —
+ * `tariffQuoteSchema` refuses a quote that arrives without one, rather than
+ * rendering a bare figure. See the note on that schema.
+ */
+export async function requestTariffQuote(
+  body: TariffQuoteRequest,
+  init?: { signal?: AbortSignal | undefined }
+): Promise<TariffQuote> {
+  const response = await request({
+    path: '/api/tariffs/quote',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(tariffQuoteSchema, await response.json(), 'tariff quote');
+}
+
+// ── Support ──────────────────────────────────────────────────────────────────
+
+export async function getSupportDirectory(init?: {
+  signal?: AbortSignal | undefined;
+}): Promise<SupportDirectory> {
+  const response = await request({
+    path: '/api/support/directory',
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(supportDirectorySchema, await response.json(), 'support directory');
+}
+
+/**
+ * Raise a support ticket.
+ *
+ * `SupportTicketRequest` has no name, email or phone field and none may be added
+ * — the backend does not accept them, and accepting them would break the privacy
+ * claim in `docs/privacy.md`. The user gets a reference to quote instead, and
+ * `next_step` tells them so.
+ */
+export async function submitSupportTicket(
+  body: SupportTicketRequest,
+  init?: { signal?: AbortSignal | undefined }
+): Promise<SupportTicketResponse> {
+  const response = await request({
+    path: '/api/support/ticket',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(supportTicketResponseSchema, await response.json(), 'support ticket');
 }
 
 /**

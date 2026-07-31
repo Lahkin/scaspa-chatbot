@@ -13,7 +13,14 @@
  * sequence a test.
  */
 
-import type { ApiErrorBody, ChartSpec, Citation, ChartType, ToolName } from '@/lib/types';
+import type {
+  ApiErrorBody,
+  ChartSpec,
+  Citation,
+  ChartType,
+  RefusalCategory,
+  ToolName,
+} from '@/lib/types';
 import { guardPartialMarker } from './markerGuard';
 import type { ChatFailure, Message, ToolActivity } from './types';
 
@@ -79,7 +86,21 @@ export type ChatAction =
   | { type: 'CITATIONS'; citations: Citation[] }
   | { type: 'CHART'; chart: ChartSpec }
   | { type: 'REPLACE'; text: string }
-  | { type: 'DONE'; grounded: boolean; refusal: boolean }
+  | {
+      type: 'DONE';
+      grounded: boolean;
+      refusal: boolean;
+      /**
+       * Which refusal gate fired, when one did.
+       *
+       * Carried on `done` so a *streamed* refusal can pick the same specific
+       * copy the non-streaming path gets. Without it a boundary refusal ("I
+       * cannot look up your container") and a plain no-answer are
+       * indistinguishable, and both render with the no-answer framing — which is
+       * honest but says the wrong thing about why.
+       */
+      refusalCategory: RefusalCategory;
+    }
   | { type: 'STREAM_ERROR'; error: ApiErrorBody }
   /** A failure before any answer existed — a 503, a timeout, offline. */
   | { type: 'REQUEST_FAILED'; failure: ChatFailure }
@@ -231,6 +252,7 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
         streaming: false,
         grounded: action.grounded,
         refusal: action.refusal,
+        refusal_category: action.refusalCategory,
       }));
       return { ...patched, status: 'idle', streamingMessageId: null, heldText: '' };
     }

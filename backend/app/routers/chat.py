@@ -139,7 +139,7 @@ async def post_chat(
     enforce_rate_limit(request, limiter, scope="chat")
     message, injections = clean_message(payload, settings)
     kb_version = _require_index(settings)
-    conversation_id = payload.conversation_id or store.new_id()
+    conversation_id = store.adopt_or_mint(payload.conversation_id)
     request_id = getattr(request.state, "request_id", "-")
 
     if injections:
@@ -208,7 +208,7 @@ async def post_chat_stream(
     enforce_rate_limit(request, limiter, scope="chat")
     message, _injections = clean_message(payload, settings)
     kb_version = _require_index(settings)
-    conversation_id = payload.conversation_id or store.new_id()
+    conversation_id = store.adopt_or_mint(payload.conversation_id)
     request_id = getattr(request.state, "request_id", "-")
 
     async def generate() -> AsyncIterator[str]:

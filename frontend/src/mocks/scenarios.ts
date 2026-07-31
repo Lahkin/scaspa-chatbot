@@ -33,7 +33,8 @@ export type ScenarioId =
   | 'refusal'
   | 'ungrounded'
   | 'empty_citations'
-  | 'stream_stall';
+  | 'stream_stall'
+  | 'ops_unavailable';
 
 export interface ScenarioDescription {
   id: ScenarioId;
@@ -147,6 +148,14 @@ export const SCENARIOS: ScenarioDescription[] = [
     id: 'stream_stall',
     label: 'Stream stalls after 2 tokens',
     expected: 'No done, no error, no close. The client timeout is the only way out.',
+  },
+  {
+    id: 'ops_unavailable',
+    label: 'No operational feed configured',
+    expected:
+      'GET /api/vessels answers 200 with an empty list, null metrics and a notice — ' +
+      'not an error. This is the production default, so the empty board is the one ' +
+      'most people will actually see.',
   },
 ];
 
