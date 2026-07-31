@@ -512,3 +512,21 @@
 @utility text-on-navy-accent {
   color: var(--on-navy-accent);
 }
+
+/* Dividers and control boundaries on a navy ground.
+ *
+ * blue-300 measures 4.83:1 at the worst endpoint of --grad-sidebar, so it is
+ * strong enough to be a real boundary rather than a hint — which is what
+ * --color-border is on a light surface, and why that token cannot simply be
+ * reused here. Border only: this colour is a divider and an icon, and it is a
+ * text colour only where the contrast test says so. */
+@utility border-on-navy-muted {
+  border-color: var(--on-navy-muted);
+}
+
+/* The boundary of a control sitting on navy — a filled button whose own fill is
+ * too close to the ground to define its edge. 8.46:1, so the edge is
+ * unambiguous. See the note on the primary button in Sidebar.tsx. */
+@utility border-on-navy-secondary {
+  border-color: var(--on-navy-secondary);
+}

@@ -49,6 +49,7 @@ import {
   pickMimeType,
 } from '@/features/voice/capabilities';
 import { config as appConfig } from '@/lib/config';
+import { ScaspaMark } from '@/components/shells/ScaspaMark';
 import { LogoLockup } from '@/components/brand/LogoLockup';
 import { Sidebar } from '@/components/shells/Sidebar';
 import { SidebarDrawer } from '@/components/shells/SidebarDrawer';
@@ -613,6 +614,60 @@ function NavigationSection() {
           <Figure label="reversed on navy — badge withheld until the asset arrives" inverse>
             <LogoLockup size="lg" variant="reversed" tagline="Ports and travel, St. Kitts" />
           </Figure>
+        </div>
+      </Section>
+
+      {/*
+        The dark-ground variants, on a dark ground.
+
+        These could not go in the loops above: those render on the gallery's own
+        light surface, where `onNavy` is white text on a brand-blue fill floating
+        on white — legible by accident, and a completely misleading picture of
+        the state it is meant to document. A component state has to be shown on
+        the surface it was designed and measured for, or the gallery is showing
+        something that does not exist.
+
+        The panel is `--grad-sidebar` rather than a flat navy for the same
+        reason: these variants live on a gradient, and a control that looks right
+        against one navy can still fail against the other end of one.
+      */}
+      <Section
+        title="On a navy ground"
+        note="Sidebar, widget header and landing hero. Measured against the WORSE endpoint of the gradient — see tests/contrast.test.ts."
+      >
+        <div className="space-y-4 rounded-md bg-grad-sidebar p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="onNavy">Ask a question</Button>
+            <Button variant="onNavy" disabled>
+              Ask a question
+            </Button>
+            <Button variant="onNavy" loading loadingLabel="Asking">
+              Ask a question
+            </Button>
+            <IconButton label="Show sources (onNavy)" variant="onNavy">
+              <span aria-hidden="true">☰</span>
+            </IconButton>
+          </div>
+
+          <ScaspaMark reversed />
+
+          {/* The 1px horizon, at the size it is actually used. */}
+          <div aria-hidden="true" className="h-px bg-hairline-horizon" />
+
+          <div className="space-y-1">
+            <p className="text-small text-on-navy-primary">
+              on-navy-primary — headings and primary items, 10.89:1
+            </p>
+            <p className="text-small text-on-navy-secondary">
+              on-navy-secondary — sub-labels and secondary text, 8.46:1
+            </p>
+            <p className="text-small text-on-navy-muted">
+              on-navy-muted — icons, dividers, timestamps, 4.83:1
+            </p>
+            <p className="text-small text-on-navy-accent tabular">
+              on-navy-accent — 1,111.11 — quantities and nothing else, 5.38:1
+            </p>
+          </div>
         </div>
       </Section>
 

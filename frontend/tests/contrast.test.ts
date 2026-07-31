@@ -364,6 +364,21 @@ describe('amber-board is only ever used on a dark ground', () => {
   // pin both numbers; this pins that the source only ever pairs it with navy.
   // `tests/chat-rendering.test.tsx` goes further and checks the rendered DOM,
   // where the ancestor background can actually be resolved.
+  /*
+   * `bg-ops-navy` counts as a navy ground, and did not used to.
+   *
+   * The operations palette is a separate design system with its own navy, and
+   * this guard only knew the chat one — so the moment the published tariff
+   * table took the departure-board treatment, a correct pairing was reported as
+   * a violation. Amber measures 8.81:1 on `--color-ops-navy`, better than the
+   * 5.38:1 it gets on the chat navy, and the assertion above pins both.
+   *
+   * Widened rather than relaxed: the rule is still "amber text only ever
+   * appears in a file that establishes a navy ground", and the set of navies is
+   * now the set the codebase actually has.
+   */
+  const NAVY_GROUND = /\bbg-(ops-)?navy(-deep|-soft)?\b/;
+
   it('every file using amber as text also establishes a navy ground', () => {
     const files = globSync('src/**/*.{ts,tsx,css}', { cwd: PROJECT_ROOT });
 
@@ -371,10 +386,20 @@ describe('amber-board is only ever used on a dark ground', () => {
     for (const file of files) {
       const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
       if (!/\btext-amber-board\b/.test(source)) continue;
-      if (!/\bbg-navy(-deep)?\b/.test(source)) offenders.push(file);
+      if (!NAVY_GROUND.test(source)) offenders.push(file);
     }
 
     expect(offenders).toEqual([]);
+  });
+
+  it('the ground regex recognises every navy and rejects a light surface', () => {
+    // Without this, widening the pattern is indistinguishable from disabling it.
+    for (const cls of ['bg-navy', 'bg-navy-deep', 'bg-ops-navy', 'bg-ops-navy-soft']) {
+      expect(NAVY_GROUND.test(`px-3 ${cls} text-right`)).toBe(true);
+    }
+    for (const cls of ['bg-surface', 'bg-neutral-0', 'bg-blue-100', 'bg-ops-surface']) {
+      expect(NAVY_GROUND.test(`px-3 ${cls} text-right`)).toBe(false);
+    }
   });
 
   it('nothing pairs amber text with a light surface in the same class list', () => {
@@ -679,5 +704,117 @@ describe('no gradient reaches a surface that carries prose', () => {
     expect(
       usingGradient.filter((f) => (READING_SURFACES as readonly string[]).includes(f))
     ).toEqual([]);
+  });
+});
+
+// ── the pairings step 2 actually put on screen ───────────────────────────────
+
+describe('the departure board, on both navies', () => {
+  /*
+   * Amber was previously asserted only as a FILL on navy, at the 3:1 non-text
+   * threshold, because that is all it was: a header cell's colour. The quantity
+   * column now runs navy the whole way down with the figures picked out in
+   * amber, so the amber is carrying money and time — text, at 4.5:1.
+   *
+   * Both navies, because the chat and the operations console are separate
+   * palettes and the treatment now appears in both.
+   */
+  it('amber figures on the chat navy clear AA as text — 5.38:1', () => {
+    const measured = ratio('--color-amber-board', '--color-navy');
+    expect(measured).toBeCloseTo(5.38, 1);
+    expect(measured).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+
+  it('amber figures on the operations navy clear AAA — 8.81:1', () => {
+    const measured = ratio('--color-amber-board', '--color-ops-navy');
+    expect(measured).toBeCloseTo(8.81, 1);
+    expect(measured).toBeGreaterThanOrEqual(AAA_TEXT);
+  });
+
+  it('and the same amber on the row beside it would fail — which is why the navy travels with it', () => {
+    // The ground cannot be left behind. `text-amber-board` on the zebra stripe
+    // or the plain row is 2.03:1 and 1.95:1 respectively.
+    expect(ratio('--color-amber-board', '--color-neutral-0')).toBeLessThan(AA_TEXT);
+    expect(ratio('--color-amber-board', '--color-ops-surface')).toBeLessThan(AA_TEXT);
+  });
+});
+
+describe('nothing wears an on-navy colour without a navy ground', () => {
+  /*
+   * The `on-navy` tokens are named for the ground they were measured against,
+   * and they are meaningless anywhere else: `--on-navy-muted` on white is
+   * 2.03:1. The names make the mistake obvious in review, which is exactly why
+   * it needs a check — a rule that relies on someone noticing is not a rule.
+   *
+   * A file that uses one must establish a navy ground somewhere in it. That is
+   * coarser than resolving the real ancestor background, which jsdom cannot do
+   * without layout; `tests/shells.test.tsx` and the axe run in
+   * `npm run check:a11y` cover the rendered result.
+   */
+  const ON_NAVY = /\btext-on-navy-[\w-]+\b/;
+  const NAVY_GROUND = /\b(bg-grad-(sidebar|hero|rail)|bg-(ops-)?navy(-deep|-soft)?)\b/;
+
+  /*
+   * Three primitives are exempt, and the reason is the same for all three.
+   *
+   * `Button`, `IconButton` and `LogoLockup` each offer an explicit variant for a
+   * dark ground — `variant="onNavy"`, `variant="reversed"`. The ground is
+   * supplied by whoever renders them; a reusable control that painted its own
+   * background would not be reusable. The check that they are only ever placed
+   * on navy is the caller's file, which this same rule covers.
+   *
+   * Listed by name with a required-existence assertion rather than pattern-
+   * matched, so the exemption cannot quietly widen: a fourth component reaching
+   * for these tokens without a ground fails, and a rename fails too instead of
+   * leaving a stale entry that exempts nothing.
+   */
+  const GROUND_FROM_CALLER = [
+    'src/components/ui/Button.tsx',
+    'src/components/ui/IconButton.tsx',
+    'src/components/brand/LogoLockup.tsx',
+  ] as const;
+
+  it('every exempt primitive exists and does offer a dark-ground variant', () => {
+    for (const file of GROUND_FROM_CALLER) {
+      const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
+      expect(ON_NAVY.test(source), `${file} no longer uses an on-navy token`).toBe(true);
+      expect(/\b(onNavy|reversed)\b/.test(source), `${file} has no dark-ground variant`).toBe(true);
+    }
+  });
+
+  it('every other file using an on-navy text colour establishes one', () => {
+    const files = globSync('src/**/*.{ts,tsx}', { cwd: PROJECT_ROOT });
+    const offenders: string[] = [];
+    for (const file of files) {
+      if ((GROUND_FROM_CALLER as readonly string[]).includes(file)) continue;
+      const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
+      if (!ON_NAVY.test(source)) continue;
+      if (!NAVY_GROUND.test(source)) offenders.push(file);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('the patterns catch what they claim to', () => {
+    expect(ON_NAVY.test('className="text-on-navy-primary"')).toBe(true);
+    expect(ON_NAVY.test('className="text-ink-muted"')).toBe(false);
+    expect(NAVY_GROUND.test('className="bg-grad-sidebar"')).toBe(true);
+    expect(NAVY_GROUND.test('className="bg-surface-muted"')).toBe(false);
+  });
+
+  it('brand blue never appears as a text colour on a navy ground', () => {
+    // 1.91:1. The specific mistake decision 0025 exists to prevent, checked in
+    // the source rather than only in the maths.
+    const files = globSync('src/**/*.{ts,tsx}', { cwd: PROJECT_ROOT });
+    const offenders: string[] = [];
+    for (const file of files) {
+      const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
+      for (const line of source.split('\n')) {
+        const onNavy = /\b(bg-grad-(sidebar|hero|rail)|bg-(ops-)?navy(-deep)?)\b/.test(line);
+        if (onNavy && /\btext-(brand|blue-600|blue-700)\b/.test(line)) {
+          offenders.push(`${file}: ${line.trim().slice(0, 70)}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

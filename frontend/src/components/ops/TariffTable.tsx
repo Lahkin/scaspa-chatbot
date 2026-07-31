@@ -50,7 +50,11 @@ export function TariffTable({ rows }: { rows: TariffRow[] }) {
             <th scope="col" className="px-3 py-2 text-left font-semibold">
               Basis
             </th>
-            <th scope="col" className="px-3 py-2 text-right font-semibold">
+            {/* The rate is the quantity column, so it carries the amber — on
+                `ops-navy` it measures 8.81:1. Same departure-board treatment as
+                the chat's ScheduleTable, in this surface's own navy rather than
+                the chat one, so the two palettes stay separate. */}
+            <th scope="col" className="px-3 py-2 text-right font-semibold text-amber-board">
               Rate
             </th>
             <th scope="col" className="px-3 py-2 text-left font-semibold">
@@ -68,8 +72,14 @@ export function TariffTable({ rows }: { rows: TariffRow[] }) {
               <td className="px-3 py-2 text-ops-ink">{row.service}</td>
               <td className="px-3 py-2 text-ops-ink-variant">{row.basis}</td>
               {/* Right-aligned and tabular so a column of fees can be scanned.
-                  `td` already carries tabular-nums from the base layer. */}
-              <td className="px-3 py-2 text-right whitespace-nowrap text-ops-ink">
+                  `td` already carries tabular-nums from the base layer.
+
+                  The navy runs the whole way down the rate column, not just
+                  across the header: half a departure board is a table with a
+                  coloured header. It also covers the zebra stripe underneath,
+                  which is the intended result — the stripe is there to help the
+                  eye track a row, and this column is already picked out. */}
+              <td className="bg-ops-navy px-3 py-2 text-right whitespace-nowrap text-amber-board">
                 {row.currency} {row.amount.toFixed(2)}
               </td>
               <td className="px-3 py-2 whitespace-nowrap text-ops-ink-variant">

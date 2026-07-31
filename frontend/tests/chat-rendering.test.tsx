@@ -8,6 +8,8 @@
  * invented.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -165,6 +167,51 @@ describe('ScheduleTable renders a fee table properly', () => {
   it('applies tabular figures to the whole table', () => {
     renderTable();
     expect(document.querySelector('table')!.className).toContain('tabular');
+  });
+
+  /*
+   * Tabular figures survive the departure-board treatment.
+   *
+   * The quantity column now carries its own background and text colour, and the
+   * obvious way to get that wrong is a `className` that replaces the inherited
+   * typography rather than adding to it. jsdom has no Tailwind stylesheet, so
+   * `getComputedStyle` cannot answer this — asserting on it would produce a test
+   * that passes because it measures nothing. What can be checked is that every
+   * numeric cell still sits inside the element carrying `tabular`, and that the
+   * base rule underwriting it is still in the token file.
+   */
+  it('every numeric cell still inherits tabular figures', () => {
+    renderTable();
+    const table = document.querySelector('table')!;
+    const numeric = [...table.querySelectorAll('td, th')].filter((cell) =>
+      cell.className.includes('text-right')
+    );
+
+    expect(numeric.length).toBeGreaterThan(0);
+    for (const cell of numeric) {
+      expect(cell.closest('table')).toBe(table);
+      // Nothing on the cell resets the inherited value.
+      expect(cell.className).not.toMatch(/font-variant|normal-nums|proportional-nums/);
+    }
+  });
+
+  it('the base layer still sets tabular-nums on every cell', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/tokens.css'), 'utf8');
+    expect(css).toMatch(/:where\(td,\s*th\)\s*\{[^}]*font-variant-numeric:\s*tabular-nums/);
+  });
+
+  it('the quantity column runs navy with amber figures, header and body alike', () => {
+    renderTable();
+    const header = document.querySelector('thead th.text-amber-board');
+    expect(header).not.toBeNull();
+
+    const quantityCells = document.querySelectorAll('tbody td.bg-navy');
+    expect(quantityCells.length).toBe(document.querySelectorAll('tbody tr').length);
+    for (const cell of quantityCells) {
+      // The ground travels with the colour: amber is 5.38:1 on navy and 2.03:1
+      // on the white row beside it. tests/contrast.test.ts pins both.
+      expect(cell.className).toContain('text-amber-board');
+    }
   });
 
   it('zebra-stripes only above four rows', () => {

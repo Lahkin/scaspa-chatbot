@@ -2147,3 +2147,112 @@ utility, because those are pairings nobody has measured.
 Rejected — it would rename tokens the design specified in order to work around a
 build detail, and the explicit `@utility` declarations are the pattern this file
 already uses for exactly this reason.
+
+## 0026 — Applying the gradients: navy chrome, white conversation
+
+**Date:** 2026-07-31
+**Status:** Accepted
+
+Step 2. The tokens from 0025 go on screen: sidebar, landing hero and widget
+header are navy; the conversation column, the message bubbles and the source
+panel are untouched.
+
+### The contrast is the point, so only one side gets a gradient
+
+The sidebar carries `--grad-sidebar` and `FullPageShell`'s header stays flat
+`--neutral-0`. A gradient on the header as well would wrap the transcript in
+chrome on two sides and destroy the very distinction that makes the column read
+as the content. The header's bottom border moves from `--color-border`
+(neutral-200) to neutral-300, because it is now the only thing separating a
+white column from a navy rail and a hint is not enough.
+
+### What going dark forced, none of which was free
+
+Every `--color-ink-*` token is tuned for a light surface, so none of them
+survived the move. Beyond the straight substitutions:
+
+- **The primary button gets a border.** `--color-brand` on navy is 1.91:1. The
+  white label is fine at 4.60:1, but the button's *edge* is not there at all,
+  and WCAG 1.4.11 asks 3:1 of the visual information identifying a component.
+  Rather than recolour the one solid brand-blue affordance off the surface that
+  most needs to look like SCASPA, the boundary is drawn in `on-navy-secondary`
+  at 8.46:1. This is a `Button` variant (`onNavy`) and not a `className`,
+  because `Button` deliberately does not take one.
+- **The sidebar's starter questions are outlined, not filled.** They were
+  `bg-navy` chips; a navy fill on a navy gradient is a button you cannot see.
+- **Their chevrons are no longer amber.** In this sidebar amber means "this is a
+  quantity" and nothing else, so spending it on a decorative arrow would make
+  the source count stop meaning anything. The chat's own suggestion chips keep
+  theirs — they sit on a light surface where the pairing is different. The two
+  affordances therefore no longer look identical, which is a real cost and a
+  smaller one than an invisible button.
+- **Hover states are a translucent white, not a darker navy.** `bg-navy-deep` is
+  one of the gradient's own stops, so a hover painted with it is invisible
+  wherever the gradient happens to be that colour.
+- **`IconButton` needed an `onNavy` variant.** `ghost` is `--color-ink-muted`,
+  7.5:1 on white and 1.6:1 on navy, and an icon-only control has nothing but the
+  glyph to say it is there.
+
+### Full-bleed without `100vw`
+
+`/` joins a new `FULL_BLEED_ROUTES` list in the root layout, so `<main>` does
+not constrain it and the hero can span the viewport. The usual
+`width: 100vw; margin-inline: calc(50% - 50vw)` escape was rejected: `100vw`
+includes the classic scrollbar, so any desktop browser reserving gutter space
+gains a horizontal scrollbar — and headless Chromium uses overlay scrollbars, so
+`check:responsive` would have called it green. A false green on an overflow
+check is exactly what hid the console bug in 0024, and it is not worth
+re-creating to save one wrapper.
+
+The hero ends at `--hairline-horizon`, a literal horizon. Everything below it is
+flat, including the example answer, which is the one thing on that page a
+visitor reads word for word.
+
+### The departure board now runs the whole column
+
+The quantity column was a navy header with amber in it and plain figures
+underneath. Half a departure board is a table with a coloured header, so the
+navy now runs the full height of the column with the figures picked out on it —
+in the chat's `ScheduleTable` and in the published tariff table.
+
+The ground has to travel with the colour: amber is 5.38:1 on the chat navy and
+8.81:1 on the operations navy, and 2.03:1 on the white row beside it. It is also
+why the two tables use different navies — the operations console is a separate
+palette and the chat one is not imported into it.
+
+`tabular-nums` still reaches every numeric cell, and that is now asserted per
+cell rather than once on the table, together with the base-layer `:where(td, th)`
+rule that underwrites it. jsdom has no stylesheet, so `getComputedStyle` cannot
+answer this — asserting on it would have produced a test that passes because it
+measures nothing.
+
+### The widget gets the colour and not the layout
+
+`--grad-rail` on the header row only. Measured at 380 × 600: a 60px band and a
+539px transcript with no gradient anywhere inside it. A navy surface anywhere
+but that one row would be decoration paid for out of the conversation.
+
+### What the tests learned
+
+- The amber guard now recognises `bg-ops-navy`. It knew only the chat navy, so
+  the first correct use of the treatment in the operations console was reported
+  as a violation. Widened rather than relaxed, with a test that the pattern still
+  rejects a light surface — otherwise widening is indistinguishable from
+  disabling.
+- A new guard: nothing may wear an `on-navy` colour without establishing a navy
+  ground. `Button`, `IconButton` and `LogoLockup` are exempt by name, because
+  they offer an explicit dark-ground variant and the ground comes from the
+  caller. The exemption asserts those files still exist and still have such a
+  variant, so it cannot quietly widen or go stale.
+- Brand blue is checked as forbidden in the *source* on a navy line, not only in
+  the maths.
+
+### The gallery gained a section, having been on the "leave alone" list
+
+The brief asked for `dev.gallery` to be left alone, and it has not been
+restyled. But three new component states — `Button onNavy`, `IconButton onNavy`,
+`ScaspaMark reversed` — cannot go undocumented when `frontend/CLAUDE.md` says
+every new state belongs there. They are in a new panel on `--grad-sidebar`
+rather than in the existing loops, which render on the gallery's light surface
+where `onNavy` would be legible by accident and a misleading picture of a state
+that only exists on navy.

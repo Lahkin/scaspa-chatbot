@@ -84,27 +84,43 @@ function WidgetShellInner() {
           600px panel is a tenth of the conversation. */}
       <HealthBanner />
 
-      <header className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2">
-        <ScaspaMark compact />
+      {/*
+        The colour, but not the layout.
+
+        `--grad-rail` on the header row only. At 380 × 600 a large gradient
+        surface eats the panel: the widget has about 500px of usable height and
+        the transcript needs all of it, so a navy band anywhere but this one row
+        would be decoration paid for out of the conversation. The body stays
+        flat — same rule as everywhere else, text is read on `--neutral-0`.
+
+        The layout is untouched: one row, 44px targets, no strapline. Everything
+        in here that was tuned for a light surface has moved to the `on-navy`
+        tokens, because none of the `ink` tokens survive a dark ground.
+      */}
+      <header className="flex shrink-0 items-center gap-1 bg-grad-rail px-3 py-2">
+        <ScaspaMark compact reversed />
 
         <span className="flex-1" />
 
-        <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
+        <IconButton label="Show sources" variant="onNavy" onClick={() => setPanelOpen(true)}>
           <span aria-hidden="true">☰</span>
         </IconButton>
 
         <a
           href={SCASPA_PHONE_HREF}
           aria-label="Talk to a person — call SCASPA"
-          className="inline-flex size-touch-min shrink-0 items-center justify-center rounded-md text-blue-700 hover:bg-blue-50"
+          className="inline-flex size-touch-min shrink-0 items-center justify-center rounded-md text-on-navy-primary hover:bg-neutral-0/10"
         >
           <span aria-hidden="true">☎</span>
         </a>
 
-        <IconButton label="Close the assistant" variant="ghost" onClick={close}>
+        <IconButton label="Close the assistant" variant="onNavy" onClick={close}>
           <span aria-hidden="true">✕</span>
         </IconButton>
       </header>
+
+      {/* The horizon, closing the header band. */}
+      <div aria-hidden="true" className="h-px shrink-0 bg-hairline-horizon" />
 
       {/* min-h-0, for the same reason as the full-page shell: without it the
           transcript never scrolls and the composer is pushed out of the frame. */}

@@ -26,6 +26,30 @@ import { SCASPA_PHONE_LINES } from '@/lib/scaspa-facts';
  * Docked from `lg` up, a focus-trapped drawer below it. The contents are
  * identical; only the frame differs, which is why this takes an `onNavigate`
  * callback rather than knowing about drawers. See `FullPageShell`.
+ *
+ * ## Navy, and what that forces
+ *
+ * The sidebar carries `--grad-sidebar`. The contrast is the navy rail against
+ * the white conversation column, so this is the *only* side that gets a
+ * gradient — `FullPageShell`'s header stays flat, and a gradient on both sides
+ * would destroy the very distinction it is there to make.
+ *
+ * Everything in here is on a dark ground, so no `--color-ink-*` token is
+ * correct any more; they are all tuned for a light surface. The four `on-navy`
+ * tokens replace them, and each was measured against the WORSE endpoint of the
+ * gradient (`#003F6C`) rather than the flattering one:
+ *
+ * | Role                        | Token                 | Ratio   |
+ * | --------------------------- | --------------------- | ------- |
+ * | Primary items, headings     | `--on-navy-primary`   | 10.89:1 |
+ * | Sub-labels, secondary text  | `--on-navy-secondary` |  8.46:1 |
+ * | Icons, dividers, timestamps | `--on-navy-muted`     |  4.83:1 |
+ * | Quantities, and only those  | `--on-navy-accent`    |  5.38:1 |
+ *
+ * `--color-brand` is *forbidden* here: on this ground it measures 1.91:1 and is
+ * very nearly invisible. tests/contrast.test.ts rejects it outright, which is
+ * the only reason it will not creep back in — it is the obvious thing to reach
+ * for, being the brand colour on the brand navy.
  */
 
 interface SidebarProps {
@@ -64,10 +88,22 @@ export function Sidebar({
   hasConversation,
 }: SidebarProps) {
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface-muted">
-      <div className="shrink-0 border-b border-border p-3">
-        <LogoLockup size="md" tagline="Ports and travel, St. Kitts" />
+    <div className="flex h-full min-h-0 flex-col bg-grad-sidebar">
+      <div className="shrink-0 p-3">
+        {/* `reversed` because the badge is navy-on-transparent and would vanish
+            here. It currently declines to draw the badge at all rather than
+            recolouring it — see LogoLockup. */}
+        <LogoLockup size="md" variant="reversed" tagline="Ports and travel, St. Kitts" />
       </div>
+
+      {/*
+        The horizon line under the header.
+        A 1px structural boundary rather than a border: it fades to transparent
+        at both ends, so it separates the header from the navigation without
+        drawing a hard rule across a gradient. `h-px` sizes it; the token paints
+        it. It is decorative and carries no meaning, hence `aria-hidden`.
+      */}
+      <div aria-hidden="true" className="h-px shrink-0 bg-hairline-horizon" />
 
       <div className="shrink-0 p-3">
         <button
@@ -82,12 +118,28 @@ export function Sidebar({
            * recovered — the transcript is not stored anywhere the user can get
            * it back from — so a "are you sure?" would be a modal protecting
            * something that does not exist.
+           *
+           * ── THE BORDER IS NOT DECORATION ──────────────────────────────────
+           *
+           * The fill stays `--color-brand`, and its white label measures 4.60:1
+           * on it, which is fine. What is NOT fine is the button's edge: brand
+           * blue against this navy ground is 1.91:1, so the shape of the
+           * control is invisible and only the text says a button is there.
+           * WCAG 1.4.11 wants 3:1 for the visual information that identifies a
+           * component, so the edge is drawn explicitly in `on-navy-secondary`
+           * at 8.46:1.
+           *
+           * The alternative was recolouring the button, which would have taken
+           * the one solid brand-blue affordance off the surface that most needs
+           * to look like SCASPA.
            */
           className={cn(
             'flex min-h-touch w-full items-center justify-center gap-2 rounded-md',
-            'bg-blue-600 px-3 text-small font-semibold text-ink-inverse',
+            'border border-on-navy-secondary bg-brand px-3 text-small font-semibold',
+            'text-on-navy-primary',
             'transition-colors duration-fast ease-out-soft hover:bg-blue-700',
-            'disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-ink-subtle'
+            'disabled:cursor-not-allowed disabled:border-on-navy-muted disabled:bg-transparent',
+            'disabled:text-on-navy-muted'
           )}
         >
           <span aria-hidden="true">+</span>
@@ -98,7 +150,7 @@ export function Sidebar({
       {/* The scrolling middle. `min-h-0` so it shrinks rather than pushing the
           footer off the bottom — the same trap as the transcript column. */}
       <nav aria-label="SCASPA facilities" className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-        <h2 className="px-1 pb-2 text-caption font-semibold tracking-wide text-ink-subtle uppercase">
+        <h2 className="px-1 pb-2 text-caption font-semibold tracking-wide text-on-navy-muted uppercase">
           Ask about
         </h2>
 
@@ -118,7 +170,10 @@ export function Sidebar({
         </ul>
       </nav>
 
-      <div className="shrink-0 space-y-1 border-t border-border p-3">
+      {/* Dividers are `on-navy-muted` at 4.83:1 — a real boundary rather than
+          the hint `--color-border` gives on a light surface, which at this
+          lightness would simply disappear. */}
+      <div className="shrink-0 space-y-1 border-t border-on-navy-muted p-3">
         {/*
           Hidden at xl, where the source panel is already docked beside the
           conversation. A count of something permanently on screen, next to a
@@ -133,18 +188,25 @@ export function Sidebar({
           disabled={sourceCount === 0}
           className={cn(
             'flex min-h-touch w-full items-center justify-between gap-2 rounded-md px-2',
-            'text-small text-ink-muted',
-            'hover:bg-surface-sunken hover:text-ink',
-            'disabled:cursor-not-allowed disabled:text-ink-subtle disabled:hover:bg-transparent',
+            'text-small text-on-navy-secondary',
+            'hover:bg-neutral-0/10 hover:text-on-navy-primary',
+            'disabled:cursor-not-allowed disabled:text-on-navy-muted disabled:hover:bg-transparent',
             'xl:hidden'
           )}
         >
           <span>Sources in this conversation</span>
+          {/*
+            The one amber in the sidebar, because it is the one quantity.
+            `--on-navy-accent` is for figures on a navy ground and nothing else —
+            not a label, not an icon, not an emphasis. It measures 5.38:1 here.
+            Zero drops to the muted tone: an accent on a count of nothing is
+            drawing the eye to the absence of news.
+          */}
           <span
             className={cn(
               'inline-flex min-w-6 shrink-0 items-center justify-center rounded-full px-1.5',
               'text-caption font-semibold tabular',
-              sourceCount > 0 ? 'bg-blue-100 text-blue-800' : 'bg-neutral-100 text-ink-subtle'
+              sourceCount > 0 ? 'text-on-navy-accent' : 'text-on-navy-muted'
             )}
           >
             {sourceCount}
@@ -157,7 +219,7 @@ export function Sidebar({
             onOpenAbout();
             onNavigate?.();
           }}
-          className="flex min-h-touch w-full items-center rounded-md px-2 text-small text-ink-muted hover:bg-surface-sunken hover:text-ink"
+          className="flex min-h-touch w-full items-center rounded-md px-2 text-small text-on-navy-secondary hover:bg-neutral-0/10 hover:text-on-navy-primary"
         >
           About SCASPA
         </button>
@@ -170,9 +232,14 @@ export function Sidebar({
         */}
         <a
           href={SCASPA_PHONE_LINES[0].href}
-          className="flex min-h-touch w-full items-center gap-2 rounded-md px-2 text-small font-medium text-blue-700 hover:bg-blue-50"
+          // `text-blue-700` was correct on the old light sidebar and measures
+          // 2.3:1 here. The way out must be the most legible thing in the
+          // footer, so it takes the primary tone at 10.89:1.
+          className="flex min-h-touch w-full items-center gap-2 rounded-md px-2 text-small font-semibold text-on-navy-primary hover:bg-neutral-0/10"
         >
-          <span aria-hidden="true">☎</span>
+          <span aria-hidden="true" className="text-on-navy-muted">
+            ☎
+          </span>
           Talk to a person
         </a>
 
@@ -182,7 +249,7 @@ export function Sidebar({
           fact with a missing value rather than an unanswered question.
         */}
         {knowledgeVerifiedAt ? (
-          <p className="px-2 pt-1 text-caption text-ink-subtle">
+          <p className="px-2 pt-1 text-caption text-on-navy-muted">
             Information verified as of{' '}
             <time dateTime={knowledgeVerifiedAt}>{knowledgeVerifiedAt}</time>
           </p>
@@ -235,8 +302,8 @@ function FacilityGroup({
         onClick={() => setOpen((value) => !value)}
         className={cn(
           'flex min-h-touch w-full items-center gap-2 rounded-md px-2 py-1.5 text-left',
-          'hover:bg-surface-sunken',
-          open && 'bg-surface-sunken'
+          'hover:bg-neutral-0/10',
+          open && 'bg-neutral-0/10'
         )}
       >
         {/*
@@ -248,15 +315,19 @@ function FacilityGroup({
         <span
           aria-hidden="true"
           className={cn(
-            'inline-block shrink-0 text-ink-subtle transition-transform duration-fast ease-out-soft',
+            'inline-block shrink-0 text-on-navy-muted transition-transform duration-fast ease-out-soft',
             open && 'rotate-90'
           )}
         >
           ›
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-small font-medium text-ink">{facility.name}</span>
-          <span className="block truncate text-caption text-ink-subtle">{facility.subLabel}</span>
+          <span className="block truncate text-small font-medium text-on-navy-primary">
+            {facility.name}
+          </span>
+          <span className="block truncate text-caption text-on-navy-secondary">
+            {facility.subLabel}
+          </span>
         </span>
       </button>
 
@@ -266,14 +337,25 @@ function FacilityGroup({
             {facility.questions.map((question) => (
               <li key={question}>
                 {/*
-                  The departure-board treatment: navy ground, amber chevron —
-                  matching `SuggestedQuestions`' `empty` variant, because these
-                  are the same affordance in a different place and two different
-                  looks for one action is a thing to explain rather than a thing
-                  to use.
+                  These were a navy fill with an amber chevron, matching
+                  `SuggestedQuestions`' `empty` variant. Both halves of that had
+                  to change once the sidebar itself went navy, and neither was a
+                  free choice:
 
-                  Amber on navy is the pairing that colour is for; on a light
-                  surface it measures 2.03:1. tests/contrast.test.ts asserts both.
+                  - A `bg-navy` fill on a navy gradient is a button you cannot
+                    see. It is now outlined instead — `on-navy-muted` at 4.83:1,
+                    which clears the 3:1 that WCAG 1.4.11 asks of the visual
+                    boundary of a control.
+                  - The chevron is `on-navy-muted`, not amber. In this sidebar
+                    amber means "this is a quantity" and nothing else, so
+                    spending it on a decorative arrow would make the source
+                    count stop meaning anything. The chat's own suggestion chips
+                    keep the amber chevron: they sit on a light surface where
+                    amber is a fill on navy rather than the accent in a scheme.
+
+                  So the two affordances no longer look identical. That is the
+                  cost of the sidebar being dark and the transcript being light,
+                  and it is a smaller cost than an invisible button.
                 */}
                 <button
                   type="button"
@@ -281,12 +363,12 @@ function FacilityGroup({
                   disabled={busy}
                   className={cn(
                     'flex min-h-touch w-full items-start gap-2 rounded-md px-3 py-2 text-left',
-                    'bg-navy text-caption font-medium text-ink-inverse',
-                    'transition-colors duration-fast ease-out-soft hover:bg-navy-deep',
+                    'border border-on-navy-muted text-caption font-medium text-on-navy-primary',
+                    'transition-colors duration-fast ease-out-soft hover:bg-neutral-0/10',
                     'disabled:cursor-not-allowed disabled:opacity-60'
                   )}
                 >
-                  <span aria-hidden="true" className="shrink-0 text-amber-board">
+                  <span aria-hidden="true" className="shrink-0 text-on-navy-muted">
                     ›
                   </span>
                   {question}

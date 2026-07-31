@@ -134,7 +134,19 @@ function FullPageShellInner() {
 
       <HealthBanner />
 
-      <header className="shrink-0 border-b border-border bg-surface">
+      {/*
+        Flat, and deliberately so.
+
+        The contrast this layout is built on is the navy rail against the white
+        conversation column. Putting a gradient on the header as well would
+        surround the transcript with chrome on two sides and destroy the very
+        distinction that makes the column read as the content.
+
+        `neutral-300` rather than the usual `--color-border` (neutral-200): the
+        header is now the only thing separating the white column from the navy
+        rail beside it, so its edge does real work instead of hinting.
+      */}
+      <header className="shrink-0 border-b border-neutral-300 bg-surface">
         <div className="flex items-center gap-2 px-4 py-2">
           {/* The hamburger only exists where the sidebar is a drawer. */}
           <span className="lg:hidden">

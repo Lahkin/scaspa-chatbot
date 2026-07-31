@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Spinner } from './Spinner';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Variant = 'primary' | 'onNavy' | 'secondary' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {
@@ -39,6 +39,25 @@ const VARIANTS: Record<Variant, string> = {
     'hover:bg-blue-700',
     'active:bg-blue-800',
     'disabled:bg-neutral-200 disabled:text-ink-subtle'
+  ),
+  /*
+   * `primary`, on a navy ground.
+   *
+   * Same fill — the brand blue is the point of a primary action and the hero is
+   * the surface that most needs to look like SCASPA. What changes is the edge:
+   * `--color-brand` against navy measures 1.91:1, so the button's shape simply
+   * is not there, and only its label says a control exists. WCAG 1.4.11 asks
+   * 3:1 of the visual information that identifies a component, so the boundary
+   * is drawn in `on-navy-secondary` at 8.46:1.
+   *
+   * A variant rather than a className, because `Button` deliberately does not
+   * take one — a primitive that can be restyled from outside stops being one.
+   */
+  onNavy: cn(
+    'bg-brand text-on-navy-primary border border-on-navy-secondary',
+    'hover:bg-blue-700',
+    'active:bg-blue-800',
+    'disabled:bg-transparent disabled:text-on-navy-muted disabled:border-on-navy-muted'
   ),
   secondary: cn(
     'bg-surface text-blue-700 border border-border-strong',

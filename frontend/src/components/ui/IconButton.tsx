@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '@/lib/cn';
 import { Spinner } from './Spinner';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Variant = 'primary' | 'onNavy' | 'secondary' | 'ghost' | 'danger';
 
 interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {
   /** Required. An icon button with no label is unusable with a screen reader. */
@@ -28,6 +28,18 @@ const VARIANTS: Record<Variant, string> = {
     'bg-blue-600 text-ink-inverse hover:bg-blue-700 active:bg-blue-800 disabled:bg-neutral-200 disabled:text-ink-subtle',
   secondary:
     'bg-surface text-blue-700 border border-border-strong hover:bg-blue-50 active:bg-blue-100 disabled:text-ink-subtle disabled:border-border',
+  /*
+   * `ghost`, on a navy ground.
+   *
+   * `ghost` is transparent with `--color-ink-muted` — a colour chosen against a
+   * light surface, where it measures 7.5:1 and on navy measures 1.6:1. The
+   * glyph would be very nearly invisible, and an icon-only control has nothing
+   * else to say it is there. The hover fill likewise: `neutral-100` on navy is
+   * a bright flash rather than a hint, so it becomes a translucent white that
+   * reads the same at either end of the gradient.
+   */
+  onNavy:
+    'bg-transparent text-on-navy-primary hover:bg-neutral-0/10 active:bg-neutral-0/20 disabled:text-on-navy-muted',
   ghost:
     'bg-transparent text-ink-muted hover:bg-neutral-100 active:bg-neutral-200 disabled:text-ink-subtle',
   danger:

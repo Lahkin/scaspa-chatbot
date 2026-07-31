@@ -60,6 +60,25 @@ const SELF_CHROMED_ROUTES = [
 /** Prefixes whose whole subtree is self-chromed, so `/ops/*` needs no upkeep. */
 const SELF_CHROMED_PREFIXES = ['/ops'];
 
+/**
+ * Routes that lay out their own width inside the chrome.
+ *
+ * These still get the nav, the footer and the skip link — they are documents,
+ * not app shells — but `<main>` does not constrain them, because a full-bleed
+ * hero cannot be drawn inside a `max-w-3xl` column.
+ *
+ * The alternative was the usual `width: 100vw; margin-inline: calc(50% - 50vw)`
+ * escape. Rejected: `100vw` includes the classic scrollbar, so on any desktop
+ * browser that reserves gutter space the page gains a horizontal scrollbar —
+ * and headless Chromium uses overlay scrollbars, so `check:responsive` would
+ * have reported it green. A false green on an overflow check is the exact
+ * failure that hid the console's sr-only bug (decision 0024), and it is not
+ * worth re-creating to save one wrapper.
+ *
+ * A route in here owns its own horizontal padding for every child.
+ */
+const FULL_BLEED_ROUTES = ['/'];
+
 function isSelfChromed(pathname: string): boolean {
   if (SELF_CHROMED_ROUTES.includes(pathname)) return true;
   return SELF_CHROMED_PREFIXES.some(
@@ -162,7 +181,14 @@ function RootLayout() {
         </nav>
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
+      <main
+        id="main"
+        className={
+          FULL_BLEED_ROUTES.includes(pathname)
+            ? 'w-full flex-1'
+            : 'mx-auto w-full max-w-3xl flex-1 px-4 py-6'
+        }
+      >
         <RouteErrorBoundary key={pathname} routeName={pathname}>
           <Outlet />
         </RouteErrorBoundary>

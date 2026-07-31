@@ -164,7 +164,19 @@ export function ScheduleTable({ children, verifiedOn, sourceId, label }: Schedul
                     className={cn(
                       'px-3 py-2 align-top',
                       kinds[column] === 'numeric' ? 'text-right whitespace-nowrap' : 'text-left',
-                      column === quantity && 'font-semibold text-ink'
+                      /*
+                       * The quantity column runs navy the whole way down, not
+                       * just in the header — a departure board is a dark strip
+                       * with the figures picked out on it, and half of one is
+                       * just a table with a coloured header.
+                       *
+                       * Amber on navy measures 5.38:1, which is AA for text.
+                       * The same amber on the white row beside it is 2.03:1,
+                       * which is why the ground has to travel with the colour
+                       * and cannot be applied to the figure alone. The zebra
+                       * stripe on the row underneath is simply covered here.
+                       */
+                      column === quantity && 'bg-navy font-semibold text-amber-board'
                     )}
                   >
                     {row[column]?.node ?? ''}

@@ -122,16 +122,19 @@ export function LogoLockup({
       ) : null}
 
       <span className={cn('min-w-0', nameHidden && 'sr-only')}>
-        <span className={cn('block truncate', NAME_CLASS[size], inverse && 'text-ink-inverse')}>
+        <span className={cn('block truncate', NAME_CLASS[size], inverse && 'text-on-navy-primary')}>
           SCASPA Assistant
         </span>
         {tagline && size !== 'sm' ? (
           <span
-            // On navy, `blue-100` measures 8.27:1 — the muted ink used on a
-            // light surface would be unreadable there.
+            // The `on-navy` tokens rather than the blue ramp: the ramp's
+            // blue-100 is #CBE4F4 and the navy-ground token is #CFE6F6, close
+            // enough to look identical and different enough to move the
+            // measured ratio. The reversed lockup now sits on --grad-sidebar,
+            // whose worst endpoint is what 8.46:1 was measured against.
             className={cn(
               'block truncate text-caption',
-              inverse ? 'text-blue-100' : 'text-ink-subtle'
+              inverse ? 'text-on-navy-secondary' : 'text-ink-subtle'
             )}
           >
             {tagline}
