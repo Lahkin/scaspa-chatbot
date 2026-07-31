@@ -253,6 +253,95 @@
 }
 
 @layer base {
+  /* ══ Structural gradients, and the text that is safe on them ══════════════
+   *
+   * DECLARED HERE AND NOT IN @theme, ON PURPOSE.
+   *
+   * Tailwind v4 only emits an `@theme` variable whose name sits in a namespace
+   * it recognises — `--color-*`, `--spacing-*`, `--text-*` and so on. It knows
+   * nothing about `--grad-*` or `--on-navy-*`, so declaring them up there
+   * produced no CSS at all: the build shipped, every class type-checked, and
+   * `var(--grad-sidebar)` resolved to nothing. That is the same failure as
+   * `min-h-touch-min` and `duration-fast` before it, and it is invisible until
+   * someone looks at a screenshot.
+   *
+   * A plain `:root` inside @layer base is not tree-shaken, keeps the token
+   * names the design asked for, and stays overridable by the
+   * `prefers-contrast` block below. The utilities at the foot of this file
+   * expose them to className, so no component needs an arbitrary value.
+   *
+   * ── STRUCTURE, NOT DECORATION ────────────────────────────────────────────
+   *
+   * Linear only, near-vertical, within one hue family. A gradient here says
+   * "this is chrome, not content".
+   *
+   * ── THE READING SURFACE STAYS FLAT ───────────────────────────────────────
+   *
+   * No gradient token may be applied to a surface carrying prose the user is
+   * expected to read: the conversation column, message bubbles, the source
+   * panel. Those stay --neutral-0 / --neutral-50. Contrast against a gradient
+   * changes down the paragraph, so any figure you measure is true of one line
+   * of it. Readability wins over decoration everywhere text is actually read.
+   * Recorded in docs/decisions.md 0025, asserted in tests/contrast.test.ts.
+   *
+   * ── CONTRAST ON A GRADIENT IS TWO MEASUREMENTS, NOT ONE ──────────────────
+   *
+   * A gradient has no single background colour, so a single ratio is
+   * meaningless. Every foreground must clear the bar against BOTH endpoints
+   * and passes only if the worse of the two passes. The test parses the stops
+   * back out of these declarations, so a stop edited here is re-measured
+   * rather than re-asserted from memory.
+   */
+  :root {
+    --grad-sidebar: linear-gradient(170deg, #002845 0%, #003f6c 100%);
+    --grad-hero: linear-gradient(165deg, #002845 0%, #003f6c 55%, #004c83 100%);
+    --grad-rail: linear-gradient(180deg, #003f6c 0%, #002845 100%);
+
+    /* Horizon hairline — a 1px structural boundary, not a decorative glow. It
+     * separates chrome from content, carries no text and no meaning, and so
+     * makes no contrast claim. */
+    --hairline-horizon: linear-gradient(
+      90deg,
+      transparent 0%,
+      #1d87cc 20%,
+      #6fb4e2 50%,
+      #1d87cc 80%,
+      transparent 100%
+    );
+
+    /* Text and accents on a navy gradient.
+     *
+     * Measured against the WORST endpoint of --grad-sidebar / --grad-rail,
+     * which is #003F6C: for a light foreground the lighter ground is always
+     * the harder one. Ratios pinned in tests/contrast.test.ts.
+     *
+     *   --on-navy-primary    #FFFFFF   10.89:1   AAA
+     *   --on-navy-secondary  #CFE6F6    8.46:1   AAA
+     *   --on-navy-muted      #6FB4E2    4.83:1   AA
+     *   --on-navy-accent     #F5A623    5.38:1   AA   quantities only
+     *
+     * TWO TRAPS, BOTH ASSERTED AS FAILURES ON PURPOSE.
+     *
+     * 1. --color-brand (#0069B4) measures 1.91:1 on #003F6C. Brand blue on
+     *    navy is invisible. It is the reasonable-sounding mistake — it is the
+     *    brand colour and the ground is brand navy — so the test rejects it.
+     *
+     * 2. --grad-hero has a THIRD stop at #004C83, lighter than either of the
+     *    others. Against it muted drops to 3.94:1 and accent to 4.39:1, both
+     *    under AA. White (8.89:1) and secondary (6.90:1) still clear it. On
+     *    the hero gradient, only primary and secondary are text colours.
+     *
+     * These are deliberately NOT the blue-100 / blue-300 of the ramp above
+     * (#CBE4F4 / #66ACDB). They are the design's own values for this surface,
+     * written literally rather than aliased — an alias would silently move
+     * these ratios if the ramp were ever retuned.
+     */
+    --on-navy-primary: #ffffff;
+    --on-navy-secondary: #cfe6f6;
+    --on-navy-muted: #6fb4e2;
+    --on-navy-accent: #f5a623; /* quantities only */
+  }
+
   html {
     font-family: var(--font-sans);
     /* Never let a mobile browser silently inflate text and break a layout. */
@@ -378,4 +467,48 @@
 
 @utility h-chart-lg {
   height: var(--size-chart-h-lg);
+}
+
+/* ── The gradient and on-navy tokens, as utilities ───────────────────────────
+ *
+ * Declared explicitly for the same reason as the touch-target utilities above:
+ * these token names are outside every namespace Tailwind generates from, so
+ * without these `bg-grad-sidebar` would be a class that compiles to nothing.
+ *
+ * Backgrounds only for the gradients, text only for the on-navy colours —
+ * `--on-navy-accent` is a quantity colour on a navy ground and is not a fill,
+ * and a gradient is chrome and never a text colour. Anything wider than that is
+ * a pairing nobody has measured. */
+@utility bg-grad-sidebar {
+  background-image: var(--grad-sidebar);
+}
+
+@utility bg-grad-hero {
+  background-image: var(--grad-hero);
+}
+
+@utility bg-grad-rail {
+  background-image: var(--grad-rail);
+}
+
+/* A 1px structural boundary. Apply to an element that already has a height of
+ * 1px; this paints it, it does not size it. */
+@utility bg-hairline-horizon {
+  background-image: var(--hairline-horizon);
+}
+
+@utility text-on-navy-primary {
+  color: var(--on-navy-primary);
+}
+
+@utility text-on-navy-secondary {
+  color: var(--on-navy-secondary);
+}
+
+@utility text-on-navy-muted {
+  color: var(--on-navy-muted);
+}
+
+@utility text-on-navy-accent {
+  color: var(--on-navy-accent);
 }

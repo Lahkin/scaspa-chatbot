@@ -2054,3 +2054,96 @@ FAIL  320px  no horizontal overflow — scrollWidth 723 > clientWidth 320;
 **Alternative considered:** redefining the `sr-only` utility itself. Rejected —
 containment is a property of the ancestor, not the element, so there is no
 change to `sr-only` that could fix this. The scroller has to opt in.
+
+## 0025 — Gradients as structure, and the reading surface that stays flat
+
+**Date:** 2026-07-31
+**Status:** Accepted
+
+Step 1 of the colour work: gradient tokens exist, nothing uses them yet, and
+every foreground that may sit on one is measured. Deliberately no visual change.
+
+### A gradient has no background colour, so one measurement is a guess
+
+WCAG contrast is defined between two colours. A gradient is not one colour, so
+"white on the sidebar" has no single answer — it is 15.11:1 at the top of
+`--grad-sidebar` and 10.89:1 at the bottom. Measuring the stop that flatters the
+text is the easy mistake, and it produces a number that is true of one line of a
+paragraph and false of the next.
+
+`tests/contrast.test.ts` gains `assertOnGradient(fg, stopA, stopB, minRatio)`,
+which computes both and asserts on the **worse**. The stops are parsed back out
+of the `linear-gradient(...)` declarations rather than restated in the test, so
+editing a stop re-measures the pairing instead of quietly invalidating a number
+someone wrote down once.
+
+Measured at the worst endpoint of `--grad-sidebar` / `--grad-rail` (`#003F6C` —
+for a light foreground the lighter ground is always the harder one):
+
+| Foreground | | Ratio | |
+|---|---|---|---|
+| `--on-navy-primary` | `#FFFFFF` | 10.89:1 | AAA |
+| `--on-navy-secondary` | `#CFE6F6` | 8.46:1 | AAA |
+| `--on-navy-muted` | `#6FB4E2` | 4.83:1 | AA |
+| `--on-navy-accent` | `#F5A623` | 5.38:1 | AA — quantities only |
+
+### Two failures asserted on purpose
+
+**Brand blue on navy measures 1.91:1.** `#0069B4` is sampled from the supplied
+logo and is not negotiable, so the colour does not move — what moves is where it
+may appear. It is the mistake someone will make in three weeks, because it is
+the brand colour on the brand navy, and it is close to invisible. The test
+rejects it at every stop of every gradient, and additionally asserts that
+`assertOnGradient` itself throws on it, so the helper is what catches this
+rather than a reviewer.
+
+**`--grad-hero` carries less than the other two.** It has a third stop at
+`#004C83`, lighter than either endpoint of the sidebar gradient. Applying the
+same rule there gives two results outside the brief's table: `--on-navy-muted`
+drops to 3.94:1 and `--on-navy-accent` to 4.39:1, both under AA. White (8.89:1)
+and secondary (6.90:1) still clear it.
+
+The gradient is left exactly as specified and the constraint is recorded
+instead: **on the hero, only primary and secondary are text colours.** Muted
+still clears 3:1 and so remains usable there for a non-text indicator — an icon
+or a rule, never a word. Raised rather than silently accommodated; if the last
+stop is ever darkened to fix it, those assertions fail and are the place to say
+so deliberately.
+
+### The reading surface stays flat
+
+No gradient token may be applied to a surface carrying prose: the conversation
+column, message bubbles, the source panel. Those stay `--neutral-0` /
+`--neutral-50`.
+
+This is a readability rule before it is an aesthetic one, and it follows from
+the paragraph above — a ratio measured against a gradient is true of one line
+and false of the next, and these are the surfaces where someone reads sentences
+rather than glancing at chrome. Gradients are structural: they say "this is
+chrome, not content".
+
+Asserted against the real source of the eight reading-surface components, not
+left as a comment. Each must exist, so a rename fails the guard rather than
+shrinking it silently.
+
+### The tokens are not in `@theme`, and that is not a style choice
+
+Declared in `@theme` first, as the ramps are. The build then emitted **none of
+them**: Tailwind v4 only writes out a theme variable whose name sits in a
+namespace it recognises, and it knows `--color-*` and `--spacing-*` but nothing
+about `--grad-*` or `--on-navy-*`. Everything type-checked, the build passed,
+and `var(--grad-sidebar)` resolved to nothing — the third instance of this exact
+failure in this repo, after `min-h-touch-min` and `duration-fast`.
+
+They live in a plain `:root` inside `@layer base`, which is not tree-shaken,
+keeps the token names the design asked for, and stays overridable by the
+`prefers-contrast` block. Four `@utility` rules expose the gradients as
+backgrounds and the on-navy colours as text, so no component needs an arbitrary
+value — and gradients get no text utility and the on-navy colours no fill
+utility, because those are pairings nobody has measured.
+
+**Alternative considered:** renaming to `--color-on-navy-*` and
+`--background-image-grad-*` so Tailwind generates the utilities itself.
+Rejected — it would rename tokens the design specified in order to work around a
+build detail, and the explicit `@utility` declarations are the pattern this file
+already uses for exactly this reason.
