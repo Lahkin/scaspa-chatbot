@@ -4,17 +4,34 @@ import logoUrl from '@/assets/scaspa-logo.png';
 /**
  * The SCASPA lockup: mark plus product name.
  *
- * ## The asset is a placeholder, and that is deliberate
+ * ## The asset is the real SCASPA seal, used with permission
  *
- * `src/assets/scaspa-logo.svg` is a neutral geometric stand-in, not the SCASPA
- * seal. Three client items are outstanding — vector files, a reversed white
- * variant, and **written permission to use the identity** — and all three are
- * listed in that file. Tracing the mark off scaspa.com would put an unlicensed
- * identity in front of judges and passengers, which is a worse outcome than an
- * honest placeholder.
+ * `src/assets/scaspa-logo.png` is the authority's own mark — the circular seal
+ * with an aircraft above a ship — and SCASPA has granted permission to use it.
+ * This file previously carried a neutral geometric placeholder and a note that
+ * permission was outstanding; both are now historical, and the note is recorded
+ * here rather than deleted because "is this licensed?" is the first question
+ * anyone reviewing a third-party identity should ask, and it deserves an answer
+ * in the file rather than in a commit message.
  *
- * Everything below is built against the real mark's constraints, so the swap is
- * one file and no code change.
+ * One rule survives from the placeholder era and is not negotiable: **the mark
+ * is used as supplied.** No tracing it off scaspa.com, no redrawing it, no
+ * recolouring it. Permission covers the identity as it is, not a variation of
+ * it invented here.
+ *
+ * ## Why the asset is 256px and must stay small
+ *
+ * It is drawn at 48px at the largest, so 256 is roughly 5x the highest-density
+ * case. That is not fussiness: the original supplied file was 6000 x 6000 and
+ * 2.1 MB, which shipped to every visitor and outweighed the entire application
+ * bundle five times over, on a product that self-hosts its font to save one DNS
+ * round trip.
+ *
+ * `scripts/bundle-budget.mjs` now fails the build on any raster over 512px or
+ * 100 kB, so re-importing a full-resolution original cannot quietly happen
+ * again. **Resize the source; do not just compress it.** If SCASPA later
+ * supplies vector files, an SVG is strictly better here and the budget stops
+ * being a consideration at all.
  *
  * ## Why a wordmark fallback below 32px
  *
