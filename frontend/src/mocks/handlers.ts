@@ -50,6 +50,10 @@ import {
   MOCK_DIRECTORY,
   MOCK_DISCLAIMER,
   MOCK_FLIGHTS,
+  MOCK_GATES,
+  MOCK_MARINE_ADVISORIES,
+  MOCK_OPERATOR_PROFILE,
+  MOCK_POSITIONS,
   MOCK_TARIFFS,
   MOCK_VESSELS,
   UNAVAILABLE_SOURCE,
@@ -464,6 +468,58 @@ export const handlers = [
       },
       total: flights.length,
       request_id: 'mock-flights',
+    });
+  }),
+
+  // ── GET /api/ops/positions ─────────────────────────────────────────────────
+  //
+  // The four panels that had no feed. Each mirrors the backend's shape exactly,
+  // including the `active`/`total` counts being computed rather than restated —
+  // a mock that hardcodes a count is a mock that cannot catch the bug where the
+  // count and the rows disagree.
+  http.get(`${base}/api/ops/positions`, () => {
+    return HttpResponse.json({
+      source: FIXTURE_SOURCE,
+      positions: MOCK_POSITIONS,
+      total: MOCK_POSITIONS.length,
+      request_id: 'mock-positions',
+    });
+  }),
+
+  // ── GET /api/ops/gates ─────────────────────────────────────────────────────
+  http.get(`${base}/api/ops/gates`, () => {
+    const active = MOCK_GATES.filter(
+      (gate) => gate.status === 'occupied' || gate.status === 'boarding'
+    ).length;
+    return HttpResponse.json({
+      source: FIXTURE_SOURCE,
+      gates: MOCK_GATES,
+      active,
+      total: MOCK_GATES.length,
+      request_id: 'mock-gates',
+    });
+  }),
+
+  // ── GET /api/ops/advisories ────────────────────────────────────────────────
+  http.get(`${base}/api/ops/advisories`, () => {
+    return HttpResponse.json({
+      source: FIXTURE_SOURCE,
+      advisories: MOCK_MARINE_ADVISORIES,
+      total: MOCK_MARINE_ADVISORIES.length,
+      request_id: 'mock-advisories',
+    });
+  }),
+
+  // ── GET /api/ops/profile ───────────────────────────────────────────────────
+  //
+  // Takes no account of the request, because there is nothing about the caller
+  // to take account of. Same card for everyone, which is what the backend test
+  // `test_the_profile_endpoint_reads_nothing_about_the_caller` pins.
+  http.get(`${base}/api/ops/profile`, () => {
+    return HttpResponse.json({
+      source: FIXTURE_SOURCE,
+      profile: MOCK_OPERATOR_PROFILE,
+      request_id: 'mock-profile',
     });
   }),
 

@@ -9,7 +9,7 @@ import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState } from '@/components/ops/OpsPage';
 import { SourceAge, SourceNotice } from '@/components/ops/SourceNotice';
 import { FlightStatusChip } from '@/components/ops/StatusChip';
-import { useFlights } from '@/features/ops/queries';
+import { useFlights, useGateMap } from '@/features/ops/queries';
 import type { FlightDirection } from '@/lib/types';
 
 const PAGE_SIZE = 10;
@@ -17,6 +17,7 @@ const PAGE_SIZE = 10;
 /** `/ops/flights` — the design's `flight_schedules` desktop screen. */
 function OpsFlightsRoute() {
   const [direction, setDirection] = useState<FlightDirection>('arrival');
+  const gates = useGateMap();
   const [search, setSearch] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [offset, setOffset] = useState(0);
@@ -48,7 +49,12 @@ function OpsFlightsRoute() {
       aside={
         <>
           <AdvisoryPanel advisory={data?.advisory ?? null} />
-          <GatePanel />
+          <GatePanel
+            gates={gates.data?.gates}
+            active={gates.data?.active}
+            total={gates.data?.total}
+            source={gates.data?.source}
+          />
         </>
       }
     >

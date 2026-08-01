@@ -509,6 +509,101 @@ export interface FlightSchedulesResponse {
   request_id: string;
 }
 
+/** Who says where a vessel is. An AIS fix and a typed-in position differ. */
+export type VesselPositionSource = 'ais' | 'manual' | 'estimated';
+
+export interface VesselPosition {
+  /** Matches `VesselArrival.id`, so the map and the table agree. */
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  heading_degrees: number | null;
+  /** Null means not reported. It does not mean stationary. */
+  speed_knots: number | null;
+  reported_by: VesselPositionSource;
+  reported_at: string | null;
+}
+
+export interface VesselPositionsResponse {
+  source: DataSource;
+  positions: VesselPosition[];
+  total: number;
+  request_id: string;
+}
+
+export type GateStatus = 'occupied' | 'boarding' | 'free' | 'closed';
+
+export interface GateAssignment {
+  gate: string;
+  status: GateStatus;
+  flight_number: string | null;
+  airline: string;
+  scheduled_at: string | null;
+}
+
+export interface GateMapResponse {
+  source: DataSource;
+  gates: GateAssignment[];
+  /** Counted by the backend. Do not recompute — see the schema note. */
+  active: number;
+  total: number;
+  request_id: string;
+}
+
+export type AdvisorySeverity = 'low' | 'moderate' | 'high';
+
+/**
+ * A notice to mariners, passed through verbatim.
+ *
+ * Distinct from `OperationalAdvisory`, which is the airport's. An empty list
+ * means nothing was published to this assistant — it does **not** mean
+ * conditions are fine, and the panel must not let it read that way.
+ */
+export interface MarineAdvisory {
+  id: string;
+  port: string;
+  headline: string;
+  detail: string;
+  severity: AdvisorySeverity;
+  issued_at: string | null;
+}
+
+export interface MarineAdvisoriesResponse {
+  source: DataSource;
+  advisories: MarineAdvisory[];
+  total: number;
+  request_id: string;
+}
+
+/**
+ * The console identity card — a demo, never a user.
+ *
+ * This product has no sign-in and never learns who is asking. The endpoint
+ * behind this reads nothing about the caller and returns the same invented card
+ * to everyone; it is null unless the backend is running the fixture feed, which
+ * it refuses to do in production.
+ */
+export interface OperatorProfile {
+  is_demo: true;
+  display_name: string;
+  division: string;
+  agent_id: string;
+  jurisdiction: string;
+  role: string;
+  last_sync: string | null;
+  active: boolean;
+  verified: boolean;
+  /** Rendered as prominently as the card itself. Never empty. */
+  notice: string;
+}
+
+export interface OperatorProfileResponse {
+  source: DataSource;
+  profile: OperatorProfile | null;
+  request_id: string;
+}
+
 export type TariffCategory = 'maritime' | 'aviation' | 'cargo' | 'passenger';
 
 export interface TariffRow {

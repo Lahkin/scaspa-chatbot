@@ -12,7 +12,17 @@
  * from stops being asked.
  */
 
-import type { DataSource, Flight, SupportDirectory, TariffRow, VesselArrival } from '@/lib/types';
+import type {
+  DataSource,
+  Flight,
+  GateAssignment,
+  MarineAdvisory,
+  OperatorProfile,
+  SupportDirectory,
+  TariffRow,
+  VesselArrival,
+  VesselPosition,
+} from '@/lib/types';
 
 /** Matches the backend's `FIXTURE_NOTICE` — the banner the UI must render. */
 export const FIXTURE_SOURCE: DataSource = {
@@ -266,4 +276,83 @@ export const CARD_TICKET: AssistantCard = {
   department: 'Port operations',
   subject: 'Query about container storage rates',
   href: '/support',
+};
+
+/*
+ * The panels that had no feed until the design import asked for them.
+ *
+ * Same rule as everything above: mirrors `backend/app/ops/fixtures.py` value
+ * for value. The positions sit in a neat synthetic line out at sea, the gates
+ * are Z-prefixed like the ZZ airline code, and the marine notice names
+ * `Placeholder Port` and says "sample" in its own headline — see the long note
+ * on `sample_marine_advisories`, which explains why that one is blander than
+ * the rest of the file put together.
+ */
+export const MOCK_POSITIONS: VesselPosition[] = [
+  {
+    id: 'fx-vessel-1',
+    name: 'MV SAMPLE CARRIER',
+    latitude: 17.1,
+    longitude: -62.9,
+    heading_degrees: 111,
+    speed_knots: 11.1,
+    reported_by: 'ais',
+    reported_at: '2026-04-01T09:00:00Z',
+  },
+  {
+    id: 'fx-vessel-3',
+    name: 'MV SAMPLE TRADER',
+    latitude: 17.3,
+    longitude: -62.7,
+    heading_degrees: 333,
+    // Null, not 0 — the panel must not print "0.0 kn" for "not reported".
+    speed_knots: null,
+    reported_by: 'manual',
+    reported_at: '2026-04-01T08:00:00Z',
+  },
+];
+
+export const MOCK_GATES: GateAssignment[] = [
+  {
+    gate: 'Z1',
+    status: 'occupied',
+    flight_number: 'ZZ111',
+    airline: 'Placeholder Air',
+    scheduled_at: '2026-04-01T10:00:00Z',
+  },
+  {
+    gate: 'Z2',
+    status: 'boarding',
+    flight_number: 'ZZ222',
+    airline: 'Placeholder Air',
+    scheduled_at: '2026-04-01T11:00:00Z',
+  },
+  { gate: 'Z3', status: 'free', flight_number: null, airline: '', scheduled_at: null },
+  { gate: 'Z4', status: 'closed', flight_number: null, airline: '', scheduled_at: null },
+];
+
+export const MOCK_MARINE_ADVISORIES: MarineAdvisory[] = [
+  {
+    id: 'ma-0001',
+    port: 'Placeholder Port',
+    headline: 'Sample advisory — not a real notice to mariners',
+    detail: 'Placeholder text for the advisory panel.',
+    severity: 'low',
+    issued_at: '2026-04-01T07:00:00Z',
+  },
+];
+
+/** The demo identity card. Not a user — there is no sign-in to have one. */
+export const MOCK_OPERATOR_PROFILE: OperatorProfile = {
+  is_demo: true,
+  display_name: 'Sample Agent A. Sample',
+  division: 'Placeholder Division',
+  agent_id: 'SAMPLE-0000-X',
+  jurisdiction: 'Placeholder Port',
+  role: 'Placeholder Role',
+  last_sync: '2026-04-01T08:42:00Z',
+  active: true,
+  verified: true,
+  notice:
+    'DEMO ONLY — there is no sign-in. This assistant has no accounts and never knows who is asking. Every detail on this card is invented for design review.',
 };

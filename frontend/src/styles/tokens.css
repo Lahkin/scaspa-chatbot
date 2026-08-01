@@ -16,6 +16,19 @@
  *   in @theme becomes BOTH a CSS variable and a utility class, so
  *   `--color-blue-600` yields `bg-blue-600`, `text-blue-600`, `border-blue-600`.
  *
+ *   BUT ONLY IN A NAMESPACE TAILWIND RECOGNISES, AND ONLY FOR THAT NAMESPACE'S
+ *   UTILITIES. `--size-*` feeds `size-*`, NOT `w-*` / `h-*` / `min-h-*`, which
+ *   read the spacing scale; `--container-*` feeds `max-w-*`; durations must be
+ *   `--transition-duration-*`. A name outside every known namespace — `--grad-*`,
+ *   `--on-navy-*` — produces no variable at all, because an unreferenced theme
+ *   variable is tree-shaken.
+ *
+ *   Four utilities have silently compiled to nothing in this project on that
+ *   basis: `min-h-touch-min`, `duration-fast`, `w-sidebar` and every gradient
+ *   token's first draft. When in doubt declare an explicit `@utility` at the
+ *   foot of this file and add it to tests/tokens-compile.test.ts, which exists
+ *   for precisely this and is the only thing that catches it.
+ *
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 @import 'tailwindcss';
@@ -235,6 +248,15 @@
    * so the docked rail and the drawer cannot drift apart. */
   --size-sidebar: 260px;
 
+  /* The collapsed rail.
+   *
+   * 64px, not 0. A rail that collapses to nothing takes the navigation away
+   * entirely and leaves the user hunting for the way back; 64px keeps every
+   * destination on screen as a target that still clears the 44px minimum with
+   * 10px of breathing room either side. It is also wide enough for the source
+   * count, which is the one number in the sidebar worth seeing at a glance. */
+  --size-sidebar-collapsed: 64px;
+
   /* Chart heights.
    *
    * ResponsiveContainer needs a parent with a DETERMINATE height — a percentage
@@ -447,6 +469,33 @@
   min-height: var(--size-touch-min);
 }
 
+/* The sidebar widths.
+ *
+ * ── `w-sidebar` COMPILED TO NOTHING FOR THE LIFE OF THE PROJECT ─────────────
+ *
+ * The note at the top of this file used to say `--size-*` feeds `w-*`. It does
+ * not. Tailwind v4 resolves `w-*` against the SPACING scale — `w-80` emits
+ * `calc(var(--spacing) * 80)` — and only `size-*` reads the `--size-*`
+ * namespace. So `size-touch-min` worked, `min-h-touch-min` did not, and
+ * `w-sidebar` silently did not either: no rule was emitted, `--size-sidebar`
+ * was tree-shaken for having no referent, and the docked rail, the drawer panel
+ * and three gallery previews were all sized by their content instead of by the
+ * token they appeared to name.
+ *
+ * Nothing looked broken, which is why it lasted: 260px of nav content is about
+ * 260px wide. It surfaced only when a second width was added and the rail
+ * refused to animate between them.
+ *
+ * Declared explicitly here, like the touch targets above, and asserted in
+ * tests/tokens-compile.test.ts. */
+@utility w-sidebar {
+  width: var(--size-sidebar);
+}
+
+@utility w-sidebar-collapsed {
+  width: var(--size-sidebar-collapsed);
+}
+
 /* The widget box. `max-w-full` / `max-h-dvh` are applied alongside these at the
  * usage site so that a 380px box inside a 320px viewport shrinks instead of
  * forcing the page to scroll sideways. */
@@ -511,6 +560,27 @@
 
 @utility text-on-navy-accent {
   color: var(--on-navy-accent);
+}
+
+/* The sidebar collapse animation.
+ *
+ * Width only. `transition-all` on a 260px panel full of text animates colour,
+ * padding and transform on every child as well, which on a mid-range phone is
+ * a visibly janky frame or two for no benefit — the only thing changing is the
+ * rail's width.
+ *
+ * Declared as a utility rather than written `transition-[width]` at the usage
+ * site so the reasoning has somewhere to live, matching the touch-target
+ * utilities above.
+ *
+ * The duration and easing come from tokens, so `prefers-reduced-motion` in the
+ * base layer collapses this to 0.01ms along with everything else. No JS gate is
+ * needed for a pure CSS transition — `useReducedMotion` is for animations that
+ * schedule work. */
+@utility transition-width {
+  transition-property: width;
+  transition-duration: var(--transition-duration-base);
+  transition-timing-function: var(--ease-out-soft);
 }
 
 /* Dividers and control boundaries on a navy ground.

@@ -4,12 +4,12 @@ import { Button, Input } from '@/components/ui';
 import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
 import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
 import { Pagination } from '@/components/ops/console/Pagination';
-import { ActivityPanel, MapPanel } from '@/components/ops/console/SidePanels';
+import { ActivityPanel, MapPanel, MarineAdvisoryPanel } from '@/components/ops/console/SidePanels';
 import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState } from '@/components/ops/OpsPage';
 import { SourceAge, SourceNotice } from '@/components/ops/SourceNotice';
 import { VesselStatusChip } from '@/components/ops/StatusChip';
-import { useVessels } from '@/features/ops/queries';
+import { useMarineAdvisories, useVesselPositions, useVessels } from '@/features/ops/queries';
 import { useNow } from '@/lib/hooks/useNow';
 
 const PAGE_SIZE = 10;
@@ -34,6 +34,10 @@ function OpsVesselsRoute() {
   // Ticks, so "12 minutes ago" in the activity panel does not stay "12 minutes
   // ago" for as long as the tab is open.
   const now = useNow();
+  // Separate requests: a screen that draws no map should not wait on one,
+  // and a future real AIS integration may be slow without slowing the table.
+  const positions = useVesselPositions();
+  const marine = useMarineAdvisories();
 
   const query = useVessels({
     limit: PAGE_SIZE,
@@ -61,7 +65,8 @@ function OpsVesselsRoute() {
       aside={
         <>
           <ActivityPanel vessels={vessels} source={data?.source} now={now} />
-          <MapPanel />
+          <MapPanel positions={positions.data?.positions} source={positions.data?.source} />
+          <MarineAdvisoryPanel advisories={marine.data?.advisories} source={marine.data?.source} />
         </>
       }
     >

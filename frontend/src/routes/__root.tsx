@@ -55,6 +55,8 @@ const SELF_CHROMED_ROUTES = [
   '/tariffs',
   '/support',
   '/settings',
+  // Renders through `OpsPage`, which supplies its own header and `<main>`.
+  '/profile',
 ];
 
 /** Prefixes whose whole subtree is self-chromed, so `/ops/*` needs no upkeep. */

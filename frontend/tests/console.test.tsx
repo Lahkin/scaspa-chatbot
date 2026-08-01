@@ -22,7 +22,12 @@ import {
 } from '@tanstack/react-router';
 import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
 import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
-import { ActivityPanel, GatePanel, MapPanel } from '@/components/ops/console/SidePanels';
+import {
+  ActivityPanel,
+  GatePanel,
+  MapPanel,
+  MarineAdvisoryPanel,
+} from '@/components/ops/console/SidePanels';
 import { Pagination } from '@/components/ops/console/Pagination';
 import { buildActivityFeed, relativeTime } from '@/features/ops/activity';
 import { FIXTURE_SOURCE, MOCK_VESSELS, UNAVAILABLE_SOURCE } from '@/mocks/opsFixtures';
@@ -227,10 +232,127 @@ describe('the map panels', () => {
     );
   });
 
-  it('the gate panel points at the published gate column instead of an apron map', () => {
+  it('the gate panel points at the published gate column when there is no feed', () => {
     render(<GatePanel />);
-    expect(screen.getByText(/no apron or aircraft-positioning feed/i)).toBeInTheDocument();
+    expect(screen.getByText(/no apron feed connected/i)).toBeInTheDocument();
     expect(screen.queryByText(/real-time/i)).toBeNull();
+  });
+
+  /*
+   * There is a gate feed now, and it changed what this panel does. What it did
+   * NOT change is the claim: the design asks for "real-time aircraft
+   * positioning and passenger flow across the terminal apron", and occupancy
+   * per stand is neither of those. So the populated panel is a grid of stands
+   * and still says nothing about aircraft, position or passengers.
+   */
+  it('the gate panel lists stands without claiming to be an apron view', () => {
+    render(
+      <GatePanel
+        gates={[
+          {
+            gate: 'Z1',
+            status: 'occupied',
+            flight_number: 'ZZ111',
+            airline: 'Placeholder Air',
+            scheduled_at: null,
+          },
+          { gate: 'Z2', status: 'free', flight_number: null, airline: '', scheduled_at: null },
+        ]}
+        active={1}
+        total={2}
+      />
+    );
+
+    expect(screen.getByText('Z1')).toBeInTheDocument();
+    expect(screen.getByText('Occupied')).toBeInTheDocument();
+    expect(screen.getByText('Free')).toBeInTheDocument();
+    // The count comes from the response, not from recounting the rows here.
+    expect(screen.getByText(/1 of 2 in use/)).toBeInTheDocument();
+    expect(screen.queryByText(/real-time/i)).toBeNull();
+    expect(screen.queryByText(/passenger flow/i)).toBeNull();
+  });
+
+  /*
+   * The one panel whose silence could be acted on.
+   *
+   * A skipper reading an empty advisory box may conclude conditions are fine.
+   * This assistant has no idea whether they are, so the empty state has to say
+   * that in words — and must never render a tick, a green chip or the word
+   * "clear", none of which a hurried reader distinguishes from an all-clear.
+   */
+  it('an empty marine advisory panel does not read as an all-clear', () => {
+    render(<MarineAdvisoryPanel />);
+
+    expect(screen.getByText(/not a statement that conditions are safe/i)).toBeInTheDocument();
+    for (const word of [/all[- ]clear/i, /\bclear\b/i, /\bsafe to sail\b/i, /\bno warnings\b/i]) {
+      expect(screen.queryByText(word)).toBeNull();
+    }
+  });
+
+  it('a marine advisory says its severity in words, not only in colour', () => {
+    render(
+      <MarineAdvisoryPanel
+        advisories={[
+          {
+            id: 'ma-1',
+            port: 'Placeholder Port',
+            headline: 'Sample advisory — not a real notice to mariners',
+            detail: 'Placeholder text.',
+            severity: 'moderate',
+            issued_at: null,
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText(/Moderate severity/)).toBeInTheDocument();
+    expect(screen.getByText(/Not an official notice to mariners/i)).toBeInTheDocument();
+  });
+
+  /*
+   * Positions are a list, not a map.
+   *
+   * A chart is the most confident element a screen can carry: a reader takes
+   * proximity and distance-to-shore off the picture, none of which this data
+   * supports. And `reported_by` is per row rather than one "Live AIS" badge
+   * over the panel, because a transponder fix and a typed-in position are
+   * different claims that a single badge would flatten into one.
+   */
+  it('the map panel names who reported each position', () => {
+    render(
+      <MapPanel
+        positions={[
+          {
+            id: 'fx-vessel-1',
+            name: 'MV SAMPLE CARRIER',
+            latitude: 17.1,
+            longitude: -62.9,
+            heading_degrees: 111,
+            speed_knots: 11.1,
+            reported_by: 'ais',
+            reported_at: null,
+          },
+          {
+            id: 'fx-vessel-3',
+            name: 'MV SAMPLE TRADER',
+            latitude: 17.3,
+            longitude: -62.7,
+            heading_degrees: null,
+            speed_knots: null,
+            reported_by: 'manual',
+            reported_at: null,
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText(/Reported by AIS transponder/)).toBeInTheDocument();
+    expect(screen.getByText(/Reported manually/)).toBeInTheDocument();
+    // Hemispheres, not signed decimals — a minus sign meaning "south" is a
+    // database convention, not a chart one.
+    expect(screen.getByText(/17\.100°N 62\.900°W/)).toBeInTheDocument();
+    // A null speed is omitted rather than printed as zero.
+    expect(screen.queryByText(/0\.0 kn/)).toBeNull();
   });
 });
 

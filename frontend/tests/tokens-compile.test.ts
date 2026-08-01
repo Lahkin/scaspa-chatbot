@@ -80,6 +80,36 @@ const TOKEN_UTILITIES = [
   'text-amber-text',
   'text-success',
   'text-danger',
+  /*
+   * The sidebar widths, and the third instance of this exact bug.
+   *
+   * `w-sidebar` was in three components for the life of the project and emitted
+   * nothing: `w-*` reads the SPACING scale, not `--size-*`. Nothing looked
+   * wrong, because 260px of navigation content is about 260px wide — the docked
+   * rail, the drawer panel and the gallery previews were all being sized by
+   * their contents while appearing to name a token. It surfaced only when a
+   * second width was added and the rail would not animate between them.
+   */
+  'w-sidebar',
+  'w-sidebar-collapsed',
+  'transition-width',
+  /*
+   * The gradient and on-navy tokens.
+   *
+   * These live outside every namespace Tailwind generates from, so they are
+   * explicit `@utility` declarations too — and the first draft of them, written
+   * inside `@theme`, produced no CSS at all. See decision 0025.
+   */
+  'bg-grad-sidebar',
+  'bg-grad-hero',
+  'bg-grad-rail',
+  'bg-hairline-horizon',
+  'text-on-navy-primary',
+  'text-on-navy-secondary',
+  'text-on-navy-muted',
+  'text-on-navy-accent',
+  'border-on-navy-muted',
+  'border-on-navy-secondary',
 ];
 
 const css = builtCss();

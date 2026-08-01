@@ -398,3 +398,112 @@ describe('AboutScaspa', () => {
     expect(screen.getByText(/ask the assistant/i)).toBeInTheDocument();
   });
 });
+
+// ── The collapsible rail ─────────────────────────────────────────────────────
+
+describe('the sidebar collapses without losing anything', () => {
+  it('offers a toggle that describes what it will do, not what it is', async () => {
+    const onToggleCollapsed = vi.fn();
+    const user = userEvent.setup();
+    await renderSidebar({ onToggleCollapsed });
+
+    // "Collapse navigation" — an imperative. A label naming the current state
+    // reads as an instruction to about half the people who meet it.
+    const toggle = screen.getByRole('button', { name: 'Collapse navigation' });
+    // The state is on the control, so a screen reader is told it rather than
+    // being left to infer it from an arrow glyph.
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAttribute('aria-controls');
+
+    await user.click(toggle);
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders no toggle at all when it cannot collapse', async () => {
+    // The drawer passes no handler. An inert control is worse than none: it is
+    // still a tab stop and still looks like it does something.
+    await renderSidebar();
+    expect(screen.queryByRole('button', { name: /collapse navigation/i })).toBeNull();
+  });
+
+  it('keeps every destination reachable when collapsed', async () => {
+    await renderSidebar({ collapsed: true, onToggleCollapsed: vi.fn(), sourceCount: 3 });
+
+    // Glyphs are not labels. Every one of these is found by its real name,
+    // which is exactly what a screen reader gets at either width.
+    for (const facility of FACILITY_NAV) {
+      expect(screen.getByRole('button', { name: facility.name })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'New conversation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Talk to a person' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Sources in this conversation: 3/ })
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the same landmark and label at both widths', async () => {
+    // Someone navigating by landmark should not be able to tell the rail was
+    // collapsed. Same role, same accessible name.
+    const { unmount } = await renderSidebar();
+    expect(screen.getByRole('navigation', { name: 'SCASPA facilities' })).toBeInTheDocument();
+    unmount();
+
+    await renderSidebar({ collapsed: true, onToggleCollapsed: vi.fn() });
+    expect(screen.getByRole('navigation', { name: 'SCASPA facilities' })).toBeInTheDocument();
+  });
+
+  it('a collapsed facility both expands the rail and opens that group', async () => {
+    /*
+     * The click means "show me this one".
+     *
+     * Expanding without opening answers with the list of four names the user
+     * just picked from; opening without expanding answers with three questions
+     * in a 64px column. The test drives the real state by re-rendering with the
+     * collapsed prop the handler would have flipped.
+     */
+    const onToggleCollapsed = vi.fn();
+    const user = userEvent.setup();
+    const { rerender, props } = await renderSidebar({ collapsed: true, onToggleCollapsed });
+
+    const facility = FACILITY_NAV[0]!;
+    await user.click(screen.getByRole('button', { name: facility.name }));
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
+
+    rerender(<Sidebar {...props} collapsed={false} onToggleCollapsed={onToggleCollapsed} />);
+
+    const group = await screen.findByRole('button', { name: new RegExp(facility.name) });
+    expect(group).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: facility.questions[0] })).toBeInTheDocument();
+  });
+
+  it('the expand control announces the collapsed state', async () => {
+    await renderSidebar({ collapsed: true, onToggleCollapsed: vi.fn() });
+    const toggle = screen.getByRole('button', { name: 'Expand navigation' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls');
+  });
+
+  it('does not persist the collapsed state anywhere', () => {
+    /*
+     * `frontend/CLAUDE.md` rule 5 permits exactly one key in exactly one
+     * storage: `conversation_id` in `sessionStorage`. A sidebar preference is
+     * not that key, so the rail resets on reload — a real cost, recorded rather
+     * than quietly worked around with a second storage key.
+     */
+    const raw = readFileSync(
+      resolve(process.cwd(), 'src/components/shells/FullPageShell.tsx'),
+      'utf8'
+    );
+    // Comments stripped first: this file *explains* the rule in prose, and a
+    // bare word match flagged the explanation as a violation of itself.
+    const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+    // Actual API use — a member access or a call — rather than the word.
+    expect(code).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\s*[.[]/);
+
+    // And the matcher is not vacuous.
+    expect('window.localStorage.setItem(x)').toMatch(
+      /\b(localStorage|sessionStorage|indexedDB)\s*[.[]/
+    );
+  });
+});

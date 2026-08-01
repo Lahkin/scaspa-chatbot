@@ -1,8 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   getFlights,
+  getGateMap,
+  getMarineAdvisories,
+  getOperatorProfile,
   getSupportDirectory,
   getTariffs,
+  getVesselPositions,
   getVessels,
   requestTariffQuote,
   submitSupportTicket,
@@ -14,6 +18,9 @@ import {
 import { shouldRetry } from '@/features/chat/queries';
 import type {
   FlightSchedulesResponse,
+  GateMapResponse,
+  MarineAdvisoriesResponse,
+  OperatorProfileResponse,
   SupportDirectory,
   SupportTicketRequest,
   SupportTicketResponse,
@@ -21,6 +28,7 @@ import type {
   TariffQuoteRequest,
   TariffTableResponse,
   VesselArrivalsResponse,
+  VesselPositionsResponse,
 } from '@/lib/types';
 
 /**
@@ -55,6 +63,55 @@ export function useFlights(params: FlightQuery = {}) {
   return useQuery<FlightSchedulesResponse, ApiError>({
     queryKey: ['flights', params],
     queryFn: ({ signal }) => getFlights(params, { signal }),
+    staleTime: STALE_MS,
+    refetchOnWindowFocus: false,
+    retry: shouldRetry,
+  });
+}
+
+/*
+ * The map, gate and advisory panels.
+ *
+ * No params, so no params in the key. They share `STALE_MS` with everything
+ * else here and, like everything else here, they do not poll — see the note
+ * above. A live AIS feed would be the first thing on this surface with a real
+ * claim to a timer, and it would get one then rather than now.
+ */
+export function useVesselPositions() {
+  return useQuery<VesselPositionsResponse, ApiError>({
+    queryKey: ['ops', 'positions'],
+    queryFn: ({ signal }) => getVesselPositions({ signal }),
+    staleTime: STALE_MS,
+    refetchOnWindowFocus: false,
+    retry: shouldRetry,
+  });
+}
+
+export function useGateMap() {
+  return useQuery<GateMapResponse, ApiError>({
+    queryKey: ['ops', 'gates'],
+    queryFn: ({ signal }) => getGateMap({ signal }),
+    staleTime: STALE_MS,
+    refetchOnWindowFocus: false,
+    retry: shouldRetry,
+  });
+}
+
+export function useMarineAdvisories() {
+  return useQuery<MarineAdvisoriesResponse, ApiError>({
+    queryKey: ['ops', 'advisories'],
+    queryFn: ({ signal }) => getMarineAdvisories({ signal }),
+    staleTime: STALE_MS,
+    refetchOnWindowFocus: false,
+    retry: shouldRetry,
+  });
+}
+
+/** The demo identity card. Null unless the backend runs the fixture feed. */
+export function useOperatorProfile() {
+  return useQuery<OperatorProfileResponse, ApiError>({
+    queryKey: ['ops', 'profile'],
+    queryFn: ({ signal }) => getOperatorProfile({ signal }),
     staleTime: STALE_MS,
     refetchOnWindowFocus: false,
     retry: shouldRetry,

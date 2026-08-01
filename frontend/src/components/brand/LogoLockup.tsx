@@ -1,5 +1,5 @@
 import { cn } from '@/lib/cn';
-import logoUrl from '@/assets/scaspa-logo.svg';
+import logoUrl from '@/assets/scaspa-logo.png';
 
 /**
  * The SCASPA lockup: mark plus product name.

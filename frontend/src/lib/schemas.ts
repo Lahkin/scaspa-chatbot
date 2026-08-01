@@ -191,6 +191,104 @@ export const flightSchedulesResponseSchema = z.object({
   request_id: z.string(),
 });
 
+/*
+ * The panels the design shows and no real feed has ever filled.
+ *
+ * Positions, gates and marine notices. Each is `unavailable` on every source
+ * that has no AIS, no apron feed and no notices — which is every real one — and
+ * the panels render their "not connected" state from an empty array rather than
+ * from a separate flag.
+ */
+
+export const vesselPositionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  latitude: z.number(),
+  longitude: z.number(),
+  heading_degrees: z.number().nullable(),
+  // Null and 0 are different claims — "not reported" against "reported as
+  // stationary" — so this is nullable rather than defaulted.
+  speed_knots: z.number().nullable(),
+  reported_by: z.enum(['ais', 'manual', 'estimated']).catch('estimated'),
+  reported_at: z.string().nullable(),
+});
+
+export const vesselPositionsResponseSchema = z.object({
+  source: dataSourceSchema,
+  positions: z.array(vesselPositionSchema),
+  total: z.number(),
+  request_id: z.string(),
+});
+
+export const gateAssignmentSchema = z.object({
+  gate: z.string(),
+  status: z.enum(['occupied', 'boarding', 'free', 'closed']).catch('free'),
+  flight_number: z.string().nullable(),
+  airline: z.string(),
+  scheduled_at: z.string().nullable(),
+});
+
+export const gateMapResponseSchema = z.object({
+  source: dataSourceSchema,
+  gates: z.array(gateAssignmentSchema),
+  // Counted by the backend from the gates themselves. Not recomputed here —
+  // two places deciding what "active" means is two places to disagree.
+  active: z.number(),
+  total: z.number(),
+  request_id: z.string(),
+});
+
+export const marineAdvisorySchema = z.object({
+  id: z.string(),
+  port: z.string(),
+  headline: z.string(),
+  detail: z.string(),
+  severity: z.enum(['low', 'moderate', 'high']).catch('low'),
+  issued_at: z.string().nullable(),
+});
+
+export const marineAdvisoriesResponseSchema = z.object({
+  source: dataSourceSchema,
+  advisories: z.array(marineAdvisorySchema),
+  total: z.number(),
+  request_id: z.string(),
+});
+
+/*
+ * The console identity card. NOT a user.
+ *
+ * There is no sign-in in this product (`frontend/CLAUDE.md` rule 2) and this
+ * does not add one: the endpoint reads nothing about the caller and returns the
+ * same invented card to everyone. It is null on every source but the fixture
+ * one, and the backend refuses to boot with fixtures in production.
+ *
+ * `is_demo` is a literal `true`, so a payload claiming otherwise fails to parse
+ * rather than rendering a fabricated officer as a real one.
+ */
+export const operatorProfileSchema = z.object({
+  is_demo: z.literal(true),
+  display_name: z.string(),
+  division: z.string(),
+  agent_id: z.string(),
+  jurisdiction: z.string(),
+  role: z.string(),
+  last_sync: z.string().nullable(),
+  active: z.boolean(),
+  verified: z.boolean(),
+  // Non-empty, and rendered as prominently as the card. A demo card with no
+  // notice is the failure this whole screen has to avoid.
+  notice: z.string().min(1),
+});
+
+export const operatorProfileResponseSchema = z.object({
+  source: dataSourceSchema,
+  // `.default(null)` as well as `.nullable()`: an absent field and an explicit
+  // null both have to land on `null` rather than `undefined`, so no caller ever
+  // has to distinguish "no demo profile" from "the key was missing".
+  profile: operatorProfileSchema.nullable().catch(null).default(null),
+  request_id: z.string(),
+});
+
 export const tariffRowSchema = z.object({
   code: z.string(),
   service: z.string(),

@@ -19,7 +19,10 @@ import {
   chatResponseSchema,
   errorEnvelopeSchema,
   flightSchedulesResponseSchema,
+  gateMapResponseSchema,
   healthResponseSchema,
+  marineAdvisoriesResponseSchema,
+  operatorProfileResponseSchema,
   parseOrThrow,
   sttResponseSchema,
   supportDirectorySchema,
@@ -28,6 +31,7 @@ import {
   tariffTableResponseSchema,
   ttsPreviewResponseSchema,
   vesselArrivalsResponseSchema,
+  vesselPositionsResponseSchema,
 } from './schemas';
 import type {
   ApiErrorBody,
@@ -35,7 +39,10 @@ import type {
   ChatResponse,
   ErrorCode,
   FlightSchedulesResponse,
+  GateMapResponse,
   HealthResponse,
+  MarineAdvisoriesResponse,
+  OperatorProfileResponse,
   SttResponse,
   SupportDirectory,
   SupportTicketRequest,
@@ -44,6 +51,7 @@ import type {
   TariffQuoteRequest,
   TariffTableResponse,
   VesselArrivalsResponse,
+  VesselPositionsResponse,
 } from './types';
 
 /**
@@ -507,6 +515,61 @@ export interface TariffQuery {
   category?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
+}
+
+/*
+ * The four panels that had no feed until now.
+ *
+ * No query parameters on any of them: each returns the whole small set, and a
+ * filter the backend does not implement is a filter the client would have to
+ * fake. They are separate requests rather than fields on `/api/vessels` and
+ * `/api/flights` so that a screen which does not draw a map does not pay for
+ * one — and so a future real AIS integration can be slow without making the
+ * arrivals table slow with it.
+ */
+export async function getVesselPositions(init?: {
+  signal?: AbortSignal | undefined;
+}): Promise<VesselPositionsResponse> {
+  const response = await request({
+    path: '/api/ops/positions',
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(vesselPositionsResponseSchema, await response.json(), 'vessel positions');
+}
+
+export async function getGateMap(init?: {
+  signal?: AbortSignal | undefined;
+}): Promise<GateMapResponse> {
+  const response = await request({
+    path: '/api/ops/gates',
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(gateMapResponseSchema, await response.json(), 'gate map');
+}
+
+export async function getMarineAdvisories(init?: {
+  signal?: AbortSignal | undefined;
+}): Promise<MarineAdvisoriesResponse> {
+  const response = await request({
+    path: '/api/ops/advisories',
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(marineAdvisoriesResponseSchema, await response.json(), 'marine advisories');
+}
+
+/** The demo identity card. Sends no credential, because there is none to send. */
+export async function getOperatorProfile(init?: {
+  signal?: AbortSignal | undefined;
+}): Promise<OperatorProfileResponse> {
+  const response = await request({
+    path: '/api/ops/profile',
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(operatorProfileResponseSchema, await response.json(), 'operator profile');
 }
 
 export async function getTariffs(
