@@ -448,6 +448,151 @@ class FlightSchedulesResponse(BaseModel):
     request_id: str = Field(default="")
 
 
+# ── The panels the mockups show and no feed has ever filled ──────────────────
+#
+# Vessel positions, gate occupancy, marine advisories. Until now each of these
+# was a panel that stated its own absence, which was the honest answer while
+# there was no source at all.
+#
+# They are modelled here so that a source CAN fill them — the fixture one does,
+# obviously-fakely, and a real AIS or AODB integration would too. Every response
+# carries the same mandatory `DataSource` as the rest of the operations surface,
+# so a reader is never left to guess whether a position on a map is real. The
+# boot guard in `main.py` still refuses to start with fixtures when ENV=prod, so
+# sample positions cannot reach a passenger.
+
+VesselPositionSource = Literal["ais", "manual", "estimated"]
+
+
+class VesselPosition(BaseModel):
+    """Where a vessel is, according to whoever is reporting it.
+
+    `reported_by` is not decoration. An AIS transponder, a harbour master typing
+    into a form and a dead-reckoning estimate are three different claims, and a
+    map that draws them identically invites a reader to treat the third as the
+    first.
+    """
+
+    id: str = Field(description="Matches VesselArrival.id where the same vessel is in both")
+    name: str = Field(description="Vessel name as published")
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    heading_degrees: float | None = Field(default=None, ge=0, lt=360)
+    speed_knots: float | None = Field(default=None, ge=0)
+    reported_by: VesselPositionSource = Field(default="ais")
+    reported_at: datetime | None = Field(default=None)
+
+
+class VesselPositionsResponse(BaseModel):
+    """GET /api/ops/positions."""
+
+    source: DataSource
+    positions: list[VesselPosition] = Field(default_factory=list)
+    total: int = Field(default=0)
+    request_id: str = Field(default="")
+
+
+GateStatus = Literal["occupied", "boarding", "free", "closed"]
+
+
+class GateAssignment(BaseModel):
+    """One stand on the apron."""
+
+    gate: str = Field(description="Gate or stand designator")
+    status: GateStatus = Field(default="free")
+    flight_number: str | None = Field(default=None)
+    airline: str = Field(default="")
+    # Null, never "now". A gate with no published time is unknown, and rendering
+    # it as imminent is the same class of error as VesselMetrics' null-not-zero.
+    scheduled_at: datetime | None = Field(default=None)
+
+
+class GateMapResponse(BaseModel):
+    """GET /api/ops/gates."""
+
+    source: DataSource
+    gates: list[GateAssignment] = Field(default_factory=list)
+    # Counted from `gates` by the source, not by the client — two places
+    # computing "how many are active" is two places to disagree.
+    active: int = Field(default=0)
+    total: int = Field(default=0)
+    request_id: str = Field(default="")
+
+
+AdvisorySeverity = Literal["low", "moderate", "high"]
+
+
+class MarineAdvisory(BaseModel):
+    """A published notice to mariners, passed through verbatim.
+
+    Distinct from `OperationalAdvisory`, which is the airport's. A swell warning
+    for Basseterre and a runway status are not the same kind of statement and
+    must not share a model — the moment they do, one screen starts rendering the
+    other's text under the wrong heading.
+
+    Nothing here is forecast or inferred. `headline` and `detail` are whatever
+    the source stated; this service does not produce marine weather and must
+    never appear to.
+    """
+
+    id: str = Field(description="Stable id within the feed")
+    port: str = Field(description="Which facility the notice concerns")
+    headline: str = Field(description="e.g. 'Sample swell advisory'")
+    detail: str = Field(default="")
+    severity: AdvisorySeverity = Field(default="low")
+    issued_at: datetime | None = Field(default=None)
+
+
+class MarineAdvisoriesResponse(BaseModel):
+    """GET /api/ops/advisories."""
+
+    source: DataSource
+    advisories: list[MarineAdvisory] = Field(default_factory=list)
+    total: int = Field(default=0)
+    request_id: str = Field(default="")
+
+
+class OperatorProfile(BaseModel):
+    """The console's operator identity panel.
+
+    ── READ THIS BEFORE USING IT FOR ANYTHING ───────────────────────────────
+
+    This is **not** an authenticated user. This product has no sign-in, no
+    session and no user record; `frontend/CLAUDE.md` rule 2 forbids all three,
+    and rule 9 here forbids logging a user identifier at all. Nothing on this
+    model is derived from who is asking, because nothing about who is asking is
+    ever known.
+
+    It exists so the design's `profile_settings` screen can be built and
+    reviewed. It is served **only** by the fixture source, which `main.py`
+    refuses to boot with when ENV=prod — so the one way this reaches a real user
+    is a deployment that is already refusing to start.
+
+    `is_demo` is a required, always-true literal rather than a bool: a field
+    that could be False is a field somebody will eventually set to False.
+    """
+
+    is_demo: Literal[True] = True
+    display_name: str
+    division: str = Field(default="")
+    agent_id: str = Field(default="")
+    jurisdiction: str = Field(default="")
+    role: str = Field(default="")
+    last_sync: datetime | None = Field(default=None)
+    active: bool = Field(default=False)
+    verified: bool = Field(default=False)
+    # Rendered as prominently as the card itself. The screen must say what it is.
+    notice: str = Field(min_length=1)
+
+
+class OperatorProfileResponse(BaseModel):
+    """GET /api/ops/profile. `profile` is null on every non-fixture source."""
+
+    source: DataSource
+    profile: OperatorProfile | None = Field(default=None)
+    request_id: str = Field(default="")
+
+
 TariffCategory = Literal["maritime", "aviation", "cargo", "passenger"]
 
 

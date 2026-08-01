@@ -26,10 +26,14 @@ from app.ratelimit import RateLimiter, get_rate_limiter
 from app.schemas import (
     ErrorEnvelope,
     FlightSchedulesResponse,
+    GateMapResponse,
+    MarineAdvisoriesResponse,
+    OperatorProfileResponse,
     TariffQuote,
     TariffQuoteRequest,
     TariffTableResponse,
     VesselArrivalsResponse,
+    VesselPositionsResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,6 +114,130 @@ async def get_flights(
         metrics=source.flight_metrics(),
         advisory=source.advisory(),
         total=len(matched),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/ops/positions",
+    response_model=VesselPositionsResponse,
+    summary="Vessel positions for the map panel",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_positions(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> VesselPositionsResponse:
+    """Where vessels are, according to whoever reported it.
+
+    Empty on every source that has no AIS, which is a fact rather than a fault —
+    the panel says so. Each position carries `reported_by`, because a
+    transponder, a harbour master and an estimate are three different claims.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    rows = source.positions()
+    return VesselPositionsResponse(
+        source=source.describe(),
+        positions=rows,
+        total=len(rows),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/ops/gates",
+    response_model=GateMapResponse,
+    summary="Gate and stand occupancy",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_gates(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> GateMapResponse:
+    """The apron.
+
+    `active` and `total` are counted here rather than by the client, so the gate
+    map and the flight screen's "8 / 12" tile cannot disagree about what active
+    means. A closed stand is not active; a free one is not either.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    gates = source.gates()
+    active = sum(1 for gate in gates if gate.status in ("occupied", "boarding"))
+    return GateMapResponse(
+        source=source.describe(),
+        gates=gates,
+        active=active,
+        total=len(gates),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/ops/advisories",
+    response_model=MarineAdvisoriesResponse,
+    summary="Published notices to mariners",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_marine_advisories(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> MarineAdvisoriesResponse:
+    """Marine notices, passed through verbatim.
+
+    This service does not produce marine weather and no advisory here is
+    inferred from anything. An empty list means no notice was published to this
+    assistant — it does **not** mean conditions are fine, and the panel is
+    written so a reader cannot take it that way.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    rows = source.marine_advisories()
+    return MarineAdvisoriesResponse(
+        source=source.describe(),
+        advisories=rows,
+        total=len(rows),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/ops/profile",
+    response_model=OperatorProfileResponse,
+    summary="Console identity card (demo only — there is no sign-in)",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_operator_profile(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> OperatorProfileResponse:
+    """The design's `profile_settings` card.
+
+    **Null on every source except the fixture one**, and `main.py` refuses to
+    boot with fixtures when ENV=prod. There is no authentication in this product
+    and this endpoint does not add any: it reads nothing from the request, has
+    no notion of a caller, and returns the same invented card to everyone.
+
+    It exists so the screen can be built and reviewed. See `OperatorProfile`.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    return OperatorProfileResponse(
+        source=source.describe(),
+        profile=source.operator_profile(),
         request_id=_request_id(request),
     )
 

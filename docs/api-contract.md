@@ -722,6 +722,8 @@ they are empty forms the user drives. The calculator's total comes from
 ## Operations: vessels, flights and tariffs
 
 `GET /api/vessels` · `GET /api/flights` · `GET /api/tariffs`
+`GET /api/ops/positions` · `GET /api/ops/gates` · `GET /api/ops/advisories` ·
+`GET /api/ops/profile`
 
 **These are not the assistant, and that separation is the point.** The system
 prompt forbids the assistant from claiming live status — it cannot see whether a
@@ -732,6 +734,40 @@ a feed comes in, it is validated, and it goes out saying where it came from.
 So a panel may show "EN ROUTE" — because a named feed said so at a stated time —
 while the assistant continues to decline to say it in a sentence. Both are true
 at once, and the `source` object is what makes that so.
+
+### The four `/api/ops/*` endpoints
+
+Added so the design's map, gate and advisory panels have something behind them.
+All four return an **empty result on every source without that feed**, which is
+every real one today, and the panels render their "not connected" state from it.
+
+| Endpoint | Returns | Notes |
+| --- | --- | --- |
+| `GET /api/ops/positions` | `positions[]`, `total` | Each carries `reported_by`: `ais`, `manual` or `estimated`. `speed_knots` is **null when not reported**, never `0` |
+| `GET /api/ops/gates` | `gates[]`, `active`, `total` | `active` is counted **server-side** from the gates, so it cannot disagree with the flight screen's tile |
+| `GET /api/ops/advisories` | `advisories[]`, `total` | Notices to mariners, passed through verbatim. **An empty list is not an all-clear** — see below |
+| `GET /api/ops/profile` | `profile` or `null` | A demo card. **Not authentication** — see below |
+
+**`/api/ops/advisories` carries the only fake datum in this API that a reader
+could act on.** Marine safety information is different in kind from a fabricated
+berth number: a swell warning can be believed and acted on, and a quiet panel
+can be read as permission to sail. So the fixture names `Placeholder Port`, says
+"sample" in its own headline, is always the lowest severity, and mentions no
+real SCASPA facility — asserted in `test_a_sample_marine_advisory_cannot_be_mistaken_for_a_real_one`.
+Clients must render the empty state as a statement that nothing was published,
+never as a tick, a green chip or the word "clear".
+
+**`/api/ops/profile` is not an authentication endpoint and must not become
+one.** There is no sign-in in this product, no session and no user record. The
+endpoint reads nothing about the caller — no header, no cookie — and returns the
+same invented card to everyone; `test_the_profile_endpoint_reads_nothing_about_the_caller`
+pins that by sending an `Authorization` header and a `Cookie` and asserting the
+response is byte-identical. `profile` is `null` on every source but the fixture
+one, and the boot guard already refuses to start with fixtures when `ENV=prod`,
+so the one way this reaches a real user is a deployment that is already refusing
+to boot. `profile.is_demo` is a required literal `true` and `profile.notice` is
+required non-empty; a client must render that notice at least as prominently as
+the card.
 
 ### `DataSource`, on every operations response
 

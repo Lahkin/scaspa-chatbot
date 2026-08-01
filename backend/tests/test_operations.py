@@ -528,3 +528,118 @@ def test_a_valid_card_is_recorded_on_the_turn_not_returned_as_text() -> None:
         assert context.card.kind == "vessel_arrivals"
         # And the model is told not to narrate it.
         assert "Do not describe its contents" in reply
+
+
+# ── The panels that used to have no feed ─────────────────────────────────────
+#
+# Positions, gates and marine advisories. The safety-critical claims are the
+# same as everywhere else on this surface — a fixture announces itself, an empty
+# feed is not an error, and nothing invented can reach production — plus one
+# that is specific to these: a marine advisory is the only fake datum in this
+# codebase a reader could act on at sea.
+
+
+def test_the_new_panels_are_empty_and_fine_with_no_feed(empty_api: TestClient) -> None:
+    for path, key in [
+        ("/api/ops/positions", "positions"),
+        ("/api/ops/gates", "gates"),
+        ("/api/ops/advisories", "advisories"),
+    ]:
+        response = empty_api.get(path)
+        assert response.status_code == 200, path
+        body = response.json()
+        assert body[key] == []
+        assert body["total"] == 0
+        # Absence is stated, not implied by an empty list.
+        assert body["source"]["kind"] == "unavailable"
+        assert body["source"]["notice"]
+
+
+def test_the_new_panels_announce_sample_data(fixture_api: TestClient) -> None:
+    for path in ["/api/ops/positions", "/api/ops/gates", "/api/ops/advisories"]:
+        body = fixture_api.get(path).json()
+        assert body["source"]["kind"] == "fixture", path
+        assert "SAMPLE DATA" in body["source"]["notice"], path
+
+
+def test_a_position_says_who_reported_it(fixture_api: TestClient) -> None:
+    positions = fixture_api.get("/api/ops/positions").json()["positions"]
+    assert positions
+    # A transponder, a harbour master and an estimate are different claims, and
+    # a map that renders them identically invites the reader to conflate them.
+    assert {p["reported_by"] for p in positions} <= {"ais", "manual", "estimated"}
+    assert any(p["reported_by"] == "manual" for p in positions)
+    # Not reported is null, never 0.0 — "stationary" is a different statement.
+    assert any(p["speed_knots"] is None for p in positions)
+
+
+def test_positions_line_up_with_the_vessels_they_name(fixture_api: TestClient) -> None:
+    # The map and the table beside it must be talking about the same ships.
+    vessel_ids = {v["id"] for v in fixture_api.get("/api/vessels").json()["vessels"]}
+    for position in fixture_api.get("/api/ops/positions").json()["positions"]:
+        assert position["id"] in vessel_ids, position["id"]
+
+
+def test_gate_counts_are_computed_from_the_gates_themselves(fixture_api: TestClient) -> None:
+    body = fixture_api.get("/api/ops/gates").json()
+    expected = sum(1 for g in body["gates"] if g["status"] in ("occupied", "boarding"))
+    assert body["active"] == expected
+    assert body["total"] == len(body["gates"])
+    # A free or closed stand is not active. Asserted rather than assumed,
+    # because "active" is exactly the word two screens disagree about.
+    assert body["active"] < body["total"]
+
+
+def test_a_sample_marine_advisory_cannot_be_mistaken_for_a_real_one() -> None:
+    """The one fake datum in this repo somebody could act on at sea.
+
+    A fabricated swell warning naming a real port is not the same class of fake
+    as a fabricated berth number: it can be believed and acted on, and a quiet
+    screen can be read as an all-clear. So every string is checked, not just the
+    notice above it.
+    """
+    from app.ops.fixtures import sample_marine_advisories
+
+    for advisory in sample_marine_advisories():
+        assert "sample" in advisory.headline.lower()
+        assert "Placeholder" in advisory.port
+        # No real SCASPA facility is named anywhere in the record.
+        blob = f"{advisory.port} {advisory.headline} {advisory.detail}".lower()
+        for real in ["basseterre", "port zante", "charlestown", "deep water", "bradshaw"]:
+            assert real not in blob, f"{real} appears in a fabricated marine advisory"
+        # Never the severity that would make somebody change a plan.
+        assert advisory.severity == "low"
+
+
+def test_the_operator_profile_is_absent_without_fixtures(empty_api: TestClient) -> None:
+    body = empty_api.get("/api/ops/profile").json()
+    assert body["profile"] is None
+
+
+def test_the_operator_profile_says_it_is_a_demo(fixture_api: TestClient) -> None:
+    profile = fixture_api.get("/api/ops/profile").json()["profile"]
+    assert profile is not None
+    # Not a bool. A field that could be False is one somebody sets to False.
+    assert profile["is_demo"] is True
+    assert "DEMO" in profile["notice"]
+    assert "no sign-in" in profile["notice"]
+    # The design's name and credential are not reproduced — a plausible officer
+    # and a plausible badge number are what get screenshotted and circulated.
+    blob = f"{profile['display_name']} {profile['agent_id']} {profile['jurisdiction']}"
+    assert "Alistair" not in blob
+    assert "SKN-PORT" not in blob
+    assert "Sample" in profile["display_name"]
+
+
+def test_the_profile_endpoint_reads_nothing_about_the_caller(fixture_api: TestClient) -> None:
+    """It is not an authentication endpoint and must not become one.
+
+    Same card for everyone, whatever they send. If this ever starts varying by
+    header or cookie, this product has grown a session it is not allowed to have.
+    """
+    plain = fixture_api.get("/api/ops/profile").json()["profile"]
+    with_headers = fixture_api.get(
+        "/api/ops/profile",
+        headers={"Authorization": "Bearer sample", "Cookie": "session=sample"},
+    ).json()["profile"]
+    assert plain == with_headers

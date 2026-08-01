@@ -35,10 +35,14 @@ from app.schemas import (
     ContactPoint,
     Flight,
     FlightMetrics,
+    GateAssignment,
+    MarineAdvisory,
     OperationalAdvisory,
+    OperatorProfile,
     TariffRow,
     VesselArrival,
     VesselMetrics,
+    VesselPosition,
 )
 
 FIXTURE_NOTICE = (
@@ -325,6 +329,138 @@ EMERGENCY_NOTICE = (
     f"monitored and cannot raise an alarm. For urgent port matters call SCASPA on "
     f"{SCASPA_PHONE_VALUE}."
 )
+
+
+def sample_positions() -> list[VesselPosition]:
+    """Positions for the map panel. Deliberately in open water off nowhere.
+
+    The coordinates are a tidy synthetic arc a few tenths of a degree apart, not
+    plausible approaches to Basseterre. A reader who checks them finds vessels
+    sitting in a neat line in the sea, which is the intended tell — the same
+    reason the vessel names are `MV SAMPLE …` and the IMOs are `IMO 000000n`.
+    """
+    return [
+        VesselPosition(
+            id="fx-vessel-1",
+            name="MV SAMPLE CARRIER",
+            latitude=17.1,
+            longitude=-62.9,
+            heading_degrees=111.0,
+            speed_knots=11.1,
+            reported_by="ais",
+            reported_at=_at(-0.2),
+        ),
+        VesselPosition(
+            id="fx-vessel-2",
+            name="MV SAMPLE VOYAGER",
+            latitude=17.2,
+            longitude=-62.8,
+            heading_degrees=222.0,
+            speed_knots=2.2,
+            reported_by="ais",
+            reported_at=_at(-0.4),
+        ),
+        VesselPosition(
+            id="fx-vessel-3",
+            name="MV SAMPLE TRADER",
+            latitude=17.3,
+            longitude=-62.7,
+            heading_degrees=333.0,
+            # Berthed, so no speed. Null rather than 0.0 — "not reported" and
+            # "reported as stationary" are different claims.
+            speed_knots=None,
+            reported_by="manual",
+            reported_at=_at(-1.1),
+        ),
+    ]
+
+
+def sample_gates() -> list[GateAssignment]:
+    """The apron. Gate letters are Z-prefixed, like the ZZ airline code."""
+    return [
+        GateAssignment(
+            gate="Z1",
+            status="occupied",
+            flight_number="ZZ111",
+            airline="Placeholder Air",
+            scheduled_at=_at(0.5),
+        ),
+        GateAssignment(
+            gate="Z2",
+            status="boarding",
+            flight_number="ZZ222",
+            airline="Placeholder Air",
+            scheduled_at=_at(1.1),
+        ),
+        GateAssignment(gate="Z3", status="free"),
+        GateAssignment(gate="Z4", status="free"),
+        GateAssignment(
+            gate="Z5",
+            status="closed",
+            airline="Placeholder Air",
+        ),
+    ]
+
+
+def sample_marine_advisories() -> list[MarineAdvisory]:
+    """Notices to mariners.
+
+    ── WHY THESE ARE THE BLANDEST STRINGS IN THE FILE ───────────────────────
+
+    The mockup's version reads "High swell advisory for Basseterre Port". A
+    fabricated sea-state warning naming a real port is not the same kind of fake
+    as a fabricated berth number: someone could read it, believe it, and either
+    not sail when they should have or — far worse — treat a *quiet* screen as an
+    all-clear. Marine safety information is the one category where invented data
+    has a physical consequence.
+
+    So the port is `Placeholder Port`, the headline says "sample", the severity
+    is the lowest one, and `FIXTURE_NOTICE` sits above it. Nothing here reads as
+    an instruction to a mariner even if the notice above it is missed.
+    """
+    return [
+        MarineAdvisory(
+            id="ma-0001",
+            port="Placeholder Port",
+            headline="Sample advisory — not a real notice to mariners",
+            detail=(
+                "Placeholder text for the advisory panel. This assistant does not "
+                "produce marine weather and does not carry official notices."
+            ),
+            severity="low",
+            issued_at=_at(-2.2),
+        ),
+    ]
+
+
+def sample_operator_profile() -> OperatorProfile:
+    """The console's identity card. Fixture source only — see `OperatorProfile`.
+
+    Every value is obviously placeholder, in the same register as the vessel
+    names: `Sample Agent A. Sample`, `SAMPLE-0000-X`, a division that says
+    Placeholder. The design's "Senior Agent Alistair Vance" and
+    "SKN-PORT-8829-X" are not used — a plausible-looking name and a
+    plausible-looking credential are exactly what someone screenshots and
+    circulates, and neither belongs on a screen that has no accounts behind it.
+
+    `notice` is required by the model and rendered as prominently as the card.
+    """
+    return OperatorProfile(
+        display_name="Sample Agent A. Sample",
+        division="Placeholder Division",
+        agent_id="SAMPLE-0000-X",
+        jurisdiction="Placeholder Port",
+        role="Placeholder Role",
+        last_sync=_at(-0.1),
+        active=True,
+        verified=True,
+        notice=(
+            "DEMO ONLY — there is no sign-in. This assistant has no accounts and "
+            "never knows who is asking. Every detail on this card is invented for "
+            "design review."
+        ),
+    )
+
 
 DEPARTMENTS = [
     "Port operations",

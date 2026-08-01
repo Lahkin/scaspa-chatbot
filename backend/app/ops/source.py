@@ -20,10 +20,14 @@ from app.schemas import (
     DataSource,
     Flight,
     FlightMetrics,
+    GateAssignment,
+    MarineAdvisory,
     OperationalAdvisory,
+    OperatorProfile,
     TariffRow,
     VesselArrival,
     VesselMetrics,
+    VesselPosition,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,6 +63,28 @@ class OpsSource:
         return FlightMetrics()
 
     def advisory(self) -> OperationalAdvisory | None:
+        return None
+
+    # The four below default to nothing, which is the honest answer for every
+    # source that has no AIS, no apron feed and no notices to mariners — that is
+    # to say, every real source this project has ever had. A panel that gets an
+    # empty list renders its "not connected" state, which is the same thing it
+    # rendered when these methods did not exist.
+    def positions(self) -> list[VesselPosition]:
+        return []
+
+    def gates(self) -> list[GateAssignment]:
+        return []
+
+    def marine_advisories(self) -> list[MarineAdvisory]:
+        return []
+
+    def operator_profile(self) -> OperatorProfile | None:
+        """The console identity card. Null everywhere except the fixture source.
+
+        Not "the current user" — there isn't one and there cannot be. See the
+        long note on `OperatorProfile`.
+        """
         return None
 
     def tariffs(self) -> list[TariffRow]:
@@ -122,6 +148,18 @@ class FixtureOpsSource(OpsSource):
 
     def advisory(self) -> OperationalAdvisory | None:
         return fixtures.sample_advisory()
+
+    def positions(self) -> list[VesselPosition]:
+        return fixtures.sample_positions()
+
+    def gates(self) -> list[GateAssignment]:
+        return fixtures.sample_gates()
+
+    def marine_advisories(self) -> list[MarineAdvisory]:
+        return fixtures.sample_marine_advisories()
+
+    def operator_profile(self) -> OperatorProfile | None:
+        return fixtures.sample_operator_profile()
 
     def tariffs(self) -> list[TariffRow]:
         return fixtures.sample_tariffs()
