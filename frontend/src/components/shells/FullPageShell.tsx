@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { cn } from '@/lib/cn';
 import { ChatCore } from '@/components/chat/ChatCore';
 import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { IconButton, Sheet } from '@/components/ui';
@@ -79,6 +80,20 @@ function FullPageShellInner() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  /*
+   * The docked rail's width, and why it is not remembered.
+   *
+   * `frontend/CLAUDE.md` rule 5 permits exactly one key in exactly one storage:
+   * `conversation_id` in `sessionStorage`. A collapsed-sidebar preference is
+   * not that key, so it lives in component state and resets on reload.
+   *
+   * That is a real cost — someone who prefers the narrow rail sets it again
+   * each visit — and it is the same trade the high-contrast switch made in
+   * `/settings`. The difference here is that the cost is one click on a control
+   * that is permanently on screen, rather than an accessibility setting the
+   * user may not find twice.
+   */
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
   const drawerId = useId();
   const health = useHealth();
@@ -109,6 +124,8 @@ function FullPageShellInner() {
       knowledgeVerifiedAt={health?.index.kb_updated_at ?? null}
       busy={busy}
       hasConversation={hasConversation}
+      collapsed={railCollapsed}
+      onToggleCollapsed={() => setRailCollapsed((value) => !value)}
     />
   );
 
@@ -216,9 +233,41 @@ function FullPageShellInner() {
       <div className="flex min-h-0 flex-1">
         {/* Docked from lg. Its own landmark, so a screen-reader user can jump
             straight to it — and skip past it, via the link above. */}
-        <div className="hidden w-sidebar shrink-0 border-r border-border lg:block">{sidebar}</div>
+        {/*
+          The animated rail.
+          `transition-width` is width-only and token-timed, so
+          `prefers-reduced-motion` collapses it to nothing along with every
+          other transition — see the utility in tokens.css.
 
-        <main id="main" className="min-w-0 flex-1">
+          `overflow-hidden` matters during the animation: the expanded panel's
+          260px of content is still laid out for a frame or two while the box
+          narrows, and without it the text spills across the transcript.
+        */}
+        <div
+          className={cn(
+            'hidden shrink-0 overflow-hidden border-r border-border lg:block',
+            'transition-width',
+            railCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
+          )}
+        >
+          {sidebar}
+        </div>
+
+        {/*
+          `lang="en"` on the conversation, and it is not redundant.
+
+          The interface language is now selectable, and choosing Spanish sets
+          `<html lang="es">` so a screen reader speaks the chrome with Spanish
+          pronunciation. The assistant's answers stay English by rule — the
+          knowledge base is English and CLAUDE.md rule 10 requires every figure
+          to appear verbatim in the retrieved chunk, which no translation layer
+          can promise. Without this attribute those English answers inherit the
+          root's `es` and get read aloud with Spanish phonemes, which is close to
+          unusable and entirely invisible to anyone testing with their eyes.
+
+          See `features/i18n/locales.ts` for the full reasoning.
+        */}
+        <main id="main" lang="en" className="min-w-0 flex-1">
           <ChatCore />
         </main>
 

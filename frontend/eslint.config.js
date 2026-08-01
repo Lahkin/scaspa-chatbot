@@ -18,7 +18,9 @@ const RESTRICTED_EVENTSOURCE = {
 const RESTRICTED_LOCALSTORAGE = {
   name: 'localStorage',
   message:
-    'Rule 5: message content never goes to storage. Only conversation_id, and only in sessionStorage.',
+    'Rule 5: message content never goes to storage. conversation_id -> sessionStorage; ' +
+    'non-message UI preferences -> features/i18n/prefs.ts, which is the only module allowed to ' +
+    'touch localStorage.',
 };
 const RESTRICTED_FETCH = {
   name: 'fetch',
@@ -132,6 +134,22 @@ export default tseslint.config(
     files: ['src/lib/api.ts', 'src/lib/stream.ts', 'src/mocks/**'],
     rules: {
       'no-restricted-globals': ['error', RESTRICTED_EVENTSOURCE, RESTRICTED_LOCALSTORAGE],
+    },
+  },
+  // features/i18n/prefs.ts is the ONLY module permitted to touch localStorage, in
+  // the same way lib/api.ts is the only one permitted to call fetch. Rule 5 was
+  // amended (decision 0027) to allow non-message UI preferences under the single
+  // key `scaspa.prefs`; it still forbids message content in any storage
+  // anywhere, which is why the exemption is one file and not one directory.
+  //
+  // The other restrictions are repeated because this declaration REPLACES the
+  // block above rather than extending it — dropping them here is how a rule
+  // silently stops applying to the one file most likely to break it.
+  {
+    files: ['src/features/i18n/prefs.ts'],
+    rules: {
+      'no-restricted-globals': ['error', RESTRICTED_EVENTSOURCE, RESTRICTED_FETCH],
+      'no-restricted-properties': 'off',
     },
   },
   // TanStack Router file routes. Two generic rules misfire on the framework's

@@ -13,6 +13,7 @@ import {
   Tooltip,
   VisuallyHidden,
 } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
 import { SCENARIOS, getScenario, setScenario, subscribeToScenario } from '@/mocks/scenarios';
 import { setDraft as setComposerDraft } from '@/features/chat/draft';
@@ -52,6 +53,13 @@ import { config as appConfig } from '@/lib/config';
 import { ScaspaMark } from '@/components/shells/ScaspaMark';
 import { LogoLockup } from '@/components/brand/LogoLockup';
 import { Sidebar } from '@/components/shells/Sidebar';
+import { LanguagePicker } from '@/components/settings/LanguagePicker';
+import {
+  SettingRow,
+  SettingsLinkRow,
+  SettingsSection,
+} from '@/components/settings/SettingsSection';
+import { resetLocale } from '@/features/i18n';
 import { SidebarDrawer } from '@/components/shells/SidebarDrawer';
 import { AboutScaspa } from '@/components/about/AboutScaspa';
 import { CardBlock } from '@/components/chat/CardBlock';
@@ -579,6 +587,7 @@ function NavigationSection() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [lastAsked, setLastAsked] = useState<string | null>(null);
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
 
   const sidebarProps = {
@@ -680,6 +689,43 @@ function NavigationSection() {
         </div>
       </Section>
 
+      {/*
+        Both widths, side by side and live.
+
+        The collapse is a width transition on the wrapper, so a static preview
+        of each state would show the two ends and none of the thing that
+        matters. The toggle here is wired to real state: press it and the rail
+        animates exactly as it does in the shell.
+      */}
+      <Section
+        title="Sidebar — collapsed rail, and the transition between"
+        note="64px, not 0 — a rail that collapses to nothing takes the navigation away and leaves the user hunting for the way back. Every destination survives: four facilities, new conversation, the source count and the phone number, each with a real accessible name behind its glyph. The state is not persisted; frontend/CLAUDE.md rule 5 permits one key in one storage and this is not it."
+      >
+        <div className="flex gap-4">
+          <div
+            className={cn(
+              'h-160 overflow-hidden rounded-md border border-border',
+              'transition-width',
+              railCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
+            )}
+          >
+            <Sidebar
+              {...sidebarProps}
+              sourceCount={3}
+              knowledgeVerifiedAt="2026-06-01"
+              collapsed={railCollapsed}
+              onToggleCollapsed={() => setRailCollapsed((value) => !value)}
+            />
+          </div>
+          <p className="text-caption text-ink-subtle">
+            Currently <strong>{railCollapsed ? 'collapsed' : 'expanded'}</strong>. Use the toggle at
+            the top of the rail. Tapping a facility while collapsed does both things at once — it
+            widens the rail and opens that group, because the tap meant &ldquo;show me this
+            one&rdquo;.
+          </p>
+        </div>
+      </Section>
+
       <Section
         title="Sidebar — with sources and a verified date"
         note="The source count is hidden at xl, where the panel is already docked. The verified-as-of line is omitted entirely when health is unavailable, rather than showing a placeholder."
@@ -698,6 +744,59 @@ function NavigationSection() {
         </p>
         <div className="h-160 w-sidebar overflow-hidden rounded-md border border-border">
           <Sidebar {...sidebarProps} sourceCount={2} knowledgeVerifiedAt="2026-06-01" />
+        </div>
+      </Section>
+
+      <Section
+        title="Language picker"
+        note="The one control on /settings with a side effect. Radios rather than a select: on iOS a select opens a modal wheel that does not commit until Done, so the user picks a language, sees nothing happen, and picks it again. Choosing one repaints this whole page live and moves document.documentElement.lang with it. The real input is sr-only so the card can carry a 44px target without losing native radio semantics — the focus ring is put back on the card with peer-focus-visible, and removing that makes the control keyboard-invisible."
+      >
+        <div className="max-w-2xl rounded-md border border-border p-4">
+          <LanguagePicker />
+        </div>
+        <p className="mt-2 text-caption text-ink-subtle">
+          Chrome only. Assistant answers stay English — the knowledge base is English and CLAUDE.md
+          rule 10 wants every figure verbatim from the retrieved chunk, which no translation layer
+          can promise. Reset with the button below.
+        </p>
+        <button
+          type="button"
+          onClick={() => resetLocale()}
+          className="mt-2 inline-flex min-h-touch items-center rounded-md border border-border-strong px-3 text-small font-medium text-ink"
+        >
+          Reset to English
+        </button>
+      </Section>
+
+      <Section
+        title="Settings section, rows and link rows"
+        note="The three shapes /settings is built from. The badge on a row is load-bearing: most of the accessibility section describes things the device controls, and a row that looks identical to one with a button reads as a setting whose switch the user has failed to find. Saying 'Follows your device' turns a missing control into an answer."
+      >
+        <div className="max-w-2xl space-y-4">
+          <SettingsSection
+            id="gallery-settings"
+            icon="🌐"
+            title="Section heading"
+            lead="The lead line under a section heading, which says what the section is for."
+          >
+            <SettingRow
+              title="A row the device controls"
+              body="Explains where the setting actually lives, rather than leaving the reader hunting for a switch that is deliberately absent."
+              badge="Follows your device"
+            />
+            <SettingRow
+              title="A row with a control"
+              body="Same shape, but this one does something. The button sits under the explanation, never above it."
+            >
+              <Button variant="secondary">Do the thing</Button>
+            </SettingRow>
+            <SettingsLinkRow
+              to="/privacy"
+              title="A row that goes somewhere"
+              body="A Link and not a button that navigates, so it stays middle-clickable, copyable and openable in a new tab."
+              action="Read the privacy note"
+            />
+          </SettingsSection>
         </div>
       </Section>
 

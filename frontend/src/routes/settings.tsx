@@ -1,131 +1,275 @@
-import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { Button } from '@/components/ui';
 import { OpsPage } from '@/components/ops/OpsPage';
-import { clearConversationId } from '@/features/chat/conversation';
-import { setDraft } from '@/features/chat/draft';
+import {
+  SettingRow,
+  SettingsLinkRow,
+  SettingsSection,
+} from '@/components/settings/SettingsSection';
+import { LanguagePicker } from '@/components/settings/LanguagePicker';
+import { HistoryControls } from '@/components/settings/HistoryControls';
+import { getLocale, stringsFor, useStrings } from '@/features/i18n';
 import { SCASPA_TEL_HREF, SCASPA_TEL_TEXT } from '@/features/chat/contact';
 
 /**
- * Settings — the local half of the design's `profile_settings`.
+ * Settings — reached from the bottom of the navigation sidebar.
  *
- * ## What is absent, and why
+ * ## Five sections, and why each says what it says
  *
- * The mockup is a signed-in officer's page: a name, an Agent ID, a jurisdiction,
- * "Verified Officer", "Review Security Logs", "Terminate All Active Sessions".
- * All of it needs authentication, and `frontend/CLAUDE.md` rule 2 says plainly
- * that there is no auth and no session token here — no Authorization header, no
- * cookie. The README lists "no user accounts" as a non-goal.
+ * The brief asked for a language selector, accessibility options, chat-history
+ * controls, help and support, and an about panel. All five are here. Two of them
+ * answer differently from how a settings page usually would, and the difference
+ * is the point rather than a shortfall:
  *
- * So there is no profile. The route is `/settings` rather than `/profile`
- * because calling it a profile promises the part that is not here.
+ * 1. **Language changes the interface, not the answers.** The knowledge base is
+ *    English and `CLAUDE.md` rule 10 requires every money and time value in an
+ *    answer to appear verbatim in the retrieved chunk. A translation layer
+ *    between the chunk and the reader cannot promise that, so the assistant keeps
+ *    replying in English and the section says so in a panel the eye lands on
+ *    before it reaches the radios — not in a footnote underneath them.
+ * 2. **Accessibility mostly has no switches.** Contrast, motion and text size are
+ *    read from the operating system, where the user sets them once for
+ *    everything. A per-site switch would need somewhere to live, would apply to
+ *    this site alone, and would have to be found again on every other. The
+ *    section explains that rather than leaving a reader hunting for controls that
+ *    are deliberately absent.
  *
- * ## Why the contrast toggle became a system preference
+ * ## What did change to build this
  *
- * The design has a "High Contrast Mode" switch. A switch needs somewhere to
- * remember itself, and `CLAUDE.md` rule 5 permits exactly one key in exactly one
- * storage — `conversation_id` in `sessionStorage`. An accessibility preference
- * that resets on every visit is worse than none, so the choice was between
- * weakening an absolute rule and finding a better mechanism.
+ * `frontend/CLAUDE.md` rule 5 previously permitted exactly one stored value —
+ * `conversation_id` in `sessionStorage`. A language that resets every visit is
+ * not a language selector, so the rule now also permits **non-message UI
+ * preferences** in `localStorage` under `scaspa.prefs`. Message content is still
+ * forbidden everywhere, which is what the rule was protecting: `draft.ts` still
+ * refuses storage outright for a half-typed question. Recorded in
+ * docs/decisions.md.
  *
- * The better mechanism already existed: `prefers-contrast`, honoured in
- * `styles/tokens.css`. The user sets it once in their operating system and every
- * site respects it, including this one, with nothing stored anywhere. That is
- * strictly better than a per-site switch — and the same is true of
- * `prefers-reduced-motion`, which this app has always followed.
+ * ## The identity card is still not here
+ *
+ * `/profile` renders a demo operator card from a fixture feed and carries the
+ * guardrails for it. This page owns the controls with side effects, and those two
+ * jobs stay apart — two screens writing the same storage key is how they drift.
  */
 function SettingsRoute() {
-  const [cleared, setCleared] = useState(false);
+  const t = useStrings();
+
+  const sections = [
+    { id: 'language', label: t.settings.language.heading },
+    { id: 'accessibility', label: t.settings.accessibility.heading },
+    { id: 'history', label: t.settings.history.heading },
+    { id: 'support', label: t.settings.support.heading },
+    { id: 'about', label: t.settings.about.heading },
+  ];
 
   return (
     <OpsPage
-      title="Settings"
-      intro="What this app keeps on your device, and how to change how it looks."
+      title={t.settings.title}
+      intro={t.settings.intro}
+      backLabel={t.settings.backToAssistant}
     >
-      <section
-        aria-labelledby="appearance-heading"
-        className="rounded-lg border border-ops-outline-variant bg-ops-surface p-4"
-      >
-        <h2 id="appearance-heading" className="text-h3 font-semibold text-ops-ink">
-          Appearance
-        </h2>
-        <p className="mt-1 max-w-measure text-small text-ops-ink-variant">
-          There is no switch here on purpose. This app follows the contrast and reduced-motion
-          settings you have already chosen on your device, so you set them once and every app
-          respects them — and nothing has to be stored here to remember it. On iOS look under
-          Accessibility → Display; on Android under Accessibility; on a desktop under the display or
-          accessibility settings.
-        </p>
-      </section>
+      {/*
+        Quick jump. Five sections is past the point where a phone user should
+        have to thumb through all of them to reach "clear my history".
 
-      <section
-        aria-labelledby="data-heading"
-        className="rounded-lg border border-ops-outline-variant bg-ops-surface p-4"
-      >
-        <h2 id="data-heading" className="text-h3 font-semibold text-ops-ink">
-          Data on this device
-        </h2>
-
-        {/* The honest version of the mockup's "Clear Chat History", which sounds
-            like it reaches a server and does not. */}
-        <p className="mt-1 max-w-measure text-small text-ops-ink-variant">
-          This app stores one thing in your browser: an anonymous conversation id, so a reload does
-          not lose your place. No messages, no name, no account. Conversations on the server hold
-          only question and answer text, are capped, and expire on their own — there is nothing
-          there that identifies you, so there is nothing to delete.
-        </p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              clearConversationId();
-              setDraft('');
-              setCleared(true);
-            }}
+        Plain `<a href="#id">` rather than a router link: this is movement within
+        the document, so the browser's own anchor handling — including its
+        focus move to the target section — is exactly right, and a router
+        navigation would replace it with a scroll that leaves focus behind.
+      */}
+      <nav aria-label={t.settings.onThisPage} className="flex flex-wrap gap-2">
+        {sections.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            className="inline-flex min-h-touch items-center rounded-full border border-ops-outline-variant bg-ops-surface px-3 text-small font-medium text-ops-ink hover:bg-ops-surface-high"
           >
-            Start a new conversation
-          </Button>
-          {cleared ? (
-            <span role="status" className="text-small text-ops-ink-variant">
-              Cleared. Your next question starts a fresh conversation.
-            </span>
-          ) : null}
-        </div>
-      </section>
+            {section.label}
+          </a>
+        ))}
+      </nav>
 
-      <section
-        aria-labelledby="accounts-heading"
-        className="rounded-lg border border-ops-outline-variant bg-ops-surface-low p-4"
+      {/* ── 1. Language ─────────────────────────────────────────────────────── */}
+      <SettingsSection
+        id="language"
+        icon="🌐"
+        title={t.settings.language.heading}
+        lead={t.settings.language.lead}
       >
-        <h2 id="accounts-heading" className="text-h3 font-semibold text-ops-ink">
-          There is no account
-        </h2>
-        <p className="mt-1 max-w-measure text-small text-ops-ink-variant">
-          This assistant has no sign-in, no profile and no sessions to manage, by design. Nothing
-          you ask can be linked back to you. If you need something that depends on knowing who you
-          are — a shipment, a booking, a payment — that has to go to SCASPA staff, who can see your
-          case. Call{' '}
-          <a href={SCASPA_TEL_HREF} className="font-medium text-ops-sky underline">
+        {/*
+          Above the radios, deliberately.
+
+          Someone who picks Spanish and then discovers the answers are English
+          has been misled by the control, however carefully the caveat is worded
+          underneath it. Putting the scope first means nobody chooses without
+          having passed it — the same ordering rule as the demo notice on the
+          profile card.
+        */}
+        <div
+          role="note"
+          className="rounded-md border border-amber-text bg-amber-surface p-3 text-small text-ops-ink"
+        >
+          <p className="font-semibold">{t.settings.language.scopeTitle}</p>
+          <p className="mt-1 max-w-measure">{t.settings.language.scopeBody}</p>
+        </div>
+
+        <LanguagePicker />
+      </SettingsSection>
+
+      {/* ── 2. Accessibility ────────────────────────────────────────────────── */}
+      <SettingsSection
+        id="accessibility"
+        icon="♿"
+        title={t.settings.accessibility.heading}
+        lead={t.settings.accessibility.lead}
+      >
+        <SettingRow
+          title={t.settings.accessibility.contrastTitle}
+          body={t.settings.accessibility.contrastBody}
+          badge={t.settings.accessibility.followsDevice}
+        />
+        <SettingRow
+          title={t.settings.accessibility.motionTitle}
+          body={t.settings.accessibility.motionBody}
+          badge={t.settings.accessibility.followsDevice}
+        />
+        <SettingRow
+          title={t.settings.accessibility.textTitle}
+          body={t.settings.accessibility.textBody}
+          badge={t.settings.accessibility.followsDevice}
+        />
+        <SettingRow
+          title={t.settings.accessibility.keyboardTitle}
+          body={t.settings.accessibility.keyboardBody}
+          badge={t.settings.accessibility.builtIn}
+        />
+
+        <p className="max-w-measure text-small text-ops-ink-variant">
+          <strong className="font-semibold text-ops-ink">
+            {t.settings.accessibility.whyNoSwitchTitle}.
+          </strong>{' '}
+          {t.settings.accessibility.whyNoSwitchBody}
+        </p>
+      </SettingsSection>
+
+      {/* ── 3. Chat history ─────────────────────────────────────────────────── */}
+      <SettingsSection
+        id="history"
+        icon="🗒"
+        title={t.settings.history.heading}
+        lead={t.settings.history.lead}
+      >
+        <HistoryControls />
+      </SettingsSection>
+
+      {/* ── 4. Help and support ─────────────────────────────────────────────── */}
+      <SettingsSection
+        id="support"
+        icon="🛟"
+        title={t.settings.support.heading}
+        lead={t.settings.support.lead}
+      >
+        {/*
+          The phone number is a row rather than a link card because it is not a
+          navigation — it dials. Same reasoning as the sidebar footer: the way
+          out is the most legible thing in the section.
+        */}
+        <SettingRow title={t.settings.support.callTitle} body={t.settings.support.callBody}>
+          <a
+            href={SCASPA_TEL_HREF}
+            className="inline-flex min-h-touch items-center rounded-md bg-ops-navy px-4 text-small font-semibold text-ink-inverse tabular"
+          >
             {SCASPA_TEL_TEXT}
           </a>
-          .
-        </p>
-      </section>
+        </SettingRow>
+
+        <SettingsLinkRow
+          to="/support"
+          title={t.settings.support.ticketTitle}
+          body={t.settings.support.ticketBody}
+          action={t.settings.support.ticketAction}
+        />
+
+        <SettingsLinkRow
+          to="/privacy"
+          title={t.settings.support.privacyTitle}
+          body={t.settings.support.privacyBody}
+          action={t.settings.support.privacyAction}
+        />
+
+        <div className="rounded-md border border-ops-outline-variant bg-ops-surface-low p-3">
+          <h3 className="text-small font-semibold text-ops-ink">{t.settings.support.tipsTitle}</h3>
+          <ul className="mt-2 space-y-2">
+            {[t.settings.support.tip1, t.settings.support.tip2, t.settings.support.tip3].map(
+              (tip) => (
+                <li key={tip} className="flex gap-2 text-small text-ops-ink-variant">
+                  <span aria-hidden="true" className="shrink-0 text-ops-sky">
+                    →
+                  </span>
+                  <span className="max-w-measure">{tip}</span>
+                </li>
+              )
+            )}
+          </ul>
+        </div>
+      </SettingsSection>
+
+      {/* ── 5. About the assistant ──────────────────────────────────────────── */}
+      <SettingsSection
+        id="about"
+        icon="⚓"
+        title={t.settings.about.heading}
+        lead={t.settings.about.lead}
+      >
+        <SettingRow title={t.settings.about.whatTitle} body={t.settings.about.whatBody} />
+
+        <div className="rounded-md border border-ops-outline-variant bg-ops-surface-low p-3">
+          <h3 className="text-small font-semibold text-ops-ink">{t.settings.about.rulesTitle}</h3>
+          <ul className="mt-2 space-y-2">
+            {[
+              t.settings.about.rule1,
+              t.settings.about.rule2,
+              t.settings.about.rule3,
+              t.settings.about.rule4,
+            ].map((rule) => (
+              <li key={rule} className="flex gap-2 text-small text-ops-ink-variant">
+                <span aria-hidden="true" className="shrink-0 text-ops-sky">
+                  ✓
+                </span>
+                <span className="max-w-measure">{rule}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <SettingsLinkRow
+          to="/about-scaspa"
+          title={t.settings.about.orgTitle}
+          body={t.settings.about.orgBody}
+          action={t.settings.about.orgAction}
+        />
+      </SettingsSection>
     </OpsPage>
   );
 }
 
 export const Route = createFileRoute('/settings')({
   component: SettingsRoute,
-  head: () => ({
-    meta: [
-      { title: 'Settings — SCASPA Assistant' },
-      {
-        name: 'description',
-        content:
-          'What the SCASPA assistant keeps on your device, and how to change its appearance.',
-      },
-    ],
-  }),
+  /*
+   * The tab title follows the interface language too.
+   *
+   * `head()` runs outside React, so it reads the store directly rather than
+   * through the hook. It is evaluated on navigation, which means a language
+   * changed while already sitting on this page leaves the old title until the
+   * next navigation — a genuinely trivial staleness, and the alternative is
+   * writing to `document.title` from an effect and fighting `<HeadContent />`
+   * over which of them owns it.
+   */
+  head: () => {
+    const t = stringsFor(getLocale());
+    return {
+      meta: [
+        { title: `${t.settings.title} — SCASPA Assistant` },
+        { name: 'description', content: t.settings.intro },
+      ],
+    };
+  },
 });

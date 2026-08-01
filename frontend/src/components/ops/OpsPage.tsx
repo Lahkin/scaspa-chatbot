@@ -19,12 +19,24 @@ export function OpsPage({
   source,
   children,
   actions,
+  backLabel = 'Assistant',
 }: {
   title: string;
   intro?: string | undefined;
   source?: DataSource | undefined;
   children: ReactNode;
   actions?: ReactNode;
+  /**
+   * The word beside the back arrow.
+   *
+   * A prop, defaulting to English, rather than this component reading the
+   * locale itself. Only `/settings` is translated; the other pages built on this
+   * shell — vessels, flights, tariffs, support, profile — are still English
+   * throughout, and a lone Spanish "Asistente" at the top of an otherwise
+   * English page is worse than an honest English one. The page that claims a
+   * translation passes it; the pages that do not, do not.
+   */
+  backLabel?: string;
 }) {
   return (
     <div className="min-h-dvh bg-ops-surface">
@@ -34,7 +46,7 @@ export function OpsPage({
           className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm -ml-2 px-2 text-small font-medium"
         >
           <span aria-hidden="true">←</span>
-          <span className="ml-1">Assistant</span>
+          <span className="ml-1">{backLabel}</span>
         </Link>
         <h1 className="truncate text-body font-semibold">{title}</h1>
       </header>

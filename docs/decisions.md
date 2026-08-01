@@ -2256,3 +2256,109 @@ every new state belongs there. They are in a new panel on `--grad-sidebar`
 rather than in the existing loops, which render on the gallery's light surface
 where `onNavy` would be legible by accident and a misleading picture of a state
 that only exists on navy.
+
+## 0027 — A settings destination, and the first stored preference
+
+**Date:** 2026-07-31
+**Status:** Accepted
+
+The sidebar gained a Settings entry at its foot, and `/settings` was rebuilt from
+three prose panels into five sections: language, accessibility, chat history,
+help and support, and about. Asked for as "a settings menu that brings me to
+another page".
+
+### Rule 5 was amended, deliberately and narrowly
+
+`frontend/CLAUDE.md` rule 5 permitted exactly one stored value: `conversation_id`
+in `sessionStorage`. A language selector needs somewhere to remember itself, and
+one that resets every visit is not a selector — it is a control that undoes
+itself. The rail's collapsed state makes the opposite trade and it is right to:
+re-collapsing a rail is one click on a control permanently on screen. Re-finding
+a language selector three screens deep, in an interface you cannot read, is the
+cost of the feature not existing.
+
+So the rule now permits **non-message UI preferences** in `localStorage` under
+the single key `scaspa.prefs`. What the rule was actually protecting has not
+moved: message content is still forbidden in every storage, and `draft.ts` still
+refuses storage outright for a half-typed question, which is the most sensitive
+kind. Alternatives rejected:
+
+- **A search param (`?lang=es`).** No storage, shareable — but every internal
+  `Link` has to forward it, and a bare URL loses it.
+- **In-memory only.** Rule intact, feature absent.
+
+`localStorage` and not `sessionStorage`, which inverts the reasoning behind
+`conversation_id` for the same underlying reason. That id is tab-scoped so a
+shared cruise-terminal kiosk does not hand the next person a conversation. A
+language is not a confidence — the next person seeing Spanish learns nothing
+about anyone — and a returning visitor on their own phone should not choose
+twice. The kiosk case is answered by a "reset this device" control instead, which
+clears the conversation and the language together.
+
+### The selector translates the chrome, and cannot translate the answers
+
+This is the constraint that shaped the whole feature. The knowledge base is
+English; `CLAUDE.md` rule 10 requires every money and time value in an answer to
+appear verbatim in a retrieved chunk, and rule 4 forbids a citation the backend
+has not verified against that row. A translation layer between the chunk and the
+reader cannot promise either — "XCD 44.00" surviving translation is luck. And
+`voice/stt.py` pins `LANGUAGE_HINT = "en"`.
+
+So the interface translates and the answers do not, and the page says so in a
+panel placed **above** the radios rather than beneath them. Someone who picks
+Spanish and then discovers the answers are English has been misled by the
+control however carefully the caveat is worded underneath it — the same ordering
+rule as the demo notice on the profile card.
+
+Three consequences that are easy to miss and are all `lang` attributes:
+
+- `<html lang>` moves with the choice, or a screen reader speaks Spanish chrome
+  with English phonemes.
+- `FullPageShell`'s `<main>` is pinned `lang="en"`, or the English answers get
+  read with Spanish phonemes under a Spanish root. Both are needed; neither is
+  optional.
+- The facility list is `lang="en"` at both rail widths. The starter questions are
+  sent verbatim to an English retriever, so a translated question matches nothing
+  and returns "I don't know" to a perfectly good question.
+
+Spanish and French, chosen for the traffic through Port Zante and the ferry
+terminal. Adding a fourth is a data change: add the code, add the file, and the
+type checker lists every string it still owes — the dictionaries are nested
+objects accessed as `t.sidebar.settings` rather than `t('sidebar.settings')`,
+precisely so a missing key is a build failure instead of `undefined` rendered to
+whoever chose that language.
+
+### No provider, because the shells are tested without one
+
+`shells.test.tsx` renders `FullPageShell` with a `QueryClientProvider` and
+nothing else. A React context for the locale would make every such render throw,
+so the locale is a module store read through `useSyncExternalStore` — the shape
+`draft.ts` already uses. There is no provider to forget, and the sidebar stays a
+pure function of its props.
+
+For the same reason the settings entry is a plain `<a href="/settings">` and not
+a TanStack `<Link>`: a `<Link>` reads the router from context and would take ten
+passing shell tests with it. The cost is a document load rather than a
+client-side transition, and it is close to zero here — `/settings` lives outside
+`FullPageShell`, so the chat session unmounts on the way there under either
+mechanism.
+
+### What the tests learned
+
+- `sidebar.test.tsx` rejects the word "history" anywhere in the sidebar, and it
+  caught the settings entry's first sub-label, "Language, accessibility,
+  history". The copy changed rather than the guard: a nav entry offering
+  "history" reads as "your past conversations are in here", and there are none.
+  The settings page has a Chat history section that explains exactly that, but a
+  user who followed the word to find their transcripts has already been misled.
+- A dictionary-completeness test asserts at runtime what `satisfies Strings`
+  asserts at compile time, because the type only checks the files as written — a
+  key deleted from `en.ts` stops being required everywhere at once, silently.
+  A second test checks the long prose actually differs from English, since a
+  copy-paste of `en.ts` satisfies the type checker perfectly and ships an English
+  interface to someone who asked for Spanish.
+- The placeholder scan matches `TODO:` and `FIXME`, never the bare word: "todo"
+  is ordinary Spanish for "all", and a bare-word check fails on correct Spanish,
+  which teaches the next person to delete the check.
+- A guard asserts `CLAUDE.md` itself names `scaspa.prefs`. A rule relaxed in code
+  but not in the rules file is a rule nobody can rely on.

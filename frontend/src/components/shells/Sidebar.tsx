@@ -3,6 +3,7 @@ import { cn } from '@/lib/cn';
 import { LogoLockup } from '@/components/brand/LogoLockup';
 import { FACILITY_NAV, type FacilityNavItem } from '@/features/chat/facilities';
 import { SCASPA_PHONE_LINES } from '@/lib/scaspa-facts';
+import { useStrings } from '@/features/i18n';
 
 /**
  * The navigation sidebar for the full-page assistant.
@@ -74,6 +75,19 @@ interface SidebarProps {
   onNavigate?: (() => void) | undefined;
   /** True when there is a conversation to clear. */
   hasConversation: boolean;
+  /**
+   * Render the 64px rail instead of the full panel.
+   *
+   * Docked placements only. The drawer never passes this: a drawer that opens
+   * to a strip of icons has spent an animation and a tap to show less than the
+   * hamburger already did.
+   */
+  collapsed?: boolean;
+  /**
+   * Toggle between the two widths. Absent means the sidebar cannot collapse,
+   * and the control is not rendered rather than rendered inert.
+   */
+  onToggleCollapsed?: (() => void) | undefined;
 }
 
 export function Sidebar({
@@ -86,14 +100,91 @@ export function Sidebar({
   busy,
   onNavigate,
   hasConversation,
+  collapsed = false,
+  onToggleCollapsed,
 }: SidebarProps) {
+  const navId = useId();
+  const t = useStrings();
+
+  /*
+   * Which facility groups are open, held here rather than inside each group.
+   *
+   * It moved up for one reason: tapping a facility on the collapsed rail has to
+   * both widen the sidebar and open that group, and a component cannot open a
+   * disclosure that owns its own state. Kept as a list rather than a single id
+   * so the existing behaviour survives — several groups may be open at once,
+   * and turning this into an accordion would quietly take that away.
+   */
+  const [openIds, setOpenIds] = useState<readonly string[]>([]);
+
+  const toggleGroup = (id: string) =>
+    setOpenIds((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
+    );
+
+  /*
+   * A tap on a collapsed facility means "show me this one".
+   *
+   * Widening without opening the group answers with a list of four names the
+   * user has just picked from; opening without widening answers with three
+   * questions in a 64px column. So it does both.
+   */
+  const revealFacility = (id: string) => {
+    setOpenIds((current) => (current.includes(id) ? current : [...current, id]));
+    onToggleCollapsed?.();
+  };
+
+  if (collapsed) {
+    return (
+      <CollapsedRail
+        navId={navId}
+        sourceCount={sourceCount}
+        hasConversation={hasConversation}
+        onNewConversation={onNewConversation}
+        onOpenSources={onOpenSources}
+        onSelectFacility={revealFacility}
+        onExpand={onToggleCollapsed}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-grad-sidebar">
-      <div className="shrink-0 p-3">
-        {/* `reversed` because the badge is navy-on-transparent and would vanish
-            here. It currently declines to draw the badge at all rather than
-            recolouring it — see LogoLockup. */}
-        <LogoLockup size="md" variant="reversed" tagline="Ports and travel, St. Kitts" />
+      <div className="flex shrink-0 items-center gap-2 p-3">
+        <div className="min-w-0 flex-1">
+          {/* `reversed` because the badge is navy-on-transparent and would vanish
+              here. It currently declines to draw the badge at all rather than
+              recolouring it — see LogoLockup. */}
+          <LogoLockup size="md" variant="reversed" tagline="Ports and travel, St. Kitts" />
+        </div>
+
+        {/*
+          The collapse control lives beside the lockup, not floating over the
+          content, so it does not cover a nav item and does not move when the
+          list scrolls.
+
+          `aria-expanded` + `aria-controls` describe the region it operates, so
+          a screen-reader user is told the state rather than left to infer it
+          from an arrow. The label says what the button will DO — "Collapse
+          navigation" — because a label describing the current state reads as an
+          instruction to half of everyone who meets it.
+        */}
+        {onToggleCollapsed ? (
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-expanded={true}
+            aria-controls={navId}
+            className={cn(
+              'inline-flex size-touch-min shrink-0 items-center justify-center rounded-md',
+              'text-on-navy-muted hover:bg-neutral-0/10 hover:text-on-navy-primary',
+              'transition-colors duration-fast ease-out-soft'
+            )}
+          >
+            <span aria-hidden="true">«</span>
+            <span className="sr-only">{t.sidebar.collapseNav}</span>
+          </button>
+        ) : null}
       </div>
 
       {/*
@@ -143,23 +234,40 @@ export function Sidebar({
           )}
         >
           <span aria-hidden="true">+</span>
-          New conversation
+          {t.sidebar.newConversation}
         </button>
       </div>
 
       {/* The scrolling middle. `min-h-0` so it shrinks rather than pushing the
           footer off the bottom — the same trap as the transcript column. */}
-      <nav aria-label="SCASPA facilities" className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+      <nav
+        id={navId}
+        aria-label="SCASPA facilities"
+        className="min-h-0 flex-1 overflow-y-auto px-3 pb-3"
+      >
         <h2 className="px-1 pb-2 text-caption font-semibold tracking-wide text-on-navy-muted uppercase">
-          Ask about
+          {t.sidebar.askAbout}
         </h2>
 
-        <ul className="space-y-1">
+        {/*
+          `lang="en"` on the list, not on the `<nav>` — the heading above it is
+          translated and this list is not.
+
+          Facility names are proper nouns someone will read off a sign, and the
+          starter questions are sent verbatim to an English-language retriever,
+          so a translated question would match nothing and come back "I don't
+          know" to a perfectly good question. Both therefore stay English at
+          every locale, and the attribute is what stops a screen reader set to
+          Spanish pronouncing "Basseterre Ferry Terminal" with Spanish phonemes.
+        */}
+        <ul className="space-y-1" lang="en">
           {FACILITY_NAV.map((facility) => (
             <li key={facility.id}>
               <FacilityGroup
                 facility={facility}
                 busy={busy}
+                open={openIds.includes(facility.id)}
+                onToggle={() => toggleGroup(facility.id)}
                 onAsk={(question) => {
                   onAsk(question);
                   onNavigate?.();
@@ -194,7 +302,7 @@ export function Sidebar({
             'xl:hidden'
           )}
         >
-          <span>Sources in this conversation</span>
+          <span>{t.sidebar.sourcesInConversation}</span>
           {/*
             The one amber in the sidebar, because it is the one quantity.
             `--on-navy-accent` is for figures on a navy ground and nothing else —
@@ -221,7 +329,7 @@ export function Sidebar({
           }}
           className="flex min-h-touch w-full items-center rounded-md px-2 text-small text-on-navy-secondary hover:bg-neutral-0/10 hover:text-on-navy-primary"
         >
-          About SCASPA
+          {t.sidebar.aboutScaspa}
         </button>
 
         {/*
@@ -240,7 +348,7 @@ export function Sidebar({
           <span aria-hidden="true" className="text-on-navy-muted">
             ☎
           </span>
-          Talk to a person
+          {t.sidebar.talkToPerson}
         </a>
 
         {/*
@@ -250,25 +358,70 @@ export function Sidebar({
         */}
         {knowledgeVerifiedAt ? (
           <p className="px-2 pt-1 text-caption text-on-navy-muted">
-            Information verified as of{' '}
+            {t.sidebar.verifiedAsOf}{' '}
             <time dateTime={knowledgeVerifiedAt}>{knowledgeVerifiedAt}</time>
           </p>
         ) : null}
       </div>
 
       {/*
-        No `<Link>` anywhere in here, deliberately.
+        Settings, last and on its own.
 
-        A privacy link in the footer looked like a free addition. It is not: a
-        TanStack `<Link>` reads the router from context, so adding one made the
-        whole `FullPageShell` un-renderable without a router and broke ten
-        existing shell tests that had every right to expect otherwise. It also
-        was not asked for.
+        Its own bordered band rather than another row in the footer above,
+        because it is the only thing in this sidebar that *leaves* — everything
+        else asks a question, opens a panel or dials a phone. Grouping it with
+        those would make it look like a fifth panel toggle, and the two-line
+        treatment (label plus what is behind it) is what tells a hurried reader
+        that "Language" and "Accessibility" are down there without making them
+        four separate rail entries.
 
-        Keeping this component router-free keeps it a pure function of its
-        props, which is why its tests need no harness beyond a query client.
-        Anything here that should navigate takes a callback instead.
+        ── AND IT IS AN `<a>`, NOT A `<Link>` ────────────────────────────────
+
+        Deliberately, and this is the whole reason the component stays
+        router-free. A TanStack `<Link>` reads the router from context; a
+        privacy link tried here once and made `FullPageShell` un-renderable
+        without one, breaking ten shell tests that had every right to expect
+        otherwise. `shells.test.tsx` still renders the shell with a query client
+        and nothing else.
+
+        The cost of the plain anchor is a document load instead of a client-side
+        transition. That cost is very close to zero here: `/settings` is outside
+        `FullPageShell`, so the chat session provider unmounts on the way there
+        either way, and the transcript is gone under both mechanisms. Paying a
+        reload to keep ten tests and this component's independence is the right
+        side of that trade.
       */}
+      <div className="shrink-0 border-t border-on-navy-muted p-3">
+        <a
+          href="/settings"
+          onClick={() => onNavigate?.()}
+          className={cn(
+            'group flex min-h-touch w-full items-center gap-3 rounded-md px-2 py-1.5',
+            'text-on-navy-secondary hover:bg-neutral-0/10 hover:text-on-navy-primary',
+            'transition-colors duration-fast ease-out-soft'
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-on-navy-muted text-on-navy-muted"
+          >
+            ⚙
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-small font-medium text-on-navy-primary">
+              {t.sidebar.settings}
+            </span>
+            <span className="block truncate text-caption text-on-navy-secondary">
+              {t.sidebar.settingsHint}
+            </span>
+          </span>
+          {/* Points off the panel, because this one goes somewhere. The facility
+              chevrons point down when open; this never does. */}
+          <span aria-hidden="true" className="shrink-0 text-on-navy-muted">
+            ›
+          </span>
+        </a>
+      </div>
     </div>
   );
 }
@@ -284,13 +437,17 @@ export function Sidebar({
 function FacilityGroup({
   facility,
   busy,
+  open,
+  onToggle,
   onAsk,
 }: {
   facility: FacilityNavItem;
   busy: boolean;
+  /** Controlled: the parent owns this so the collapsed rail can open a group. */
+  open: boolean;
+  onToggle: () => void;
   onAsk: (question: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const panelId = useId();
 
   return (
@@ -299,7 +456,7 @@ function FacilityGroup({
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen((value) => !value)}
+        onClick={onToggle}
         className={cn(
           'flex min-h-touch w-full items-center gap-2 rounded-md px-2 py-1.5 text-left',
           'hover:bg-neutral-0/10',
@@ -378,6 +535,185 @@ function FacilityGroup({
           </ul>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The 64px rail.
+ *
+ * ## Every destination survives the collapse
+ *
+ * Nothing is dropped, because a control that disappears when the rail narrows
+ * is a control the user has to remember exists. The four facilities, the new
+ * conversation button and the source count are all still here as targets; only
+ * the words are gone, and one click brings them back.
+ *
+ * ## Glyphs are not labels
+ *
+ * Nobody reliably guesses "ferry terminal" from a boat, so every button carries
+ * a real accessible name and a `title`, and the glyph is `aria-hidden`. A
+ * screen reader hears "Basseterre Ferry Terminal" either way; the difference
+ * between the two widths is entirely visual.
+ *
+ * ## The one number that stays visible
+ *
+ * The source count. It is the only figure in the sidebar that changes as the
+ * conversation goes on, and it is the reason someone glances at the rail
+ * without meaning to open it. It keeps the amber, because in this sidebar amber
+ * means "quantity" — see the note at the top of this file.
+ */
+function CollapsedRail({
+  navId,
+  sourceCount,
+  hasConversation,
+  onNewConversation,
+  onOpenSources,
+  onSelectFacility,
+  onExpand,
+}: {
+  navId: string;
+  sourceCount: number;
+  hasConversation: boolean;
+  onNewConversation: () => void;
+  onOpenSources: () => void;
+  onSelectFacility: (id: string) => void;
+  onExpand?: (() => void) | undefined;
+}) {
+  const t = useStrings();
+
+  return (
+    <div className="flex h-full min-h-0 flex-col items-center gap-1 bg-grad-sidebar py-3">
+      {onExpand ? (
+        <button
+          type="button"
+          onClick={onExpand}
+          aria-expanded={false}
+          aria-controls={navId}
+          className={cn(
+            'inline-flex size-touch-min shrink-0 items-center justify-center rounded-md',
+            'text-on-navy-muted hover:bg-neutral-0/10 hover:text-on-navy-primary',
+            'transition-colors duration-fast ease-out-soft'
+          )}
+        >
+          <span aria-hidden="true">»</span>
+          <span className="sr-only">{t.sidebar.expandNav}</span>
+        </button>
+      ) : null}
+
+      <div aria-hidden="true" className="my-1 h-px w-8 shrink-0 bg-hairline-horizon" />
+
+      {/*
+        The primary action keeps its brand fill and its border at both widths —
+        it is the same button, and a control that changes colour when a panel
+        resizes reads as a different control. Brand blue on navy is 1.91:1, so
+        the border is what makes its edge visible; see the expanded version.
+      */}
+      <button
+        type="button"
+        onClick={onNewConversation}
+        disabled={!hasConversation}
+        title={t.sidebar.newConversation}
+        className={cn(
+          'inline-flex size-touch-min shrink-0 items-center justify-center rounded-md',
+          'border border-on-navy-secondary bg-brand text-on-navy-primary',
+          'transition-colors duration-fast ease-out-soft hover:bg-blue-700',
+          'disabled:cursor-not-allowed disabled:border-on-navy-muted disabled:bg-transparent',
+          'disabled:text-on-navy-muted'
+        )}
+      >
+        <span aria-hidden="true">+</span>
+        <span className="sr-only">{t.sidebar.newConversation}</span>
+      </button>
+
+      {/* Same landmark and same label as the expanded panel, so the collapse is
+          invisible to anyone navigating by landmark. */}
+      <nav
+        id={navId}
+        aria-label="SCASPA facilities"
+        className="min-h-0 flex-1 overflow-y-auto pt-1"
+      >
+        {/* English for the same reason as the expanded list — these are place
+            names, not phrases. See the note on the other `lang="en"` above. */}
+        <ul className="flex flex-col items-center gap-1" lang="en">
+          {FACILITY_NAV.map((facility) => (
+            <li key={facility.id}>
+              <button
+                type="button"
+                onClick={() => onSelectFacility(facility.id)}
+                title={facility.name}
+                className={cn(
+                  'inline-flex size-touch-min items-center justify-center rounded-md',
+                  'text-on-navy-secondary hover:bg-neutral-0/10 hover:text-on-navy-primary',
+                  'transition-colors duration-fast ease-out-soft'
+                )}
+              >
+                <span aria-hidden="true">{facility.glyph}</span>
+                <span className="sr-only">{facility.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <div aria-hidden="true" className="my-1 h-px w-8 shrink-0 bg-hairline-horizon" />
+
+      <button
+        type="button"
+        onClick={onOpenSources}
+        disabled={sourceCount === 0}
+        title={`${t.sidebar.sourcesInConversation}: ${sourceCount}`}
+        className={cn(
+          'inline-flex size-touch-min shrink-0 flex-col items-center justify-center rounded-md',
+          'text-on-navy-secondary hover:bg-neutral-0/10 hover:text-on-navy-primary',
+          'disabled:cursor-not-allowed disabled:text-on-navy-muted disabled:hover:bg-transparent',
+          'xl:hidden'
+        )}
+      >
+        <span aria-hidden="true" className="text-caption leading-none">
+          ⌸
+        </span>
+        <span
+          aria-hidden="true"
+          className={cn(
+            'text-caption leading-none font-semibold tabular',
+            sourceCount > 0 ? 'text-on-navy-accent' : 'text-on-navy-muted'
+          )}
+        >
+          {sourceCount}
+        </span>
+        <span className="sr-only">
+          {t.sidebar.sourcesInConversation}: {sourceCount}
+        </span>
+      </button>
+
+      <a
+        href={SCASPA_PHONE_LINES[0].href}
+        title={t.sidebar.talkToPerson}
+        className={cn(
+          'inline-flex size-touch-min shrink-0 items-center justify-center rounded-md',
+          'text-on-navy-primary hover:bg-neutral-0/10'
+        )}
+      >
+        <span aria-hidden="true">☎</span>
+        <span className="sr-only">{t.sidebar.talkToPerson}</span>
+      </a>
+
+      {/* Settings survives the collapse like every other destination — the rail
+          drops words, never targets. A control that vanishes when the sidebar
+          narrows is one the user has to remember exists. */}
+      <a
+        href="/settings"
+        title={t.sidebar.settings}
+        className={cn(
+          'inline-flex size-touch-min shrink-0 items-center justify-center rounded-md',
+          'text-on-navy-secondary hover:bg-neutral-0/10 hover:text-on-navy-primary',
+          'transition-colors duration-fast ease-out-soft'
+        )}
+      >
+        <span aria-hidden="true">⚙</span>
+        <span className="sr-only">{t.sidebar.settings}</span>
+      </a>
     </div>
   );
 }
