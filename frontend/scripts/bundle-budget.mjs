@@ -18,6 +18,35 @@ const INITIAL_JS_BUDGET_KB = 200;
 /** The embed loader is pasted into someone else's page. It has to stay small. */
 const EMBED_BUDGET_KB = 3;
 
+/*
+ * Images, and why this section exists at all.
+ *
+ * It was added after a 2.1 MB, 6000 x 6000 logo shipped and every check here
+ * went green. Nothing was wrong with the checks — they measured JavaScript, and
+ * the logo is not JavaScript. It was five times the weight of the entire app
+ * bundle, for a mark drawn at 48px, on a page whose fonts are self-hosted to
+ * save one DNS round trip.
+ *
+ * That is the failure worth guarding: a budget that measures one kind of byte
+ * teaches everyone the other kinds are free.
+ */
+
+/** No single raster over this, RAW — an image is already compressed, so gzip does nothing. */
+const IMAGE_BUDGET_KB = 100;
+/** Every image together. A dozen small ones is the same download as one large one. */
+const TOTAL_IMAGE_BUDGET_KB = 250;
+/**
+ * The largest any raster is drawn in this app is the 48px lockup badge, so this
+ * is ~5x the highest-density case and still leaves room for a hero.
+ *
+ * Checked because it names the actual mistake. A file over budget tells you to
+ * compress harder; 6000px tells you the asset was never resized, which is the
+ * thing that was true and the thing that a byte count alone does not say.
+ */
+const MAX_IMAGE_PX = 512;
+
+const RASTER_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif'];
+
 /** Must NOT be in the initial bundle — each is lazy-loaded on demand. */
 const MUST_BE_LAZY = [
   { name: 'Recharts', markers: ['ResponsiveContainer', 'CartesianGrid', 'recharts'] },
@@ -82,6 +111,76 @@ report(fonts.length > 0, 'a self-hosted woff2 is shipped', fonts.join(', '));
 const html = readFileSync('dist/index.html', 'utf8');
 report(/rel="preload"[\s\S]*?as="font"/.test(html), 'the font is preloaded');
 report(/crossorigin/.test(html), 'the preload has crossorigin (or it downloads twice)');
+
+console.log('\nImages');
+
+/**
+ * Width and height straight out of the PNG header.
+ *
+ * A PNG is an 8-byte signature followed by IHDR: length(4), type(4), then width
+ * and height as big-endian uint32s — so they sit at offsets 16 and 20, always,
+ * in every PNG. That is the whole reader, and it needs no dependency.
+ *
+ * PNG only, deliberately. JPEG stores its size in a marker segment that has to
+ * be walked, WebP has three container variants, and neither is worth the code:
+ * the byte budget below already catches an oversized asset in any format. This
+ * is the diagnostic that explains one, and PNG is what this app ships.
+ */
+function pngDimensions(buffer) {
+  if (buffer.length < 24 || buffer.readUInt32BE(0) !== 0x89504e47) return null;
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+const distFiles = readdirSync('dist', { recursive: true }).map(String);
+const images = distFiles.filter((file) =>
+  RASTER_EXTENSIONS.some((ext) => file.toLowerCase().endsWith(ext))
+);
+
+let totalImageKb = 0;
+for (const file of images) {
+  const buffer = readFileSync(join('dist', file));
+  const kb = buffer.length / 1024;
+  totalImageKb += kb;
+
+  report(kb <= IMAGE_BUDGET_KB, `${file} under ${IMAGE_BUDGET_KB} kB`, `${kb.toFixed(1)} kB`);
+
+  const size = pngDimensions(buffer);
+  if (size) {
+    const tooBig = size.width > MAX_IMAGE_PX || size.height > MAX_IMAGE_PX;
+    report(
+      !tooBig,
+      `${file} at most ${MAX_IMAGE_PX}px on a side`,
+      `${size.width} x ${size.height}${tooBig ? ' — resize the source, do not just compress it' : ''}`
+    );
+  }
+}
+
+/*
+ * SVGs are measured gzipped and rasters are not, because that is what actually
+ * crosses the wire: a server gzips text and leaves an already-compressed PNG
+ * alone. Measuring an SVG raw would over-report it by roughly a factor of four
+ * and push someone toward a raster, which is the wrong direction for a logo.
+ */
+const svgs = distFiles.filter((file) => file.toLowerCase().endsWith('.svg'));
+for (const file of svgs) {
+  const kb = gzipKb(readFileSync(join('dist', file)));
+  totalImageKb += kb;
+  report(
+    kb <= IMAGE_BUDGET_KB,
+    `${file} under ${IMAGE_BUDGET_KB} kB gzipped`,
+    `${kb.toFixed(1)} kB`
+  );
+}
+
+if (images.length === 0 && svgs.length === 0) {
+  console.log('       no images in the build');
+} else {
+  report(
+    totalImageKb <= TOTAL_IMAGE_BUDGET_KB,
+    `all images under ${TOTAL_IMAGE_BUDGET_KB} kB together`,
+    `${totalImageKb.toFixed(1)} kB across ${images.length + svgs.length} file(s)`
+  );
+}
 
 console.log('\nThird parties');
 // A render-blocking third-party request is a DNS lookup and a TLS handshake
