@@ -31,6 +31,16 @@ export interface FacilityNavItem {
   name: string;
   /** What sits under the name in the nav — the disambiguating hint. */
   subLabel: string;
+  /**
+   * The mark shown when the sidebar is collapsed to its 64px rail.
+   *
+   * Purely decorative and always `aria-hidden`: the accessible name comes from
+   * `name`, which is on the button either way. A glyph is not a label — nobody
+   * has ever reliably guessed "ferry terminal" from a boat — so the collapsed
+   * rail pairs it with a tooltip and an `aria-label`, and one click widens the
+   * rail back to the words.
+   */
+  glyph: string;
   /** Exactly three. More turns a disclosure into a scroll. */
   questions: readonly [string, string, string];
 }
@@ -40,6 +50,7 @@ export const FACILITY_NAV: readonly FacilityNavItem[] = [
     id: 'harbour',
     name: 'Deep Water Harbour',
     subLabel: 'Cargo, containers, barrels',
+    glyph: '⚓',
     questions: [
       'Where do I collect a barrel shipped to St. Kitts?',
       'What documents do I need to clear cargo?',
@@ -50,6 +61,7 @@ export const FACILITY_NAV: readonly FacilityNavItem[] = [
     id: 'zante',
     name: 'Port Zante',
     subLabel: 'Cruise terminal',
+    glyph: '🛳',
     questions: [
       'Where do cruise ships dock in St. Kitts?',
       "What's within walking distance of the cruise terminal?",
@@ -60,6 +72,7 @@ export const FACILITY_NAV: readonly FacilityNavItem[] = [
     id: 'ferry',
     name: 'Basseterre Ferry Terminal',
     subLabel: 'St. Kitts–Nevis crossing',
+    glyph: '⛴',
     questions: [
       'What time is the last ferry back from Nevis?',
       'Where do I buy a ferry ticket to Nevis?',
@@ -70,6 +83,7 @@ export const FACILITY_NAV: readonly FacilityNavItem[] = [
     id: 'airport',
     name: 'RLB International Airport',
     subLabel: 'Robert L. Bradshaw',
+    glyph: '✈',
     questions: [
       'How do I get from the airport to Basseterre?',
       'What facilities are in the airport terminal?',
