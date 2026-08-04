@@ -364,19 +364,24 @@ clean · **839 vitest** · build ✓ · budget **133.7 kB gz** · **check:integr
 126 passed** · **check:a11y 0 violations** (13 routes × 2 viewports, 0 manual
 failures).
 
-**Frozen commit:** `72c6990` — _"a unit symbol takes no plural, and the T-23
-rehearsal record"_, on `feat/connect-halves-and-import-mockups`.
+**Frozen commit:** `09b0aca`, on `feat/connect-halves-and-import-mockups`.
 
-That is the commit every figure above was measured against. To return to it
-exactly:
+Re-frozen after the rehearsal's own findings were fixed — the mock control, the
+empty heading, the facility filter and the dead end it exposed. The previous
+freeze, `72c6990`, is superseded.
+
+To return to it exactly:
 
 ```bash
-git checkout 72c6990
+git checkout 09b0aca
 cd backend  && uv run python scripts/build_index.py        # 115 indexed, 4 rejected
 lsof -ti:8000 | xargs kill 2>/dev/null
 OPS_DATA_SOURCE=fixture uv run uvicorn app.main:app
-cd frontend && npm install && npm run dev
+cd frontend && npm install && npm run dev                  # NOT a production build
 ```
+
+Then run the health check at the top of this section. The index has gone stale
+twice, once for reasons still unknown.
 
 Anything committed after this has not been rehearsed.
 
