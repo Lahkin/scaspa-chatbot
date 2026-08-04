@@ -6,6 +6,19 @@ twenty minutes before presenting. It takes five minutes.
 The point is not to discover that everything works. It is to discover the one
 thing that does not, while there is still time.
 
+> **This checklist is the machine, not the demo.** What to walk through, what to
+> say, the chat questions, the fallback and the answers for SCASPA's IT staff all
+> live in **`docs/demo-day.md`**, which is the single runbook.
+>
+> This file used to carry its own walkthrough. It went stale — it had no
+> operations screens at all, having been written before they existed — and two
+> runbooks that disagree are worse than one. The walkthrough sections below now
+> point at `demo-day.md` rather than repeating it.
+>
+> **The demo runs on `npm run dev`, not a deployed build** (`demo-day.md` §0).
+> That is what keeps `/dev/rehearsal` reachable; it is `import.meta.env.DEV`-only
+> by design, so a production build 404s it and the recovery path disappears.
+
 > **Running the browser checks** (`check:responsive`, `check:a11y`,
 > `check:charts`, `check:slow`, `check:browsers`)
 >
@@ -76,29 +89,28 @@ thing that does not, while there is still time.
 - [ ] `kb_version` is the version you expect. **Write it down here:** `__________`
 - [ ] No degraded banner across the top of the app.
 
-## 3. The four demo questions
+## 3. The demo questions — **see `docs/demo-day.md` §3**
 
-Use the **chips**, not the keyboard. A tapped chip cannot be mistyped on stage.
+The list lives there, verified by the T-23 rehearsal rather than assumed. Two
+questions this file used to recommend do not survive that check: the corpus
+publishes no fixed ferry timetable, and the real tariff schedule is still blocked
+on SCASPA — so *"what time is the last ferry back from Nevis?"* and *"how much is
+a 40-foot container?"* refuse rather than answer. A graceful refusal is a fine
+thing to **show deliberately** (`demo-day.md` §4); it is a poor thing to walk
+into while expecting a cited answer.
 
-For each of the four, tick only if an answer arrives **with at least one numbered
-source** and it feels fast enough to talk over:
+- [ ] Each question in `demo-day.md` §3 returns an answer **with at least one
+      numbered source**, fast enough to talk over.
+- [ ] If one is slow, note which: `__________`. Lead with a different one.
 
-- [ ] Where do cruise ships dock in St. Kitts?
-- [ ] What time is the last ferry back from Nevis?
-- [ ] Where do I collect a barrel shipped to St. Kitts?
-- [ ] How much is a 40-foot container?
+## 4. The moments worth showing — **see `docs/demo-day.md` §2 and §4**
 
-If one is slow, note which: `__________`. Lead with a different one.
-
-## 4. The moments worth showing
-
-- [ ] **The refusal.** Ask "where is my container?". The escalation card appears
-      with three tappable phone numbers. This is the most impressive moment in the
-      demo and most teams never show it.
+- [ ] **The refusal** — `demo-day.md` §4. The escalation card with three tappable
+      numbers. The most persuasive moment in the demo, and most teams hide it.
 - [ ] **A source.** Tap a numbered chip. The panel opens at that source, showing
       the date it was verified.
-- [ ] **A chart**, if one is in the script. It draws, and the caption underneath
-      is readable.
+- [ ] **The five screens** in `demo-day.md` §2 — `/chat`, `/vessels`, `/flights`,
+      `/tariffs`, `/support` — each loads, with its source notice intact.
 
 ## 5. Voice
 
@@ -124,10 +136,18 @@ If one is slow, note which: `__________`. Lead with a different one.
 
 ## 7. The fallback, rehearsed
 
+- [ ] **You are running `npm run dev`.** Confirm it, do not assume it. On a
+      production build `/dev/rehearsal` 404s and this whole step is fiction —
+      the route is `import.meta.env.DEV`-only by design
+      (`src/routes/dev.rehearsal.tsx:14,27`). If someone deployed the app since
+      the last rehearsal, the recovery path left with it.
 - [ ] Open `/dev/rehearsal`. The recorded conversation renders with **no network
       at all**.
-- [ ] Know how to get there without typing a URL in front of people: have the tab
-      already open in the background.
+- [ ] `VITE_ENABLE_MOCKS=true npm run dev` also serves every screen from the
+      mock layer — the wider fallback, when it is the backend rather than the
+      network that has gone.
+- [ ] Have the tab **already open in the background**. Reaching it should not
+      involve typing a URL in front of people.
 - [ ] Say the line out loud once: _"the venue wifi has gone — here is the same
       conversation recorded earlier."_ Rehearsing the sentence is what makes it
       sound calm rather than apologetic.
@@ -136,15 +156,14 @@ If one is slow, note which: `__________`. Lead with a different one.
 
 ## If something fails
 
-| Symptom                                   | First thing to check                                                                                                                       |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Page loads, answers do not                | CORS — `ALLOWED_ORIGINS` in the backend must include this page's origin. The fix is never in the frontend.                                 |
-| "You appear to be offline" but wifi works | Same as above, or the backend is down. The browser cannot tell a CORS refusal from being offline.                                          |
-| Everything is slow                        | Note it, use the chips, keep talking. The fallback answers arrive over plain POST and are often faster on a bad network.                   |
-| The microphone button is missing          | The page is not on HTTPS. Do not plan to show voice.                                                                                       |
-| A judge trips the rate limit              | Expected. The Send button shows a countdown. Say "several people are asking at once" and carry on — it is a designed state, not a failure. |
-| Anything unrecoverable                    | `/dev/rehearsal`, and the sentence from step 7.                                                                                            |
+The full table, with what to say as well as what to check, is in
+**`docs/demo-day.md`**. The three that are about *this machine*:
 
-**Composure beats perfection.** Every failure on this list has a next action, and
-the audience remembers how the presenter handled it far longer than they remember
-what broke.
+| Symptom | First thing to check |
+| --- | --- |
+| Page loads, answers do not | CORS — `ALLOWED_ORIGINS` in the backend must include this page's origin. The fix is never in the frontend. |
+| Screens say "no source configured" | A **stale backend** on `:8000`, answering with the config it booted with. `lsof -ti:8000`. This has cost a walkthrough twice. |
+| The microphone button is missing | The page is not on HTTPS. Do not plan to show voice. |
+
+**Composure beats perfection.** Every failure has a next action, and the audience
+remembers how the presenter handled it far longer than they remember what broke.
