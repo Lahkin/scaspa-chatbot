@@ -258,7 +258,8 @@ function ExampleAnswer() {
         </span>
       </p>
       <p className="mt-2 border-t border-border pt-2 text-caption text-ink-subtle">
-        <strong>1.</strong> Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on 2026-07-31
+        <strong>1.</strong> Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on
+        2026-07-31
       </p>
     </figure>
   );

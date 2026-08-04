@@ -71,12 +71,15 @@ thing that does not, while there is still time.
       network is the one that will be used, so it is the one to test.
 - [ ] Backup phone hotspot ready but **not connected** — known to work, one tap
       away.
-- [ ] Backend running and reachable. Ask whoever owns it to confirm, or open
-      `https://<host>/api/health` in a tab.
+- [ ] Backend running and reachable — `http://localhost:8000/api/health` in a tab.
+- [ ] **It is the backend you just started.** `lsof -ti:8000`. A stale instance
+      holds the port, the new one cannot bind, and the old one answers with the
+      configuration it booted with. This has cost a walkthrough once already.
 
 ## 1. The app loads
 
-- [ ] Open the deployed URL. The landing page renders within a few seconds.
+- [ ] `npm run dev`, and open `http://localhost:5173`. **Not a deployed build** —
+      see the note at the top, and `demo-day.md` §0.
 - [ ] **No console errors.** Open devtools, reload, read the console. A red line
       here is worth five minutes now.
 - [ ] The footer shows "Information verified as of …" with a date. If it does
@@ -84,7 +87,7 @@ thing that does not, while there is still time.
 
 ## 2. Health
 
-- [ ] `https://<host>/api/health` returns `"status": "ok"`.
+- [ ] `http://localhost:8000/api/health` returns `"status": "ok"`.
 - [ ] `index.ready` is `true`.
 - [ ] `kb_version` is the version you expect. **Write it down here:** `__________`
 - [ ] No degraded banner across the top of the app.
@@ -94,8 +97,8 @@ thing that does not, while there is still time.
 The list lives there, verified by the T-23 rehearsal rather than assumed. Two
 questions this file used to recommend do not survive that check: the corpus
 publishes no fixed ferry timetable, and the real tariff schedule is still blocked
-on SCASPA — so *"what time is the last ferry back from Nevis?"* and *"how much is
-a 40-foot container?"* refuse rather than answer. A graceful refusal is a fine
+on SCASPA — so _"what time is the last ferry back from Nevis?"_ and _"how much is
+a 40-foot container?"_ refuse rather than answer. A graceful refusal is a fine
 thing to **show deliberately** (`demo-day.md` §4); it is a poor thing to walk
 into while expecting a cited answer.
 
@@ -157,13 +160,13 @@ into while expecting a cited answer.
 ## If something fails
 
 The full table, with what to say as well as what to check, is in
-**`docs/demo-day.md`**. The three that are about *this machine*:
+**`docs/demo-day.md`**. The three that are about _this machine_:
 
-| Symptom | First thing to check |
-| --- | --- |
-| Page loads, answers do not | CORS — `ALLOWED_ORIGINS` in the backend must include this page's origin. The fix is never in the frontend. |
+| Symptom                            | First thing to check                                                                                                          |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Page loads, answers do not         | CORS — `ALLOWED_ORIGINS` in the backend must include this page's origin. The fix is never in the frontend.                    |
 | Screens say "no source configured" | A **stale backend** on `:8000`, answering with the config it booted with. `lsof -ti:8000`. This has cost a walkthrough twice. |
-| The microphone button is missing | The page is not on HTTPS. Do not plan to show voice. |
+| The microphone button is missing   | The page is not on HTTPS. Do not plan to show voice.                                                                          |
 
 **Composure beats perfection.** Every failure has a next action, and the audience
 remembers how the presenter handled it far longer than they remember what broke.
