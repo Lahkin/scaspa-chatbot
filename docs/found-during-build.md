@@ -35,6 +35,41 @@ convention, and the service refuses to boot with this data when `ENV=prod`.
 
 ---
 
+## From M4c
+
+### 19. `CLAUDE.md` has silently reverted twice — do not restore a third time blind
+
+Twice now, uncommitted edits to `CLAUDE.md` have disappeared from the working
+tree between sessions:
+
+| When | What was lost | Recovered from |
+| --- | --- | --- |
+| Before M1 | Absolute rule 3 (pay.scaspa.com) | Restored by the owner |
+| Before M4c | **All four changes in `86ae726`** — rule 5's 0032 deferral, rule 9's logging rule, the commit-scope wording, rule 11's formatting | `git checkout HEAD -- CLAUDE.md` |
+
+The second is the instructive one. `86ae726` **did land** — `git show 86ae726 --
+CLAUDE.md` shows the diff going in — and the working tree later held the
+pre-commit text for all four hunks. HEAD was never wrong; the file on disk was.
+
+**Both times the loss was invisible until something depended on it.** Rule 5's
+reversion surfaced only because M4b was actively writing realistic fixture
+values against it, and rule 9's blanking surfaced only because a commit was
+about to sweep it in.
+
+**If it happens again, diagnose before restoring.** A fourth silent revert during
+a milestone that depends on the reverted rule would be worse than the drift:
+
+```bash
+git log --all --oneline -- CLAUDE.md      # every commit that has touched it
+git reflog                                 # whether a checkout/reset moved it
+git fsck --lost-found                      # dangling objects, if a commit vanished
+```
+
+…and check the editor's local history. **Something is writing that file**, and
+restoring a third time without knowing what would be treating the symptom.
+
+---
+
 ## From M4b
 
 ### 18. Audit correction — F-23 checked the chips' wiring and never their values

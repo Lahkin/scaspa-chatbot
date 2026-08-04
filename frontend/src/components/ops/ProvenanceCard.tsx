@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { FixtureWatermark } from './FixtureWatermark';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import type { DataSource } from '@/lib/types';
 
@@ -80,12 +81,28 @@ export function ProvenanceCard({
   return (
     <section
       {...(label ? { 'aria-label': label } : {})}
-      className={cn('overflow-hidden rounded-panel border border-border bg-surface', className)}
+      className={cn(
+        // `relative` so the hatch can sit behind the body. It changes nothing
+        // when there is no hatch, which is every non-fixture source.
+        'relative overflow-hidden rounded-panel border border-border bg-surface',
+        className
+      )}
     >
-      <MetaStrip source={source} wide={wide} derived={derived} />
-      <MandatoryNotice source={source} wide={wide} />
-      {children}
-      {footer}
+      {/*
+        0032 layer 4, at the choke point every operations payload passes
+        through. `source` is required on this component with no way to suppress
+        it, so a card that renders fixture data cannot render without its hatch
+        — the same guarantee the meta strip and the notice already have.
+      */}
+      <FixtureWatermark source={source} />
+      {/* `relative` on the content so it stacks above the hatch rather than
+          under it — the stripes are a ground, not a veil over the figures. */}
+      <div className="relative">
+        <MetaStrip source={source} wide={wide} derived={derived} />
+        <MandatoryNotice source={source} wide={wide} />
+        {children}
+        {footer}
+      </div>
     </section>
   );
 }

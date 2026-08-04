@@ -138,6 +138,9 @@ function FlightsRoute() {
     <OpsShell
       title="Flight movements"
       intro="Arrivals and departures at R. L. Bradshaw International."
+      // As on `/vessels` — the table is not a provenance card, so the hatch
+      // comes from the shell.
+      source={source}
     >
       {/* §5.2's banner — one per screen, rendered here now that the shell
           carries no data of its own. See the note in `routes/vessels.tsx`. */}

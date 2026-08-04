@@ -77,6 +77,42 @@ async function readBody(request: Request): Promise<Partial<ChatRequest>> {
   }
 }
 
+/**
+ * Apply every `?key=value` equality filter the real endpoint implements.
+ *
+ * The audit's **E-7**: the mock honoured two parameters and silently ignored
+ * five, so a screen could send one the server acts on and no test would notice
+ * it had no effect — which is precisely how the client-side status filter
+ * survived on `/vessels` under a server-side total.
+ */
+function applyEquals<T>(
+  rows: T[],
+  params: URLSearchParams,
+  fields: Record<string, (row: T) => string | null>
+): T[] {
+  let out = rows;
+  for (const [key, read] of Object.entries(fields)) {
+    const wanted = params.get(key)?.trim();
+    if (wanted) out = out.filter((row) => read(row) === wanted);
+  }
+  return out;
+}
+
+/**
+ * `limit`/`offset`, so pagination is exercised rather than assumed.
+ *
+ * Also **E-7**. `total` must be counted by the caller *before* this runs: the
+ * range readout says "Showing 1–25 of 100", and a total counted after paging
+ * would always equal the page.
+ */
+function page<T>(rows: T[], params: URLSearchParams, fallback = 25): T[] {
+  const limit = Number(params.get('limit') ?? fallback);
+  const offset = Number(params.get('offset') ?? 0);
+  const start = Number.isFinite(offset) && offset > 0 ? offset : 0;
+  const size = Number.isFinite(limit) && limit > 0 ? limit : fallback;
+  return rows.slice(start, start + size);
+}
+
 export const handlers = [
   // ── POST /api/chat ─────────────────────────────────────────────────────────
   http.post(`${base}/api/chat`, async ({ request }) => {
@@ -416,47 +452,73 @@ export const handlers = [
 
     const params = new URL(request.url).searchParams;
     const query = (params.get('q') ?? '').toLowerCase();
-    // `status` is a real parameter on `GET /api/vessels` — `filter_vessels`
-    // applies it and `total` is counted after it. The mock ignored it, which is
-    // what let the screen filter in the client without anything noticing.
-    const status = params.get('status');
 
+    /*
+     * Every filter the real endpoint implements, applied in the same order —
+     * E-7 in the audit's divergence table. The mock used to honour `q` and
+     * `status` and silently ignore `vessel_type`, `berth`, `facility`, `limit`
+     * and `offset`, so a screen could send a parameter the real server acts on
+     * and the tests would never notice it had no effect.
+     */
     let vessels = MOCK_VESSELS;
     if (query) {
       vessels = vessels.filter(
         (v) => v.name.toLowerCase().includes(query) || (v.imo ?? '').toLowerCase().includes(query)
       );
     }
-    if (status) {
-      vessels = vessels.filter((v) => v.status === status);
-    }
+    vessels = applyEquals(vessels, params, {
+      status: (v) => v.status,
+      vessel_type: (v) => v.vessel_type,
+      berth: (v) => v.berth,
+      facility: (v) => v.facility,
+    });
 
+    // `total` is matches BEFORE paging — that is what makes the range readout
+    // true — and the page is the slice.
+    const total = vessels.length;
     return HttpResponse.json({
       source: FIXTURE_SOURCE,
-      vessels,
+      vessels: page(vessels, params),
       metrics: {
-        vessels_at_berth: 1,
-        berth_capacity: 4,
-        arrivals_next_24h: 1,
+        vessels_at_berth: 4,
+        berth_capacity: 11,
+        arrivals_next_24h: 7,
         daily_cargo_teu: 1111,
-        // Null, mirroring the backend fixture: the field landed in M2, the
-        // value lands in M4. An em dash under "Expected today" is correct
-        // until then.
-        arrivals_today: null,
+        arrivals_today: 5,
       },
-      total: vessels.length,
+      total,
       request_id: 'mock-vessels',
     });
   }),
 
   // ── GET /api/flights ───────────────────────────────────────────────────────
   http.get(`${base}/api/flights`, ({ request }) => {
+    // E-6: the no-feed branch existed on `/api/vessels` only, so the flights
+    // screen's `NoFeedState` — the production default — could not be reached
+    // from a mock at all.
+    if (getScenario() === 'ops_unavailable') {
+      return HttpResponse.json({
+        source: UNAVAILABLE_SOURCE,
+        flights: [],
+        metrics: {
+          total_flights: null,
+          on_time_percent: null,
+          gates_active: null,
+          gates_total: null,
+          arrivals_today: null,
+          departures_today: null,
+          delayed: null,
+        },
+        advisory: null,
+        total: 0,
+        request_id: 'mock-flights',
+      });
+    }
+
     const params = new URL(request.url).searchParams;
-    const direction = params.get('direction');
     const query = (params.get('q') ?? '').toLowerCase();
 
     let flights = MOCK_FLIGHTS;
-    if (direction) flights = flights.filter((f) => f.direction === direction);
     if (query) {
       flights = flights.filter(
         (f) =>
@@ -465,19 +527,32 @@ export const handlers = [
           f.port_code.toLowerCase().includes(query)
       );
     }
+    flights = applyEquals(flights, params, {
+      direction: (f) => f.direction,
+      status: (f) => f.status,
+      facility: (f) => f.facility,
+    });
+    // `airline` matches either the spelled-out name or the code, as the server's
+    // `filter_flights` does.
+    const airline = params.get('airline')?.trim().toLowerCase();
+    if (airline) {
+      flights = flights.filter(
+        (f) => f.airline.toLowerCase() === airline || f.airline_code.toLowerCase() === airline
+      );
+    }
 
+    const total = flights.length;
     return HttpResponse.json({
       source: FIXTURE_SOURCE,
-      flights,
+      flights: page(flights, params),
       metrics: {
-        total_flights: 4,
-        on_time_percent: 75,
-        gates_active: 3,
-        gates_total: 4,
-        // §5.3's three, null until M4 — see the vessels handler above.
-        arrivals_today: null,
-        departures_today: null,
-        delayed: null,
+        total_flights: 12,
+        on_time_percent: 77.7,
+        gates_active: 4,
+        gates_total: 8,
+        arrivals_today: 7,
+        departures_today: 5,
+        delayed: 2,
       },
       advisory: {
         headline: 'Sample conditions',
@@ -485,7 +560,7 @@ export const handlers = [
         temperature_c: 11.1,
         systems_status: 'Sample status — not a real operational report',
       },
-      total: flights.length,
+      total,
       request_id: 'mock-flights',
     });
   }),
@@ -546,23 +621,33 @@ export const handlers = [
   http.get(`${base}/api/tariffs`, ({ request }) => {
     const params = new URL(request.url).searchParams;
     const category = params.get('category');
+    const facility = params.get('facility');
     const query = (params.get('q') ?? '').toLowerCase();
 
     let tariffs = MOCK_TARIFFS;
     if (category) tariffs = tariffs.filter((t) => t.category === category);
+    if (facility) {
+      // Facility-specific rates AND the port-wide ones, as `filter_tariffs`
+      // does: a charge published for the whole port applies at the facility
+      // being asked about, and dropping it would understate what a caller owes.
+      tariffs = tariffs.filter((t) => t.facility === facility || t.facility === null);
+    }
     if (query) {
       tariffs = tariffs.filter(
         (t) => t.service.toLowerCase().includes(query) || t.code.toLowerCase().includes(query)
       );
     }
 
+    const total = tariffs.length;
     return HttpResponse.json({
       source: FIXTURE_SOURCE,
-      tariffs,
-      // From the whole table, not the filtered slice — otherwise selecting a
-      // category removes every other chip and there is no way back.
-      categories: ['cargo', 'vessel_dues'],
-      total: tariffs.length,
+      tariffs: page(tariffs, params, 100),
+      // E-2: this was the hardcoded pair `['cargo', 'vessel_dues']`, so four of
+      // the six chips could never appear under a mock. Computed from the WHOLE
+      // table, exactly as the server does — otherwise selecting a category
+      // removes every other chip and there is no way back.
+      categories: [...new Set(MOCK_TARIFFS.map((t) => t.category))].sort(),
+      total,
       request_id: 'mock-tariffs',
     });
   }),
@@ -621,6 +706,11 @@ export const handlers = [
 
     return HttpResponse.json({
       line_items: lines,
+      // E-8: the field was omitted entirely and survived only because zod
+      // defaults it to `[]`. The backend always sends the key, so a mock that
+      // does not cannot exercise §5.11's "Total so far" rendering at all —
+      // which is the one path where a quote is short by a whole charge.
+      unpriced: [],
       subtotal,
       total: subtotal,
       currency: 'XCD',

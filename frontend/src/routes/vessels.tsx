@@ -170,6 +170,9 @@ function VesselsRoute() {
     <OpsShell
       title="Vessel movements"
       intro="Arrivals and berth occupancy across SCASPA port facilities."
+      // 0032 layer 4: the hatch behind the table. The rows here are an
+      // `OpsTable` rather than a provenance card, so the shell carries it.
+      source={source}
     >
       {/*
         §5.2's banner — above the tiles, full width, never dismissible for the

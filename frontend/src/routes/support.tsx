@@ -58,6 +58,23 @@ function SupportRoute() {
   };
 
   return (
+    /*
+     * ── NO SAMPLE-DATA HATCH ON THIS SCREEN, AND THAT IS THE POINT ──────────
+     *
+     * `GET /api/support/directory` carries the same `DataSource` as every other
+     * operations response, so under `OPS_DATA_SOURCE=fixture` it reports
+     * `kind: "fixture"` and 0032's hatch would render here too.
+     *
+     * It must not. **The contact details on this screen are real.**
+     * `contact_locations()` lives on the base `OpsSource` rather than the
+     * fixture one, precisely so support never goes dark — the switchboard
+     * number and the postal address are the published ones, the same pair that
+     * ends every error message in the product.
+     *
+     * Hatching them would say the Authority's own telephone number is sample
+     * data, on the screen someone reaches when everything else has told them to
+     * call. That is a worse lie than the one the hatch exists to prevent.
+     */
     <OpsShell
       title="Contact SCASPA"
       intro="Published contact routes, and a way to leave an enquiry for a department."

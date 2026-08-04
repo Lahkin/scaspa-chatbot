@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { setPendingQuestion } from '@/features/chat/pending';
+import { FixtureWatermark } from '@/components/ops/FixtureWatermark';
+import type { DataSource } from '@/lib/types';
 import { FullPageShell } from './FullPageShell';
 
 /**
@@ -37,6 +39,7 @@ import { FullPageShell } from './FullPageShell';
 export function OpsShell({
   title,
   intro,
+  source,
   children,
 }: {
   /** The screen title, in the shell's header row. */
@@ -46,6 +49,19 @@ export function OpsShell({
    * four screens carry one and the fourth reads better without.
    */
   intro?: string;
+  /**
+   * The screen's data source, for 0032's layer-4 hatch.
+   *
+   * The second of the two choke points: `ProvenanceCard` covers every payload
+   * that *is* a card — the tariff schedule, the quote, the maps, the chat cards
+   * — and this covers the vessels and flights tables, which are `OpsTable`
+   * inside a plain screen and never pass through one.
+   *
+   * Optional because `/support` has no operational feed behind it: its contact
+   * directory is real published information, and hatching it would be claiming
+   * otherwise.
+   */
+  source?: DataSource | null | undefined;
   children: ReactNode;
 }) {
   const navigate = useNavigate();
@@ -65,9 +81,13 @@ export function OpsShell({
         `max-w-5xl` is the width `OpsPage` used and the tables were designed
         against.
       */}
-      <div className="mx-auto w-full max-w-5xl px-4 py-6 lg:px-7">
-        {intro ? <p className="max-w-measure text-small text-ink-muted">{intro}</p> : null}
-        <div className="mt-5 space-y-5">{children}</div>
+      {/* `relative` carries the hatch; it is inert on every other screen. */}
+      <div className="relative min-h-full">
+        <FixtureWatermark source={source} />
+        <div className="relative mx-auto w-full max-w-5xl px-4 py-6 lg:px-7">
+          {intro ? <p className="max-w-measure text-small text-ink-muted">{intro}</p> : null}
+          <div className="mt-5 space-y-5">{children}</div>
+        </div>
       </div>
     </FullPageShell>
   );

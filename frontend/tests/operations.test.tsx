@@ -1225,14 +1225,20 @@ describe('the flights screen', () => {
     setScenario('happy');
   });
 
-  it('draws §5.3’s three tiles and puts no figure under them', async () => {
+  it('draws §5.3’s three tiles, each reading its own field', async () => {
     /*
      * "Flights — three tiles: Arrivals today · Departures today · Delayed."
      *
-     * None of the three is on the wire. The screen rendered `total_flights`
-     * under "Arrivals today" and relabelled the SAME figure "Departures today"
-     * when the toggle flipped — and `total_flights` counts both directions, so
-     * on the sample feed it read 4 arrivals where there are 3.
+     * This asserted three em dashes, which was right while none of the three was
+     * on the wire. T-07 added them and M4a filled them, so the tiles carry
+     * figures now — and the thing worth pinning has changed with it.
+     *
+     * What must stay true is that **no tile is `total_flights` wearing a
+     * different label**. That field counts both directions across the whole
+     * feed; rendering it under "Arrivals today" reported 4 arrivals where the
+     * feed held 3, and relabelled the same figure "Departures today" when the
+     * toggle flipped. Arrivals and departures must therefore differ from each
+     * other and from the total.
      */
     renderRoute('/flights');
     await screen.findByRole('table', { name: 'Flight movements' });
@@ -1244,8 +1250,14 @@ describe('the flights screen', () => {
     for (const label of ['Arrivals today', 'Departures today', 'Delayed']) {
       expect(within(tiles).getByText(label)).toBeInTheDocument();
     }
-    expect(within(tiles).getAllByText('not reported')).toHaveLength(3);
-    expect(within(tiles).queryByText(/^\d/)).toBeNull();
+
+    // The fixture's own figures: 7 arrivals, 5 departures, 2 delayed of 12.
+    expect(within(tiles).getByText('7')).toBeInTheDocument();
+    expect(within(tiles).getByText('5')).toBeInTheDocument();
+    expect(within(tiles).getByText('2')).toBeInTheDocument();
+    // And none of them is the both-directions total.
+    expect(within(tiles).queryByText('12')).toBeNull();
+
     // The figures that were standing in belong to the Console.
     expect(screen.queryByText('On time')).toBeNull();
     expect(screen.queryByText('Gates active')).toBeNull();

@@ -833,3 +833,48 @@
 @utility fade-out-bottom {
   mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 72px), transparent 100%);
 }
+
+/* ── The sample-data hatch — decision record 0032, layer 4 ───────────────────
+ *
+ * A DELIBERATE DEVIATION from `design/`, recorded rather than slipped in. The
+ * specification draws the fixture notice (§4.1, §5.2) and forbids dismissing it;
+ * it draws no hatch. `CLAUDE.md`'s Style rule permits a deviation when it is
+ * recorded in docs/decisions.md with the reason, and 0032 is that record.
+ *
+ * ## Why a notice was no longer enough
+ *
+ * While the sample data looked obviously fake, the notice was a belt over
+ * braces. 0032 made the data realistic — real berth identifiers, real gate
+ * numbers, times that behave like times — precisely so the screens could be
+ * checked against the shape they will really have. The better the data looks,
+ * the less a sentence at the top of the page is read.
+ *
+ * So the treatment has to satisfy three things a sentence cannot:
+ *
+ *   1. **Visible without reading.** A hatch registers before any word does.
+ *   2. **Not dismissible.** There is no control, no state and no prop. It
+ *      renders from `source.kind` and nothing else, so there is nothing to
+ *      turn off.
+ *   3. **Survives a screenshot.** It sits BEHIND the rows rather than above
+ *      them, so a crop that removes the hatch removes the data with it.
+ *
+ * ## Why these values
+ *
+ * `--color-caution` is the design's own hue for "sample data, estimated,
+ * stale" (§5.4), so the hatch says the same thing the notice does in the same
+ * colour. At 5% over a 14px pitch it is unmistakable across a table and does
+ * not touch text contrast — the stripes are on a layer of their own with no
+ * text on it, which is also why `tests/contrast.test.ts` has nothing to pair.
+ *
+ * The consumer sets `pointer-events: none` and `aria-hidden`: the hatch must not
+ * take a click meant for a row, and a screen reader gets the notice, which says
+ * it in words. */
+@utility sample-hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--color-caution) 5%, transparent) 0px,
+    color-mix(in srgb, var(--color-caution) 5%, transparent) 6px,
+    transparent 6px,
+    transparent 14px
+  );
+}

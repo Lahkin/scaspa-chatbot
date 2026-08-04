@@ -24,6 +24,7 @@ import {
   CARD_TICKET,
   CARD_VESSELS,
   CARD_VESSELS_EMPTY,
+  MOCK_VESSELS,
 } from '@/mocks/opsFixtures';
 import { CHAT_RESPONSE } from '@/mocks/fixtures';
 import { renderInRouter } from './helpers';
@@ -176,16 +177,26 @@ describe('compact rows keep the distinctions the full cards make', () => {
      * `~`, ATA is not.** "One is a prediction, one is a record; that distinction
      * is the entire point of having two fields."
      *
-     * MOCK_VESSELS has one arrived (ata) and two expected (eta).
+     * The card shows the first three of `MOCK_VESSELS`, and those three are
+     * chosen to cover the distinction: two have arrived (`ata`, upright) and one
+     * is predicted only (`eta`, tilde). Counted rather than hardcoded, so the
+     * assertion follows the fixture instead of drifting from it.
      */
     renderInRouter(<CardBlock card={CARD_VESSELS} />);
     await screen.findByText('MV SAMPLE CARRIER');
 
+    const shown = MOCK_VESSELS.slice(0, 3);
+    const predicted = shown.filter((v) => v.ata === null).length;
+    const recorded = shown.length - predicted;
+
     const metas = [...document.querySelectorAll('li p:nth-of-type(2)')].map(
       (p) => p.textContent ?? ''
     );
-    expect(metas.filter((line) => line.includes('~'))).toHaveLength(2);
-    expect(metas.filter((line) => !line.includes('~'))).toHaveLength(1);
+    expect(metas.filter((line) => line.includes('~'))).toHaveLength(predicted);
+    expect(metas.filter((line) => !line.includes('~'))).toHaveLength(recorded);
+    // Both cases must actually occur, or the test proves nothing.
+    expect(predicted).toBeGreaterThan(0);
+    expect(recorded).toBeGreaterThan(0);
     // And no verb: the berth leads, per §4.4.
     expect(metas.join(' ')).not.toMatch(/Arrived|Estimated/);
   });

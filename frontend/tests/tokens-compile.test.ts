@@ -144,6 +144,17 @@ const TOKEN_UTILITIES = [
    */
   'fade-out-bottom',
   /*
+   * The sample-data hatch — decision record 0032, layer 4.
+   *
+   * Listed here for the reason this whole file exists: it is a token-derived
+   * `@utility`, and a `@utility` that compiles to nothing fails silently. Four
+   * have done so over this project's life. This one failing silently would mean
+   * realistic fixture data rendering with no visual mark at all, which is the
+   * exact state layer 4 was added to prevent — and the screen would look
+   * completely normal.
+   */
+  'sample-hatch',
+  /*
    * The on-navy tokens.
    *
    * These live outside every namespace Tailwind generates from, so they are

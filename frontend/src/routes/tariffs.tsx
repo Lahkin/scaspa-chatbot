@@ -59,6 +59,14 @@ function TariffsRoute() {
      * put the same "sample data" sentence on screen twice, one line above the
      * card that was already saying it.
      */
+    /*
+     * No `source` on the shell, for the same reason there is no banner: every
+     * payload here IS a provenance card, so `ProvenanceCard` already carries
+     * 0032's hatch behind the schedule and behind the quote. Passing it here
+     * would hatch the screen twice — once through the shell and once through
+     * each card — and a doubled tint is a darker one, which starts eating the
+     * contrast the stripes were kept at 5% to protect.
+     */
     <OpsShell
       title="Port tariffs and fees"
       intro="Published schedule of port charges, aviation fees and cargo levies."
