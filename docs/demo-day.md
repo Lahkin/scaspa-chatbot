@@ -378,10 +378,13 @@ real question, and it is instant.
 Politeness in front of a question is still a question — _"hi, where do cruise
 ships dock?"_ returns its two citations as normal.
 
-To return to it exactly:
+**Code freeze is `5c9f65d`. Present from the branch tip**, not from that hash —
+the commits after it are this document and the backlog, and they change no code.
+Checking out `5c9f65d` directly would hand you a stale copy of the runbook you
+are reading.
 
 ```bash
-git checkout 5c9f65d
+git checkout feat/connect-halves-and-import-mockups   # tip; code identical to 5c9f65d
 cd backend  && uv run python scripts/build_index.py        # 115 indexed, 4 rejected
 lsof -ti:8000 | xargs kill 2>/dev/null
 OPS_DATA_SOURCE=fixture uv run uvicorn app.main:app
