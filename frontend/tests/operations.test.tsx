@@ -833,6 +833,80 @@ describe('the vessels screen', () => {
     expect(screen.getAllByText(/SAMPLE DATA/)).toHaveLength(1);
   });
 
+  it('keeps the search box focused while a name is typed into it', async () => {
+    /*
+     * ── THE BUG THIS PINS ────────────────────────────────────────────────────
+     *
+     * Typing accepted ONE character and then lost focus, so a vessel name had to
+     * be entered one letter at a time, clicking back into the field between each.
+     *
+     * The cause is not a recreated element. It is the query key:
+     *
+     *   1. a keystroke changes `search`, so `queryKey` becomes ['vessels', {q:'M'}]
+     *   2. that is a NEW query with no cached data, so `isPending` is genuinely true
+     *   3. the screen's conditional swaps <OpsTable> for <TableSkeleton>
+     *   4. the toolbar — and the input inside it — is a CHILD of <OpsTable>,
+     *      so it unmounts with the table and the browser drops focus
+     *
+     * `/tariffs` never had this because `useTariffs` carries
+     * `placeholderData: keepPreviousData`, which keeps `isPending` false on a
+     * key change so the card is never replaced. The same fix now applies to
+     * vessels and flights, plus a debounce so a query is not issued per letter.
+     */
+    const user = userEvent.setup();
+    renderRoute('/vessels');
+    await screen.findByRole('table', { name: 'Vessel movements' });
+
+    const box = screen.getByLabelText('Search vessel name or IMO');
+    await user.click(box);
+    await user.type(box, 'SAMPLE');
+
+    // The whole word arrived, and the element still has the caret.
+    expect(box).toHaveValue('SAMPLE');
+    expect(box).toHaveFocus();
+    // And it is the same node throughout — a remount would replace it.
+    expect(screen.getByLabelText('Search vessel name or IMO')).toBe(box);
+  });
+
+  it('does not issue a request per keystroke', async () => {
+    /*
+     * Debounced. Without it every letter is a request and a rate-limit slot:
+     * `shouldRetry` is shared with the chat path deliberately, so a search box
+     * that fires per keystroke spends the budget the user's next question needs.
+     */
+    const seen: string[] = [];
+    server.use(
+      http.get(`${config.apiBaseUrl}/api/vessels`, ({ request }) => {
+        seen.push(new URL(request.url).searchParams.get('q') ?? '');
+        return HttpResponse.json({
+          source: { kind: 'fixture', label: 'Sample feed', as_of: null, notice: 'Sample data.' },
+          vessels: MOCK_VESSELS,
+          metrics: {
+            vessels_at_berth: null,
+            berth_capacity: null,
+            arrivals_next_24h: null,
+            daily_cargo_teu: null,
+            arrivals_today: null,
+          },
+          total: MOCK_VESSELS.length,
+          request_id: 'test',
+        });
+      })
+    );
+
+    const user = userEvent.setup();
+    renderRoute('/vessels');
+    await screen.findByRole('table', { name: 'Vessel movements' });
+    const before = seen.length;
+
+    await user.type(screen.getByLabelText('Search vessel name or IMO'), 'SAMPLE');
+    await waitFor(() => expect(seen).toContain('SAMPLE'));
+
+    // Six characters typed. One request for the settled term, not six —
+    // allowing a little slack for the leading request already in flight.
+    expect(seen.length - before).toBeLessThanOrEqual(2);
+  });
+
   it('sends the status filter to the server rather than filtering the page', async () => {
     /*
      * `GET /api/vessels?status=` exists and `total` is counted after it. Filtering
@@ -1186,6 +1260,74 @@ describe('the tariffs screen', () => {
     const cargo = within(await screen.findByRole('form', { name: 'Cargo charges' }));
     expect(cargo.getByLabelText('Units')).toHaveValue(null);
     expect(cargo.getByLabelText('Storage')).toHaveValue(null);
+  });
+
+  it('lets a vessel type be chosen, and sends it', async () => {
+    /*
+     * ── THE BUG THIS PINS ────────────────────────────────────────────────────
+     *
+     * The select was `disabled` with a single "Choose a type" option, so it
+     * could not be operated at all — on the calculator this product demonstrates
+     * live.
+     *
+     * It was disabled for a good reason at the time: nothing read
+     * `vessel_type`, and there was no published list of types, so an enabled
+     * control would have moved no figure. Both are answerable now — the schedule
+     * carries `DCK-FT` and `DCK-CR`, two dockage rates that differ only by type
+     * — and the options are that pair rather than a set invented here.
+     */
+    const user = userEvent.setup();
+    renderRoute('/tariffs');
+    const maritime = within(await screen.findByRole('form', { name: 'Maritime charges' }));
+
+    const select = maritime.getByLabelText('Vessel type');
+    expect(select).toBeEnabled();
+    // Both published types are offered, and nothing else.
+    expect(maritime.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Commercial vessel',
+      'Cruise vessel',
+    ]);
+
+    await user.selectOptions(select, 'cruise');
+    expect(select).toHaveValue('cruise');
+  });
+
+  it('prices a cruise vessel differently from a commercial one', async () => {
+    /*
+     * The reason the control is allowed to be enabled at all: it moves a figure.
+     * A select that changed nothing would be the product implying a rule it does
+     * not apply, which is exactly why it shipped disabled.
+     */
+    const sent: unknown[] = [];
+    server.use(
+      http.post(`${config.apiBaseUrl}/api/tariffs/quote`, async ({ request }) => {
+        const body = await request.json();
+        sent.push(body);
+        return HttpResponse.json({
+          line_items: [],
+          unpriced: [],
+          subtotal: 0,
+          total: 0,
+          currency: 'XCD',
+          derived: true,
+          disclaimer: MOCK_DISCLAIMER,
+          source: FIXTURE_SOURCE,
+          request_id: 'test',
+        });
+      })
+    );
+
+    const user = userEvent.setup();
+    renderRoute('/tariffs');
+    const maritime = within(await screen.findByRole('form', { name: 'Maritime charges' }));
+
+    await user.selectOptions(maritime.getByLabelText('Vessel type'), 'cruise');
+    await user.type(maritime.getByLabelText('Length'), '100');
+    await user.type(maritime.getByLabelText('Stay'), '2');
+    await user.click(maritime.getByRole('button', { name: /Work out|Calculate|Estimate/i }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ category: 'vessel_dues', vessel_type: 'cruise' });
   });
 
   it('states the currency rather than offering to change it', async () => {

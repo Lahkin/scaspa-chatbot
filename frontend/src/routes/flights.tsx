@@ -17,6 +17,7 @@ import { Pagination } from '@/components/ops/console/Pagination';
 import { FlightStatusChip } from '@/components/ops/StatusChip';
 import { FlightTime, GateCell } from '@/components/ops/TimeCell';
 import { useFlights } from '@/features/ops/queries';
+import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import type { FlightDirection } from '@/lib/types';
 
 /**
@@ -72,11 +73,14 @@ function FlightsRoute() {
   const [density, setDensity] = useState<Density>('comfortable');
   const [offset, setOffset] = useState(0);
 
+  // Settles 300ms after typing stops — see the note in `routes/vessels.tsx`.
+  const q = useDebouncedValue(search.trim());
+
   const query = useFlights({
     limit: PAGE_SIZE,
     offset,
     direction,
-    ...(search.trim() ? { q: search.trim() } : {}),
+    ...(q ? { q } : {}),
   });
 
   const data = query.data;

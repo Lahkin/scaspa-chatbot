@@ -49,6 +49,27 @@ import type {
 
 const STALE_MS = 60_000;
 
+/*
+ * ── `keepPreviousData` IS NOT A NICETY ON THESE TWO ──────────────────────────
+ *
+ * The toolbar — search box, status filter, direction and density toggles —
+ * lives INSIDE `<OpsTable>`, which is what §5.1 draws. So the moment a screen
+ * swaps the table for the skeleton, the control the user is operating goes with
+ * it.
+ *
+ * A filter or a search term is part of the query key, so changing one is a NEW
+ * query with no cached data and `isPending` is genuinely true — not a refetch.
+ * Without this, typing a vessel name accepted one character and then lost focus,
+ * because the input unmounted underneath the caret on every keystroke.
+ *
+ * `useTariffs` learned this on board 18 and carried the fix alone for a while;
+ * the same defect was sitting on vessels and flights the whole time, and passed
+ * every gate because no test typed a second character.
+ *
+ * The previous page stays on screen until the next arrives, which is also the
+ * honest picture — those are rows, just not yet the filtered ones — and
+ * `isPlaceholderData` marks the difference for anything that needs it.
+ */
 export function useVessels(params: VesselQuery = {}) {
   return useQuery<VesselArrivalsResponse, ApiError>({
     queryKey: ['vessels', params],
@@ -56,6 +77,7 @@ export function useVessels(params: VesselQuery = {}) {
     staleTime: STALE_MS,
     refetchOnWindowFocus: false,
     retry: shouldRetry,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -66,6 +88,7 @@ export function useFlights(params: FlightQuery = {}) {
     staleTime: STALE_MS,
     refetchOnWindowFocus: false,
     retry: shouldRetry,
+    placeholderData: keepPreviousData,
   });
 }
 

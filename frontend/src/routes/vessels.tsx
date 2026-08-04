@@ -15,6 +15,7 @@ import { Pagination } from '@/components/ops/console/Pagination';
 import { VesselStatusChip } from '@/components/ops/StatusChip';
 import { ActualTime, EstimatedTime } from '@/components/ops/TimeCell';
 import { useVessels } from '@/features/ops/queries';
+import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import type { VesselStatus } from '@/lib/types';
 
 /**
@@ -75,10 +76,20 @@ function VesselsRoute() {
    * Nothing here is counted from the visible rows; `total` stays the server's
    * figure — implementation requirement #5.
    */
+  /*
+   * The term the SERVER sees, which is not the term in the box.
+   *
+   * `search` updates per keystroke so the field stays responsive; `q` settles
+   * 300ms after typing stops. Every distinct `q` is a query key, a request and a
+   * rate-limit slot — and that budget is shared with the chat path, so a field
+   * that fired per letter would spend the questions the user has not asked yet.
+   */
+  const q = useDebouncedValue(search.trim());
+
   const query = useVessels({
     limit: PAGE_SIZE,
     offset,
-    ...(search.trim() ? { q: search.trim() } : {}),
+    ...(q ? { q } : {}),
     ...(status === 'all' ? {} : { status }),
   });
 

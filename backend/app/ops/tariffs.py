@@ -50,12 +50,38 @@ logger = logging.getLogger(__name__)
 # `docs/implementation-plan.md`) and why `test_a_cargo_quote_prices_every_line`
 # asserts a non-empty result rather than a well-formed one.
 DOCKAGE_CODE = "DCK-FT"
+DOCKAGE_CRUISE_CODE = "DCK-CR"
 PILOTAGE_CODE = "PIL-E"
 HARBOUR_DUES_CODE = "HBR-C"
 WHARFAGE_20FT_CODE = "WHF-20"
 WHARFAGE_40FT_CODE = "WHF-40"
 HANDLING_CODE = "HND-C"
 STORAGE_CODE = "STO-D"
+
+# ── Vessel type, and why it is finally readable ──────────────────────────────
+#
+# `vessel_type` was accepted by the API and read by nothing, so §5.10's select
+# was drawn disabled: an enabled control that changed no figure would be the
+# product implying a rule it does not apply, and there was no published list of
+# types to put in it either.
+#
+# **Both halves are now answerable from the schedule itself.** It publishes two
+# dockage rates that differ only by vessel type — `DCK-FT` for a commercial
+# vessel and `DCK-CR` for a cruise vessel — so the rate varies, and the list of
+# types is the set the table distinguishes rather than a set invented here. Add
+# a third published dockage row and it belongs in this map; do not add one
+# without.
+#
+# An unrecognised or absent type prices as commercial. That is the schedule's
+# own default rather than a guess: `DCK-FT` is the rate for a vessel the
+# schedule does not single out.
+DOCKAGE_BY_VESSEL_TYPE: dict[str, str] = {
+    "commercial": DOCKAGE_CODE,
+    "cruise": DOCKAGE_CRUISE_CODE,
+}
+
+#: The values the client may send, for the select §5.10 draws.
+VESSEL_TYPES: tuple[str, ...] = tuple(DOCKAGE_BY_VESSEL_TYPE)
 
 
 def _money(value: float) -> float:
@@ -119,7 +145,12 @@ def build_quote(
     if request.category == "vessel_dues":
         length = request.length_ft or 0
         days = request.stay_days or 0
-        if length > 0 and days > 0 and (row := rate(DOCKAGE_CODE)):
+        # The published rate for this vessel type, falling back to the
+        # commercial one the schedule applies to a vessel it does not single out.
+        dockage_code = DOCKAGE_BY_VESSEL_TYPE.get(
+            (request.vessel_type or "").strip().lower(), DOCKAGE_CODE
+        )
+        if length > 0 and days > 0 and (row := rate(dockage_code)):
             lines.append(
                 _line(
                     row,

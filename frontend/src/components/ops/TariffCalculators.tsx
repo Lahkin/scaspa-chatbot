@@ -30,6 +30,22 @@ import type { TariffQuoteRequest } from '@/lib/types';
 
 /** 0–2000 ft, 0–365 days, 0–10,000 units — the wire's own limits, and §5.10's. */
 const LENGTH_MAX = 2000;
+
+/**
+ * The vessel types the published schedule distinguishes — **not a list this
+ * component chose**.
+ *
+ * It carries two dockage rates that differ only by type, `DCK-FT` (commercial)
+ * and `DCK-CR` (cruise), and `build_quote` picks between them by this value.
+ * The wire values mirror `DOCKAGE_BY_VESSEL_TYPE` in `app/ops/tariffs.py`; a
+ * third entry belongs here only once a third dockage row is published.
+ */
+const VESSEL_TYPES = [
+  { value: 'commercial', label: 'Commercial vessel' },
+  { value: 'cruise', label: 'Cruise vessel' },
+] as const;
+
+type VesselType = (typeof VESSEL_TYPES)[number]['value'];
 const DAYS_MAX = 365;
 const UNITS_MAX = 10_000;
 
@@ -42,6 +58,7 @@ export function MaritimeCalculator({
 }) {
   const [length, setLength] = useState('');
   const [stay, setStay] = useState('');
+  const [vesselType, setVesselType] = useState<VesselType>('commercial');
   const typeId = useId();
 
   return (
@@ -55,6 +72,7 @@ export function MaritimeCalculator({
           // branches on. `tone` above is a *styling* value for §5.10's two
           // surfaces and is deliberately not the same thing.
           category: 'vessel_dues',
+          vessel_type: vesselType,
           length_ft: toNumber(length),
           stay_days: toNumber(stay),
         })
@@ -63,29 +81,35 @@ export function MaritimeCalculator({
     >
       <Field label="Vessel type" htmlFor={typeId}>
         {/*
-         * BLOCKED — and disabled rather than decorative.
+         * UNBLOCKED. It was disabled, and the reason it was disabled has gone.
          *
-         * §5.10 draws a vessel-type select. `TariffQuoteRequest.vessel_type` is
-         * accepted by the API and **`build_quote` never reads it**: the maritime
-         * lines are dockage (length × stay), pilotage and harbour dues, none of
-         * which varies by type. There is also no published list of types to put
-         * in it, and inventing four would be inventing SCASPA's tariff
-         * structure.
+         * §5.10 draws this select; `build_quote` did not read `vessel_type`, and
+         * there was no published list of types to offer — so the control was
+         * drawn inert, because an enabled select that changed no figure would be
+         * the product implying a rule it does not apply.
          *
-         * So the control is drawn and disabled, with a note saying what the
-         * estimate actually uses. An enabled select that changed nothing would
-         * be the product implying a rule it does not apply.
+         * The schedule now settles both halves itself. It publishes **two
+         * dockage rates that differ only by vessel type** — `DCK-FT` for a
+         * commercial vessel and `DCK-CR` for a cruise vessel — so the rate does
+         * vary, and the options below are the set the table distinguishes rather
+         * than a set invented here. That is the whole list: adding a third
+         * option means adding a third published dockage row first.
          */}
         <select
           id={typeId}
-          disabled
+          value={vesselType}
+          onChange={(event) => setVesselType(event.target.value as VesselType)}
           aria-describedby={`${typeId}-note`}
-          className="h-11 w-full rounded-input border border-border bg-surface-muted px-3 text-label text-ink disabled:text-ink-disabled sm:h-9.5"
+          className="h-11 w-full rounded-input border border-border bg-surface-muted px-3 text-label text-ink sm:h-9.5"
         >
-          <option>Choose a type</option>
+          {VESSEL_TYPES.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
         </select>
         <span id={`${typeId}-note`} className="text-caption font-medium text-ink-muted">
-          Not used in the estimate yet — length and stay are what the schedule prices.
+          The schedule publishes a different dockage rate for each.
         </span>
       </Field>
 

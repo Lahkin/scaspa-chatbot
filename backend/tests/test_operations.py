@@ -31,11 +31,14 @@ from app.ops.source import (
     get_ops_source,
 )
 from app.ops.tariffs import (
+    DOCKAGE_BY_VESSEL_TYPE,
     DOCKAGE_CODE,
+    DOCKAGE_CRUISE_CODE,
     HANDLING_CODE,
     HARBOUR_DUES_CODE,
     PILOTAGE_CODE,
     STORAGE_CODE,
+    VESSEL_TYPES,
     WHARFAGE_20FT_CODE,
     WHARFAGE_40FT_CODE,
     build_quote,
@@ -573,6 +576,48 @@ def test_a_cargo_quote_prices_every_line(fixture_api: TestClient) -> None:
     # line for exactly this.
     assert round(sum(line["amount"] for line in body["line_items"]), 2) == body["subtotal"]
     assert body["total"] == body["subtotal"]
+
+
+def test_vessel_type_selects_the_published_dockage_rate(fixture_api: TestClient) -> None:
+    """§5.10's select was inert because nothing read this field. Now it does.
+
+    The schedule publishes two dockage rates that differ only by vessel type, so
+    the figure genuinely changes — which is what makes an enabled control
+    honest. A select that moved no number would be the product implying a rule
+    it does not apply.
+    """
+
+    def dockage(vessel_type: str | None) -> dict:
+        body = {"category": "vessel_dues", "length_ft": 100, "stay_days": 2}
+        if vessel_type is not None:
+            body["vessel_type"] = vessel_type
+        lines = fixture_api.post("/api/tariffs/quote", json=body).json()["line_items"]
+        return next(line for line in lines if line["code"].startswith("DCK"))
+
+    commercial = dockage("commercial")
+    cruise = dockage("cruise")
+
+    assert commercial["code"] == DOCKAGE_CODE
+    assert cruise["code"] == DOCKAGE_CRUISE_CODE
+    assert cruise["rate"] > commercial["rate"], "the two published rates differ"
+    assert cruise["amount"] > commercial["amount"], "and the total moves with them"
+
+    # Absent or unrecognised prices as commercial — the schedule's own rate for a
+    # vessel it does not single out, rather than a guess or a refusal.
+    assert dockage(None)["code"] == DOCKAGE_CODE
+    assert dockage("submarine")["code"] == DOCKAGE_CODE
+
+
+def test_the_offered_vessel_types_are_the_ones_the_schedule_prices() -> None:
+    """The list is read off the table, never chosen by a component.
+
+    Inventing four vessel types would be inventing SCASPA's tariff structure —
+    which is why the select was disabled rather than filled with plausible
+    options. Every type offered must map to a code the schedule publishes.
+    """
+    published = {row.code for row in sample_tariffs()}
+    for vessel_type in VESSEL_TYPES:
+        assert DOCKAGE_BY_VESSEL_TYPE[vessel_type] in published, vessel_type
 
 
 def test_the_calculator_codes_all_exist_in_the_published_table() -> None:
