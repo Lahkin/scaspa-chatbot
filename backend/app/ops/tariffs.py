@@ -36,13 +36,26 @@ logger = logging.getLogger(__name__)
 # Codes the calculator knows how to apply, per category. Kept here rather than
 # inferred from the table, because "which charges apply to this movement" is a
 # rule about SCASPA's tariff structure, not something derivable from a rate.
-DOCKAGE_CODE = "SMP-001"
-PILOTAGE_CODE = "SMP-002"
-HARBOUR_DUES_CODE = "SMP-003"
-WHARFAGE_20FT_CODE = "SMP-010"
-WHARFAGE_40FT_CODE = "SMP-011"
-HANDLING_CODE = "SMP-012"
-STORAGE_CODE = "SMP-013"
+#
+# ── THESE AND THE TARIFF TABLE ARE ONE CHANGE ────────────────────────────────
+#
+# `build_quote` looks each of these up in `source.tariffs()` by exact code. A
+# code renamed in `app/ops/fixtures.py` and not here — or here and not there —
+# does not raise, does not fail a type check and does not fail a test that only
+# asserts the quote is well-formed. Every line falls into `unpriced`, the
+# subtotal becomes `0.00`, and the client renders §5.11's "Nothing to charge for
+# those figures" looking entirely healthy.
+#
+# That is why this pairing ships as one unit (CU-1 in
+# `docs/implementation-plan.md`) and why `test_a_cargo_quote_prices_every_line`
+# asserts a non-empty result rather than a well-formed one.
+DOCKAGE_CODE = "DCK-FT"
+PILOTAGE_CODE = "PIL-E"
+HARBOUR_DUES_CODE = "HBR-C"
+WHARFAGE_20FT_CODE = "WHF-20"
+WHARFAGE_40FT_CODE = "WHF-40"
+HANDLING_CODE = "HND-C"
+STORAGE_CODE = "STO-D"
 
 
 def _money(value: float) -> float:

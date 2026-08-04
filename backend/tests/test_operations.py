@@ -30,7 +30,17 @@ from app.ops.source import (
     filter_vessels,
     get_ops_source,
 )
-from app.ops.tariffs import build_quote, total_of
+from app.ops.tariffs import (
+    DOCKAGE_CODE,
+    HANDLING_CODE,
+    HARBOUR_DUES_CODE,
+    PILOTAGE_CODE,
+    STORAGE_CODE,
+    WHARFAGE_20FT_CODE,
+    WHARFAGE_40FT_CODE,
+    build_quote,
+    total_of,
+)
 from app.schemas import DataSource, TariffQuoteRequest
 
 
@@ -165,9 +175,18 @@ def test_every_money_amount_in_the_fixture_is_repeated_digit() -> None:
         quotable.append(("on_time_percent", flight_metrics.on_time_percent))
 
     def digits(value: float) -> str:
-        # `:g` so a whole number formats as `1111` rather than `1111.0` — the
-        # trailing zero is an artefact of the float, not a digit anyone sees.
-        return f"{value:g}".replace(".", "").replace("-", "")
+        """The digits a reader actually sees, with notation stripped.
+
+        `:g` so a whole number is `1111` rather than `1111.0` — the trailing zero
+        is an artefact of the float. `lstrip("0")` so `0.444` is `444` rather
+        than `0444`: the leading zero before a decimal point is notation for the
+        same reason, and a three-decimal rate is deliberate — §5.9 requires rates
+        "rendered exactly as published … no rounding, no conversion", and
+        `TON-GT` is the row that proves the formatter honours it.
+
+        A genuine offender still fails: `0.42` becomes `42`.
+        """
+        return f"{value:g}".replace(".", "").replace("-", "").lstrip("0")
 
     offenders = [(label, value) for label, value in quotable if len(set(digits(value))) > 1]
     assert offenders == [], f"not repeated-digit: {offenders}"
@@ -248,8 +267,9 @@ def test_tariff_category_chips_survive_filtering(fixture_api: TestClient) -> Non
 
 def test_tariff_search_matches_code_and_service() -> None:
     rows = sample_tariffs()
-    assert len(filter_tariffs(rows, query="SMP-013")) == 1
-    assert filter_tariffs(rows, query="storage")[0].code == "SMP-013"
+    assert len(filter_tariffs(rows, query="STO-D")) >= 1
+    assert all("STO-D" in r.code for r in filter_tariffs(rows, query="STO-D"))
+    assert {r.code for r in filter_tariffs(rows, query="storage")} >= {"STO-D", "STO-BB"}
 
 
 # ── Facility scoping — T-06 (the field), T-09 (the values) ───────────────────
@@ -523,8 +543,57 @@ def test_a_missing_rate_is_reported_not_guessed() -> None:
     )
 
     assert lines == []
-    assert "SMP-010" in unpriced
+    # The code the calculator *expected* and could not find. It moves with the
+    # table — CU-1 — and hardcoding the old `SMP-010` here would have kept
+    # passing against a schedule that no longer contains it.
+    assert WHARFAGE_20FT_CODE in unpriced
     assert total_of(lines) == 0.0
+
+
+def test_a_cargo_quote_prices_every_line(fixture_api: TestClient) -> None:
+    """CU-1's exit gate, and the reason the table and the constants are one unit.
+
+    A code renamed on one side and not the other does not raise, does not fail a
+    type check, and does not fail a test that only asserts the quote is
+    well-formed. It produces an EMPTY, CLEAN-LOOKING quote: every line into
+    `unpriced`, subtotal `0.00`, and §5.11's "Nothing to charge for those
+    figures" rendered as though the inputs were simply unpriceable.
+
+    So this asserts the opposite of well-formed — that there is something there.
+    """
+    body = fixture_api.post(
+        "/api/tariffs/quote",
+        json={"category": "cargo", "container_size": "40ft", "units": 12, "storage_days": 3},
+    ).json()
+
+    assert len(body["line_items"]) >= 3, body["line_items"]
+    assert body["subtotal"] > 0
+    assert body["unpriced"] == [], "every applicable code resolved to a published rate"
+    # The lines add up to the total the reader is shown — `tariffs.py` rounds per
+    # line for exactly this.
+    assert round(sum(line["amount"] for line in body["line_items"]), 2) == body["subtotal"]
+    assert body["total"] == body["subtotal"]
+
+
+def test_the_calculator_codes_all_exist_in_the_published_table() -> None:
+    """The pairing itself, asserted directly rather than through a quote.
+
+    Every constant `build_quote` can look up must be a code the schedule
+    actually publishes. This is the check that would have caught a half-applied
+    CU-1 immediately, rather than at the moment someone read a zero total.
+    """
+    published = {row.code for row in sample_tariffs()}
+    expected = {
+        DOCKAGE_CODE,
+        PILOTAGE_CODE,
+        HARBOUR_DUES_CODE,
+        WHARFAGE_20FT_CODE,
+        WHARFAGE_40FT_CODE,
+        HANDLING_CODE,
+        STORAGE_CODE,
+    }
+
+    assert expected <= published, f"calculator codes missing from the table: {expected - published}"
 
 
 def test_currency_conversion_is_refused(fixture_api: TestClient) -> None:

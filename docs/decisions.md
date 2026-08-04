@@ -2501,6 +2501,46 @@ The result is a screen that *behaves* exactly like the real thing — every
 column, every chip, every null case, every arithmetic path — and contains not
 one figure a reader could act on.
 
+#### The rule governs authored values, not computed ones
+
+**Confirmed reading, stated because the calculator's total is one of the most
+quotable numbers on the tariffs screen.**
+
+Layer 3 governs values this project **wrote down**. A derived figure — the
+calculator's subtotal and total — is not one of them and is **not** required to
+be repeated-digit. A quote for 100 ft over 2 days returns `377.55`, and that is
+correct.
+
+Three reasons, in order of how badly the alternative fails:
+
+1. **It would break the arithmetic a reader can check.** `_money()` rounds per
+   line so the printed lines add up to the printed total, and `total_of` sums
+   the already-rounded amounts for the same reason —
+   `backend/app/ops/tariffs.py:48-55`: *"A reader who checks the arithmetic and
+   finds it off by a cent has been given a reason to distrust the whole card."*
+   Massaging the total into a digit pattern would make the lines stop summing to
+   it. The integrity property is worth more than the convention.
+2. **It is not achievable.** The total is a function of user input — 12
+   containers, 3 days — so no choice of published rates makes every possible
+   total repeated-digit. A rule that cannot hold is a rule that gets quietly
+   dropped.
+3. **The total already announces itself, by stronger means than its digits.**
+   `TariffQuote.derived` is a `Literal[True]` that cannot be unset, `disclaimer`
+   is validated non-empty and rendered last and uncollapsed, and §5.11 puts a
+   `CALCULATED` provenance badge on the meta strip. Three structural claims that
+   the figure is computed rather than published — against which a digit pattern
+   is a convention someone has to notice.
+
+The protection sits at the right layer either way: **the rates the total is
+built from are the authored values, and those are repeated-digit.** A reader who
+quotes the total is quoting something that says on its face it is an estimate;
+a reader who quotes a *rate* is quoting a figure that is visibly synthetic.
+
+The same reading applies to every other computed figure — `active` gate counts,
+`total` row counts, the ratio in the "alongside of expected" tile. Counts derived
+from fixture rows inherit their trustworthiness from the rows, and forcing them
+into a pattern would make them disagree with the rows they count.
+
 #### Times are realistic, and that is the rule rather than an oversight
 
 The repeated-digit convention stops at the clock. **Times are generated

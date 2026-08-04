@@ -448,6 +448,18 @@ Planned, not scheduled. Ordered by the audit's visibility × effort × contract-
 - The legacy `ops-*` palette surviving in `routes/index.tsx`, `profile.tsx`, `ops.flights.tsx`.
 - Boards not on the path: 00a embedded widget, 21 voice cache states (F-49), §6.18 speech preview (F-50).
 
+**Audit follow-up**
+- **Sweep every `WIRED-EMPTY` finding for the same class of miss.** F-23 called
+  the tariff category chips `WIRED-EMPTY` — chain complete, nothing in it — and
+  every question it asked was about the chain: does the client re-derive them,
+  does the server compute them from the whole table, are they empty under
+  `none`. All four answers were right. **The enum never matched the design's five
+  categories**, and nothing in the audit would have found it. The label means
+  "the chain works and contains nothing"; it is silent on whether what will flow
+  through it is correct. Candidates: F-10, F-11, F-19, F-20, F-23, F-45, F-57,
+  F-60. Post-demo, but before anyone treats a `WIRED-EMPTY` row as "just needs
+  data". See `docs/found-during-build.md` #18.
+
 **Decisions, not code**
 - **F-40** the admin gate — blocks §6.13's panels, §6.14's spend (F-41), the three TTS cache captions and `tracked_clients`. Five findings on one security decision.
 - Multilingual scope (audit §H). Three locales ship; only `/settings` is translated; the backend takes no language parameter; the design spec never mentions it. Complete it, scope it visibly, or remove it.

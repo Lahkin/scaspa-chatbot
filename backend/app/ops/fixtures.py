@@ -71,6 +71,12 @@ FIXTURE_NOTICE = (
     "plan anything."
 )
 
+# The schedule's verification date. §5.9's meta strip carries "as of 1 Apr 2026";
+# one constant so thirty rows cannot drift apart, and a plain date rather than an
+# instant — `TariffTable` pins its formatter to UTC for exactly this field, or a
+# reader in AST sees the day before.
+AS_OF = "2026-01-01"
+
 UNAVAILABLE_NOTICE = (
     "Live operational data is not connected. SCASPA has not published a feed to this "
     "assistant, so nothing is shown rather than something guessed. Call SCASPA on "
@@ -524,86 +530,129 @@ def sample_advisory() -> OperationalAdvisory:
 
 
 def sample_tariffs() -> list[TariffRow]:
-    """A rate per basis the calculator prices, so every code it applies exists.
+    """Thirty published charges across all six categories — §5.9's table.
+
+    ## Codes are the design's convention, and they are load-bearing
+
+    §5.9 prints `WHF-40`, `TON-GT`, `STO-D`, `SEC-C`: a service prefix, a hyphen,
+    a basis suffix. **`app/ops/tariffs.py` looks rates up by code**, so the codes
+    here and the constants there are one change — see CU-1 in
+    `docs/implementation-plan.md`. Rename a code without moving the constant and
+    every line falls into `unpriced`, the total silently becomes `0.00`, and the
+    quote renders §5.11's "Nothing to charge for those figures" while looking
+    entirely healthy.
+
+    ## Amounts are repeated-digit, bases and descriptions are not
+
+    `docs/decisions.md` 0032: realistic in every field that shapes the layout,
+    synthetic in every field a reader could act on. A rate is the most quotable
+    figure in the product, so every one is repeated-digit at whatever magnitude
+    it needs — `0.44`, `5.55`, `222.22`. The *basis* is real (`per container`,
+    `per ft per 24h`, `per gross tonne`) because it is what makes the rate
+    legible and the calculator's arithmetic checkable.
+
+    **The derived total is not bound by this** and is not repeated-digit: it is
+    computed rather than authored, and it announces itself through
+    `TariffQuote.derived`, the mandatory disclaimer and the `CALCULATED` badge.
+    0032 states the reading.
+
+    ## `facility` where the charge names one, null where it does not
+
+    Null means port-wide, and `filter_tariffs` keeps those under any facility
+    filter: a charge published for the whole port applies at the facility being
+    asked about, and dropping it would understate what a caller owes.
 
     `kb_id` is null throughout: these rates are **not** in the knowledge base and
     saying otherwise would fabricate a citation, which is the one thing
     CLAUDE.md rule 4 will not tolerate. A real tariff export arrives with real
     row ids attached.
     """
+
+    # `_rate` keeps a row to one line: thirty of them written out longhand is a
+    # table nobody re-reads, and the shape of the schedule is the point.
+    def _rate(
+        code: str,
+        service: str,
+        basis: str,
+        amount: float,
+        category: str,
+        facility: str | None = None,
+    ) -> TariffRow:
+        return TariffRow(
+            code=code,
+            service=service,
+            basis=basis,
+            amount=amount,
+            category=category,  # type: ignore[arg-type]
+            facility=facility,  # type: ignore[arg-type]
+            as_of=AS_OF,
+        )
+
     return [
-        TariffRow(
-            code="SMP-001",
-            service="Sample dockage — commercial",
-            basis="per ft per 24h",
-            amount=1.11,
-            category="vessel_dues",
-            as_of="2026-01-01",
+        # ── Cargo ────────────────────────────────────────────────────────────
+        _rate("WHF-20", "Wharfage — 20 ft container", "per container", 22.22, "cargo"),
+        _rate("WHF-40", "Wharfage — 40 ft container", "per container", 44.44, "cargo"),
+        _rate("WHF-BB", "Wharfage — break-bulk cargo", "per tonne", 3.33, "cargo"),
+        _rate("HND-C", "Container handling", "per container", 33.33, "cargo"),
+        _rate("HND-BB", "Break-bulk handling", "per tonne", 5.55, "cargo"),
+        _rate("REF-C", "Reefer connection", "per container per day", 11.11, "cargo"),
+        _rate("HAZ-C", "Hazardous cargo surcharge", "per container", 55.55, "cargo"),
+        # ── Vessel dues ──────────────────────────────────────────────────────
+        _rate("DCK-FT", "Dockage — commercial vessel", "per ft per 24h", 1.11, "vessel_dues"),
+        _rate("DCK-CR", "Dockage — cruise vessel", "per ft per 24h", 2.22, "vessel_dues"),
+        _rate("PIL-E", "Pilotage — inward", "per entry", 111.11, "vessel_dues"),
+        _rate("PIL-D", "Pilotage — outward", "per departure", 111.11, "vessel_dues"),
+        # A three-decimal rate, printed exactly as published: §5.9 forbids
+        # rounding, and this is the row that proves the formatter honours it.
+        _rate("TON-GT", "Tonnage dues", "per gross tonne", 0.444, "vessel_dues"),
+        _rate("HBR-C", "Harbour dues", "per call", 44.44, "vessel_dues"),
+        _rate("TUG-H", "Tug assistance", "per hour", 222.22, "vessel_dues"),
+        # ── Storage ──────────────────────────────────────────────────────────
+        _rate("STO-D", "Container storage", "per container per day", 5.55, "storage"),
+        _rate(
+            "STO-DX",
+            "Container storage — beyond free period",
+            "per container per day",
+            8.88,
+            "storage",
+        ),  # noqa: E501
+        _rate("STO-BB", "Break-bulk storage", "per tonne per day", 2.22, "storage"),
+        _rate("STO-V", "Vehicle storage", "per vehicle per day", 6.66, "storage"),
+        _rate("STO-RF", "Reefer storage", "per container per day", 9.99, "storage"),
+        # ── Passenger ────────────────────────────────────────────────────────
+        _rate(
+            "PAX-H",
+            "Passenger head tax — cruise",
+            "per passenger",
+            11.11,
+            "passenger",
+            "port_zante",
+        ),  # noqa: E501
+        _rate(
+            "PAX-D", "Departure charge — cruise", "per passenger", 7.77, "passenger", "port_zante"
+        ),  # noqa: E501
+        _rate(
+            "PAX-F",
+            "Passenger charge — ferry terminal",
+            "per passenger",
+            3.33,
+            "passenger",
+            "basseterre_ferry_terminal",
         ),
-        TariffRow(
-            code="SMP-002",
-            service="Sample pilotage — entry",
-            basis="per entry",
-            amount=111.11,
-            category="vessel_dues",
-            as_of="2026-01-01",
-        ),
-        TariffRow(
-            code="SMP-003",
-            service="Sample harbour dues",
-            basis="per call",
-            amount=44.44,
-            category="vessel_dues",
-            as_of="2026-01-01",
-        ),
-        TariffRow(
-            code="SMP-010",
-            service="Sample wharfage — 20 ft container",
-            basis="per container",
-            amount=22.22,
-            category="cargo",
-            as_of="2026-01-01",
-        ),
-        TariffRow(
-            code="SMP-011",
-            service="Sample wharfage — 40 ft container",
-            basis="per container",
-            amount=44.44,
-            category="cargo",
-            as_of="2026-01-01",
-        ),
-        TariffRow(
-            code="SMP-012",
-            service="Sample container handling",
-            basis="per container",
-            amount=33.33,
-            category="cargo",
-            as_of="2026-01-01",
-        ),
-        TariffRow(
-            code="SMP-013",
-            service="Sample container storage",
-            basis="per container per day",
-            amount=5.55,
-            category="cargo",
-            as_of="2026-01-01",
-        ),
-        TariffRow(
-            code="SMP-020",
-            service="Sample passenger head tax",
-            basis="per passenger",
-            amount=11.11,
-            category="passenger",
-            as_of="2026-01-01",
-        ),
-        TariffRow(
-            code="SMP-030",
-            service="Sample aircraft landing fee",
-            basis="per tonne",
-            amount=9.99,
-            category="aviation",
-            as_of="2026-01-01",
-        ),
+        _rate("PAX-P", "Port facility charge", "per passenger", 2.22, "passenger"),
+        # ── Security ─────────────────────────────────────────────────────────
+        _rate("SEC-C", "ISPS security charge — vessel", "per call", 88.88, "security"),
+        _rate("SEC-P", "ISPS security charge — passenger", "per passenger", 1.11, "security"),
+        _rate("SEC-S", "Container security screening", "per container", 6.66, "security"),
+        # ── Aviation — RLB only, so every one names the facility ─────────────
+        _rate("LDG-T", "Aircraft landing charge", "per tonne", 9.99, "aviation", "rlb_airport"),
+        _rate("PKG-A", "Aircraft parking", "per hour", 22.22, "aviation", "rlb_airport"),
+        _rate(
+            "PAX-A", "Passenger service charge", "per passenger", 44.44, "aviation", "rlb_airport"
+        ),  # noqa: E501
+        _rate(
+            "SEC-A", "Aviation security charge", "per passenger", 5.55, "aviation", "rlb_airport"
+        ),  # noqa: E501
     ]
 
 
