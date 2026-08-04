@@ -16,6 +16,7 @@ from app.config import Settings, get_settings
 from app.main import create_app
 from app.ops.fixtures import (
     sample_flight_metrics,
+    sample_flights,
     sample_tariffs,
     sample_vessel_metrics,
     sample_vessels,
@@ -108,25 +109,68 @@ def test_an_unknown_source_name_degrades_rather_than_crashing(tmp_settings) -> N
 def test_the_sample_feed_cannot_be_mistaken_for_real_information(
     fixture_api: TestClient,
 ) -> None:
-    """CLAUDE.md rule 5, checked rather than trusted.
+    """CLAUDE.md rule 5 and decision record 0032, checked rather than trusted.
 
-    The design exports use real vessels and real airlines. Reproducing them as
-    seed data would render an arrivals board indistinguishable from a real one,
-    and the better it looks the worse that is.
+    **This test guards the half of the fixture that must stay synthetic.** The
+    other half — berths, gates, times, statuses — is deliberately realistic and
+    is not asserted here, because asserting it would be asserting that the
+    fixture looks fake, which 0032 explicitly stopped requiring.
+
+    The design exports use real vessels and real airlines. Reproducing them
+    would render an arrivals board indistinguishable from a real one, and now
+    that the surrounding data behaves realistically, the names are carrying more
+    of that load rather than less.
     """
     vessels = fixture_api.get("/api/vessels").json()["vessels"]
     assert vessels, "the fixture feed should return something"
     for vessel in vessels:
-        assert "SAMPLE" in vessel["name"].upper()
+        assert "SAMPLE" in vessel["name"].upper(), vessel["name"]
         # A real IMO is seven digits with a check digit. These resolve nowhere.
-        assert vessel["imo"].startswith("IMO 000")
-        assert "Placeholder" in vessel["agent"]
+        assert vessel["imo"].startswith("IMO 000"), vessel["imo"]
+        assert "Placeholder" in vessel["agent"], vessel["agent"]
 
     flights = fixture_api.get("/api/flights").json()["flights"]
+    # Not one code: a board showing a single carrier does not exercise the
+    # avatar column. Every code used must still be one IATA does not assign.
+    unassigned = {"ZZ", "QQ", "XX", ""}
     for flight in flights:
-        # ZZ is not an IATA-assigned airline code.
-        assert flight["airline_code"] == "ZZ"
-        assert "Placeholder" in flight["airline"]
+        assert flight["airline_code"] in unassigned, flight["airline_code"]
+        assert any(word in flight["airline"] for word in ("Placeholder", "Sample", "Example")), (
+            flight["airline"]
+        )
+        # The route is shaped like a route; the place is not a place.
+        assert flight["port"] not in {"Antigua", "San Juan", "Miami", "New York"}
+
+
+def test_every_money_amount_in_the_fixture_is_repeated_digit() -> None:
+    """0032 layer 3, the one field type with no exceptions.
+
+    Times are realistic, berths are realistic, counts that shape a tile are
+    realistic. **Money is not**, at any magnitude, because a figure is the thing
+    a reader writes down and acts on — and `XCD 222.22 per container` exercises
+    the calculator, the alignment and the totalling while being unquotable on
+    sight.
+
+    Checked against the digits after the decimal point matching the digits
+    before it, which is what "repeated-digit" means in practice for this data.
+    """
+    quotable: list[tuple[str, float]] = [(row.code, row.amount) for row in sample_tariffs()]
+    # Statistics are quotable too — "the port handles N TEU a day" is exactly
+    # the sentence that must not survive a screenshot.
+    metrics = sample_vessel_metrics()
+    if metrics.daily_cargo_teu is not None:
+        quotable.append(("daily_cargo_teu", float(metrics.daily_cargo_teu)))
+    flight_metrics = sample_flight_metrics()
+    if flight_metrics.on_time_percent is not None:
+        quotable.append(("on_time_percent", flight_metrics.on_time_percent))
+
+    def digits(value: float) -> str:
+        # `:g` so a whole number formats as `1111` rather than `1111.0` — the
+        # trailing zero is an artefact of the float, not a digit anyone sees.
+        return f"{value:g}".replace(".", "").replace("-", "")
+
+    offenders = [(label, value) for label, value in quotable if len(set(digits(value))) > 1]
+    assert offenders == [], f"not repeated-digit: {offenders}"
 
 
 def test_fixture_data_is_refused_in_production(tmp_settings, monkeypatch) -> None:
@@ -161,17 +205,34 @@ def test_vessel_search_matches_name_and_imo() -> None:
 
 
 def test_vessel_filters_combine() -> None:
+    """Two filters narrow, and the narrowing is a real intersection.
+
+    Counts come from the fixture rather than being restated here as literals
+    where it can be avoided: the point is that combining filters is stricter
+    than either alone, not that the sample feed holds a particular number.
+    """
     rows = FixtureOpsSource().vessels()
-    assert len(filter_vessels(rows, vessel_type="Cruise")) == 1
-    assert len(filter_vessels(rows, status="at_berth")) == 1
-    assert filter_vessels(rows, vessel_type="Cruise", status="at_berth") == []
+    cruise = filter_vessels(rows, vessel_type="Cruise")
+    alongside = filter_vessels(rows, status="at_berth")
+    both = filter_vessels(rows, vessel_type="Cruise", status="at_berth")
+
+    assert cruise and alongside, "the fixture should exercise both filters"
+    assert len(both) < min(len(cruise), len(alongside))
+    assert all(v.vessel_type == "Cruise" and v.status == "at_berth" for v in both)
 
 
 def test_flight_search_matches_number_and_port() -> None:
     rows = FixtureOpsSource().flights()
-    assert len(filter_flights(rows, query="ZZ 2222")) == 1
-    assert len(filter_flights(rows, query="sampleton")) == 2
-    assert len(filter_flights(rows, direction="departure")) == 1
+    # An exact flight number matches exactly one movement.
+    assert len(filter_flights(rows, query="QQ 2222")) == 1
+    # A port name matches every movement on that route, in both directions.
+    sampleton = filter_flights(rows, query="sampleton")
+    assert len(sampleton) > 1
+    assert {f.direction for f in sampleton} == {"arrival", "departure"}
+    # And direction narrows to one side of the board.
+    departures = filter_flights(rows, direction="departure")
+    assert departures and all(f.direction == "departure" for f in departures)
+    assert len(departures) < len(rows)
 
 
 def test_tariff_category_chips_survive_filtering(fixture_api: TestClient) -> None:
@@ -191,33 +252,55 @@ def test_tariff_search_matches_code_and_service() -> None:
     assert filter_tariffs(rows, query="storage")[0].code == "SMP-013"
 
 
-# ── Facility scoping — M2 / T-06 ─────────────────────────────────────────────
+# ── Facility scoping — T-06 (the field), T-09 (the values) ───────────────────
 #
-# The field is on the wire before any fixture carries a value, which is the whole
-# point of landing it in its own milestone: fixture generation happens once,
-# against the final shape. Every assertion below is about the *mechanism*, so it
-# keeps working when M4 populates the records.
+# The field landed in M2 before any fixture carried a value, so that generation
+# would happen once against the final shape. M4a populated it. The assertions
+# are still about the *mechanism* rather than about particular counts.
 
 
 def test_a_vessel_carries_its_facility_and_does_not_guess_one() -> None:
-    """Null means the feed did not say. It is never inferred from the berth."""
+    """Attributed where the feed says so, null where it does not.
+
+    Both halves matter. A fixture in which every row is attributed would never
+    exercise the unattributed rendering, and a reader would never see what the
+    table does with a movement the feed declined to place.
+    """
     rows = sample_vessels()
-    # No fixture is attributed yet — M4's job — and that must read as absence.
-    assert all(v.facility is None for v in rows)
+    attributed = [v for v in rows if v.facility is not None]
+    unattributed = [v for v in rows if v.facility is None]
+
+    assert attributed, "the feed should place most movements"
+    assert unattributed, "and at least one it cannot — that is a real state"
+    # Three of the four facilities appear; RLB has no vessel movements.
+    assert {v.facility for v in attributed} == {
+        "deep_water_harbour",
+        "port_zante",
+        "basseterre_ferry_terminal",
+    }
+    # And it is never inferred from the berth: the unattributed row has no berth
+    # to infer from either.
+    assert all(v.berth == "" for v in unattributed)
 
 
 def test_filtering_by_facility_excludes_the_unattributed() -> None:
     """Asking for Port Zante must not return movements that might be anywhere."""
     rows = sample_vessels()
-    assert filter_vessels(rows, facility="port_zante") == []
 
-    attributed = rows[0].model_copy(update={"facility": "port_zante"})
-    mixed = [attributed, *rows[1:]]
+    zante = filter_vessels(rows, facility="port_zante")
+    assert zante, "the fixture places cruise calls at Port Zante"
+    assert all(v.facility == "port_zante" for v in zante)
 
-    assert filter_vessels(mixed, facility="port_zante") == [attributed]
-    assert filter_vessels(mixed, facility="deep_water_harbour") == []
+    # The unattributed movement is in the feed and in no facility's result.
+    # Compared by id: `VesselArrival` is a plain model and is not hashable.
+    unplaced = {v.id for v in rows if v.facility is None}
+    assert unplaced
+    for facility in ("port_zante", "deep_water_harbour", "basseterre_ferry_terminal"):
+        returned = {v.id for v in filter_vessels(rows, facility=facility)}
+        assert not (unplaced & returned), facility
+
     # No filter, no exclusion.
-    assert len(filter_vessels(mixed)) == len(mixed)
+    assert len(filter_vessels(rows)) == len(rows)
 
 
 def test_a_facility_tariff_filter_keeps_the_port_wide_rates() -> None:
@@ -243,29 +326,93 @@ def test_a_facility_tariff_filter_keeps_the_port_wide_rates() -> None:
 
 def test_the_facility_filter_reaches_the_endpoint(fixture_api: TestClient) -> None:
     """`total` is counted after filtering, so pagination cannot disagree."""
-    body = fixture_api.get("/api/vessels", params={"facility": "port_zante"}).json()
-    assert body["vessels"] == []
-    assert body["total"] == 0
-    # Unfiltered, the same feed is not empty — so the parameter did the work.
-    assert fixture_api.get("/api/vessels").json()["total"] == 3
+    everything = fixture_api.get("/api/vessels").json()
+    zante = fixture_api.get("/api/vessels", params={"facility": "port_zante"}).json()
+
+    assert zante["total"] < everything["total"], "the parameter did the work"
+    assert zante["total"] == len(zante["vessels"]), "total counts matches, not the page"
+    assert {v["facility"] for v in zante["vessels"]} == {"port_zante"}
+
+    # A facility with no vessel movements is empty rather than an error.
+    airport = fixture_api.get("/api/vessels", params={"facility": "rlb_airport"}).json()
+    assert airport["vessels"] == []
+    assert airport["total"] == 0
 
 
-def test_the_metric_tiles_the_design_draws_are_on_the_wire() -> None:
-    """T-07. Present and null: the fields exist, no fixture fills them yet."""
+def test_the_metric_tiles_the_design_draws_carry_figures() -> None:
+    """T-07 put the fields on the wire; T-09 and T-10 filled them.
+
+    The calendar day and the rolling window are **different numbers**, which is
+    the whole reason the field was added: the tile says "today" and was reading
+    a window that reaches into tomorrow morning.
+    """
     metrics = sample_vessel_metrics()
-    assert metrics.arrivals_today is None, "a calendar day, not the rolling window"
-    assert metrics.arrivals_next_24h is not None, "the rolling window is unchanged"
+    assert metrics.arrivals_today is not None
+    assert metrics.arrivals_next_24h is not None
+    assert metrics.arrivals_today != metrics.arrivals_next_24h
 
     flights = sample_flight_metrics()
     for field in ("arrivals_today", "departures_today", "delayed"):
-        assert getattr(flights, field) is None, f"{field} must be null, never 0"
+        assert getattr(flights, field) is not None, field
+
+    # And none of §5.3's three is `total_flights` wearing a different label:
+    # that counts both directions across the whole feed.
+    assert flights.arrivals_today != flights.total_flights
+    assert flights.arrivals_today + flights.departures_today == flights.total_flights
+
+
+def test_the_status_chips_that_had_never_rendered_now_do() -> None:
+    """`08-blocked-and-forbidden.md` #6 — "a chip that has never been rendered
+    is a chip nobody has checked".
+
+    Three enum values were built at full fidelity and produced by no fixture.
+    All three are in the feed now, which is what makes them checkable at all.
+    """
+    statuses = {v.status for v in sample_vessels()}
+    assert "departed" in statuses, "settled and closed — takes no status hue"
+    assert "unknown" in statuses, "hollow dot, dashed outline, em dash"
+    # And the set is complete, so the greyscale proof has every variant to show.
+    assert statuses == {"at_berth", "en_route", "scheduled", "departed", "unknown"}
+
+    flight_statuses = {f.status for f in sample_flights()}
+    assert "arrived" in flight_statuses, "differs from `landed` by glyph and label"
+    assert "landed" in flight_statuses, "and both must be present to tell them apart"
+    assert flight_statuses == {
+        "on_time",
+        "delayed",
+        "landed",
+        "arrived",
+        "boarding",
+        "cancelled",
+    }
+
+
+def test_the_fixture_clock_does_not_give_every_row_the_same_minute() -> None:
+    """0032's times clause, and the reason `_at` takes a minute.
+
+    Deriving every timestamp from `now()` and zeroing the seconds gave the whole
+    board one minute — `14:37`, `16:37`, `22:37` — which is a tell of its own
+    and a sillier one than repeated digits.
+    """
+    minutes = {
+        stamp.minute
+        for vessel in sample_vessels()
+        for stamp in (vessel.eta, vessel.ata)
+        if stamp is not None
+    }
+    minutes |= {f.scheduled_time.minute for f in sample_flights() if f.scheduled_time}
+
+    assert len(minutes) > 3, f"the board shares too few minutes: {sorted(minutes)}"
 
 
 def test_paging_reports_the_full_match_count(fixture_api: TestClient) -> None:
     """`total` is matches, not the page — or pagination cannot be rendered."""
+    everything = fixture_api.get("/api/vessels").json()["total"]
     body = fixture_api.get("/api/vessels", params={"limit": 1}).json()
-    assert len(body["vessels"]) == 1
-    assert body["total"] == 3
+
+    assert len(body["vessels"]) == 1, "the page is one row"
+    assert body["total"] == everything, "the total is every match, not the page"
+    assert everything > 1, "a feed of one cannot demonstrate the difference"
 
 
 # --------------------------------------------------------------- the quote
