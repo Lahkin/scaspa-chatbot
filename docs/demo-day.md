@@ -173,8 +173,9 @@ anywhere in the product that did not come from a cited row.
 
 ## 5. Filters, both viewports
 
-- **Filter by facility — on both screens.** Pick **Port Zante** on `/vessels`;
-  pick **R. L. Bradshaw** on `/flights`. This is the one that demonstrates the
+- **Filter by facility — on `/vessels`.** Pick **Port Zante**: 11 → 3. The
+  control exists on `/flights` too, but every flight is at R. L. Bradshaw, so it
+  has nothing to show there (§2). This is the one that demonstrates the
   per-facility work directly, and it is worth naming as you do it:
 
   > "Every vessel, flight, gate and tariff row carries the facility it belongs
