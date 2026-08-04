@@ -215,29 +215,50 @@ const CAPABILITIES = [
  * One real answer, statically rendered.
  *
  * Not a live call: the hero must not depend on the backend being up, and a
- * visitor who arrives to a spinner has already formed an opinion. The figures are
- * the fixture's obviously-placeholder ones and the caption says so, so nothing
- * here can be mistaken for a published fare.
+ * visitor who arrives to a spinner has already formed an opinion.
+ *
+ * ## It used to invent a sailing time \u2014 T-18
+ *
+ * This block previously answered the same question with "the last placeholder
+ * sailing back from Nevis on a weekday is 18:00", under a source line reading
+ * *"Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on 2026-04-01"*.
+ *
+ * **No such row exists.** The corpus contains no ferry departure time at all,
+ * and `kb-192` \u2014 the row that actually answers this question \u2014 carries the note
+ * *"ROUTING ROW \u2026 Never state a sailing time."* So the landing page, the first
+ * thing anyone sees, was doing the one thing the row it cited forbids, and
+ * attributing it to SCASPA's website with a verification date. A "placeholder"
+ * caption does not undo a fabricated citation: the shape of the claim is what a
+ * reader copies down.
+ *
+ * What is here now is `kb-192` verbatim \u2014 confirmed, `as_of` 2026-07-31, sourced
+ * to scaspa.com/ferry-schedule.html. It is a better hero than the invention was.
+ * A visitor asks the question they actually have, and watches the assistant
+ * decline to make up a timetable while still telling them where to look. That is
+ * the product's whole argument, made in four lines and without a word of
+ * marketing.
+ *
+ * If this text is ever edited, edit it to match the row. It is not copy.
  */
 function ExampleAnswer() {
   return (
     <figure className="max-w-measure rounded-lg border border-border bg-surface-muted p-4">
       <figcaption className="text-caption text-ink-subtle">
-        An example of an answer \u2014 illustrative figures, not a published fare.
+        An example of an answer \u2014 a real one, from a verified source.
       </figcaption>
       <p className="mt-2 text-small font-medium text-ink">
         \u201cWhat time is the last ferry back from Nevis?\u201d
       </p>
       <p className="mt-2 text-small text-ink-muted">
-        The last placeholder sailing back from Nevis on a weekday is 18:00
+        Ferry departure times vary by operator and by day, so SCASPA publishes them through a live
+        vessel schedule rather than a fixed timetable. Check the ferry schedule on scaspa.com for
+        the date you are travelling.
         <span className="mx-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-tint px-1 align-baseline text-caption font-semibold text-brand-200 tabular">
           1
         </span>
-        . Please confirm with SCASPA before you travel.
       </p>
       <p className="mt-2 border-t border-border pt-2 text-caption text-ink-subtle">
-        <strong>1.</strong> Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on
-        2026-04-01
+        <strong>1.</strong> Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on 2026-07-31
       </p>
     </figure>
   );
@@ -261,14 +282,15 @@ function SiteFooter() {
         Built for the St. Christopher Air &amp; Sea Ports Authority. Deep Water Harbour, Port Zante,
         Basseterre Ferry Terminal and Robert L. Bradshaw International Airport.
       </p>
-      <p>
-        {/* Team names and date are a client deliverable, not something to invent.
-            The slot is visible and marked so it is chased rather than forgotten. */}
-        <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 font-medium">
-          Team names pending
-        </span>{' '}
-        \u00b7 2026
-      </p>
+      {/*
+        A "Team names pending" chip sat here until T-18. It did its job \u2014 the
+        slot was visible so it would be chased rather than forgotten \u2014 but a
+        placeholder shipped to a client demonstration reads as unfinished
+        software rather than as a deliberate blank waiting on them. The names
+        are still a client deliverable and still must not be invented; they go
+        in when SCASPA supplies them.
+      */}
+      <p>2026</p>
       {version && (
         <p>
           Information verified as of <time dateTime={version}>{version}</time>

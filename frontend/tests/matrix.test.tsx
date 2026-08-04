@@ -422,6 +422,32 @@ describe('one event, one treatment — board 22', () => {
     expect(filesRendering(/Aviation advisory/)).toEqual(['src/components/ops/AdvisoryPanel.tsx']);
   });
 
+  it('the landing page quotes a real source rather than inventing one — T-18', () => {
+    /*
+     * The example answer in the hero used to read "the last placeholder sailing
+     * back from Nevis on a weekday is 18:00", cited to "Ferry — schedule ·
+     * Official SCASPA website · Verified on 2026-04-01".
+     *
+     * No such row exists. The corpus holds no ferry departure time anywhere, and
+     * kb-192 — the row that does answer this question — is annotated "ROUTING
+     * ROW … Never state a sailing time". The first screen a visitor sees was
+     * doing the one thing its own cited row forbids.
+     *
+     * It survived every gate because the landing page had no test at all. This
+     * is the cheapest guard that would have caught it: the hero renders a
+     * verbatim quote from a confirmed row, and a confirmed row that states a
+     * time or a fee does not exist for this question — so neither should appear
+     * in the rendered source.
+     *
+     * Comments are stripped above, which is why the docstring recording the old
+     * text does not trip this.
+     */
+    const landing = SOURCE.find((entry) => entry.file === 'src/routes/index.tsx');
+    expect(landing, 'src/routes/index.tsx is missing from the scan').toBeDefined();
+    expect(landing?.code).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(landing?.code).not.toMatch(/(XCD|EC\$|US\$|\$)\s*\d/);
+  });
+
   it('the escalation block is one component, never re-typed', () => {
     // §7.1: "Every error is followed by the escalation block." `ErrorState` used
     // to re-type the three phone lines and the postal address into a panel of
