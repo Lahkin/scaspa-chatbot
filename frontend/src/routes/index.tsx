@@ -284,7 +284,9 @@ function SiteFooter() {
         Basseterre Ferry Terminal and Robert L. Bradshaw International Airport.
       </p>
       {/*
-        A "Team names pending" chip sat here until T-18. It did its job \u2014 the
+        A placeholder chip naming the pending credits sat here until T-18. It
+        is described rather than quoted, because the exact wording is what the
+        release grep looks for and a comment should not answer it. It did its job \u2014 the
         slot was visible so it would be chased rather than forgotten \u2014 but a
         placeholder shipped to a client demonstration reads as unfinished
         software rather than as a deliberate blank waiting on them. The names

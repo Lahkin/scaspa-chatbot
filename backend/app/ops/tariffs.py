@@ -112,8 +112,17 @@ def _line(
     )
 
 
+# Unit symbols, which are invariant: "220 ft", never "220 fts". A symbol is an
+# abbreviation of a unit rather than a count of things, so it takes no plural —
+# the same reason nobody writes "5 kgs" on an invoice. Words like "container" and
+# "day" are counts and do pluralise, which is what `_plural` is for.
+_INVARIANT_UNITS = frozenset({"ft", "m", "kg", "t", "kWh"})
+
+
 def _plural(count: float, singular: str) -> str:
     whole = int(count) if float(count).is_integer() else count
+    if singular in _INVARIANT_UNITS:
+        return f"{whole} {singular}"
     return f"{whole} {singular}{'' if whole == 1 else 's'}"
 
 

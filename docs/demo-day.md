@@ -74,15 +74,19 @@ Tap a citation chip. The panel opens at that source with its `as_of` date.
 > "This is the operations side. Eleven vessels, every status the schema allows —
 > alongside, expected, departed, and the ones we have no report for."
 
-Filter by facility (§5). Show that **"not reported" is an em dash, never a
-zero** — §5.3 calls that the single most dangerous default to get wrong, and it
-is worth saying out loud to the operational staff.
+**Filter by status** — the control is "Filter by status", *not* by facility; see
+§5. Rehearsed: All 11 → Expected 2 → En route 3 → Alongside 4.
+
+Show that **"not reported" is an em dash, never a zero** — §5.3 calls that the
+single most dangerous default to get wrong, and it is worth saying out loud to
+the operational staff.
 
 ### `/flights` — RLB International
 
 > "Same shape, different facility. Seven arrivals, five departures."
 
-Filter by facility here too — it proves the filter is real and not decoration.
+**Toggle Direction** — Arrivals 7, Departures 5. That is the filter to
+demonstrate here; there is no facility control on this screen either (§5).
 
 ### `/tariffs` — the schedule and the calculator
 
@@ -109,16 +113,23 @@ base `OpsSource`, not the fixture one, so support never goes dark — see §6.3.
 
 Use the **chips**, not the keyboard. A tapped chip cannot be mistyped on stage.
 
-> **Verified in T-23** — see §8 for what each actually returned, and use that
-> list. A question that refuses is not a failure, but you should know which
-> before you are standing up.
+**All four below were run against the live backend in T-23 and returned a cited
+answer with a real verified date.** Do not substitute an untested question — two
+plausible ones failed this check and were removed (§8).
 
-Tick only if the answer arrives **with at least one numbered source**:
+- [ ] **Where do cruise ships dock in St. Kitts?** — `kb-113`, `kb-117`
+- [ ] **Where do I collect a barrel shipped to St. Kitts?** — `kb-161`, `kb-153`
+- [ ] **What are SCASPA's opening hours?** — `kb-016`, `kb-005`
+- [ ] **What time is the last ferry back from Nevis?** — `kb-192`
 
-- [ ] Where do cruise ships dock in St. Kitts?
-- [ ] Where do I collect a barrel shipped to St. Kitts?
-- [ ] What are SCASPA's opening hours?
-- [ ] Who do I contact about a shipment?
+The fourth is the strongest of the four and worth saving for last. It is the
+question on the landing page, and the assistant answers it by **declining to
+invent a timetable** — *"I do not have a fixed last-departure time. Ferry times
+vary by operator and day; SCASPA directs travellers to its ferry schedule."* Then
+it cites the row that says so.
+
+> "That is the whole product in one answer. It could easily have given you a
+> time. It does not have one from SCASPA, so it does not offer one."
 
 If one is slow, lead with a different one.
 
@@ -145,11 +156,20 @@ anywhere in the product that did not come from a cited row.
 
 ## 5. Filters, both viewports
 
-- **Facility filter on `/vessels`** — pick Deep Water Harbour. The count drops
-  and the source notice stays.
-- **Facility filter on `/flights`** — pick R. L. Bradshaw.
+- **`/vessels` — "Filter by status".** All 11 → Expected 2 → En route 3 →
+  Alongside 4. The count drops and the source notice stays.
+- **`/flights` — the Direction toggle.** Arrivals 7, Departures 5.
+- **Search** — type a full word. `CARRIER` on `/vessels` narrows 11 → 1;
+  `SAMPLE` on `/flights` narrows to 2. The field keeps focus while you type.
 - **Both viewports.** Narrow the window, or present the phone. The tables become
   cards; nothing is cut off and no horizontal scroll appears.
+
+> **There is no facility filter in the interface.** The API supports
+> `?facility=`, and nothing in the frontend sends it — `features/ops/queries.ts`
+> does not mention the field. Do not promise to filter by facility on stage. If
+> asked, it is an honest answer: *"the API filters by facility today; we have not
+> put a control on it yet, because the four St. Kitts facilities fit on one
+> screen."* Filed in `found-during-build.md` entry 25.
 
 ---
 
@@ -238,16 +258,65 @@ The asks, phrased as asks. Full table: `docs/implementation-plan.md` §3.
 
 ## 8. Rehearsal record — T-23
 
-Filled in when the rehearsal runs. If this section is empty, **the rehearsal did
-not happen** and nothing below the line is verified.
+Run 2026-08-04 against the live backend (`OPS_DATA_SOURCE=fixture`) and the dev
+server, driven through the real interface rather than asserted in tests.
 
-- Chat questions, with what each returned:
-- The no-answer:
-- Calculator, 12 × 40 ft + 3 storage days:
-- Facility filters:
-- Both viewports:
+**Before anything else, one thing had to be fixed:** the backend was serving the
+**10-row `sample_kb.csv`**, not the real corpus — a persisted Chroma index built
+earlier and loaded rather than rebuilt. Health reported `status: ok`,
+`ready: true` over it. Rebuilt to **115 rows indexed, 4 rejected**,
+`kb_version 2026-07-31`. **Check `kb_csv_filename` on `/api/health` before
+presenting** (§2 of the preflight) — an index this stale answers every question
+from ten rows and nothing announces it.
 
-**Frozen commit:** `________________`
+**Chat questions** — all four returned a cited answer with a real `as_of`:
+
+| Question | Citations | Verified |
+| --- | --- | --- |
+| Where do cruise ships dock in St. Kitts? | `kb-113`, `kb-117` | 2026-07-31 |
+| Where do I collect a barrel shipped to St. Kitts? | `kb-161`, `kb-153` | 2026-07-31 / 2025-09-01 |
+| What are SCASPA's opening hours? | `kb-016`, `kb-005` | 2026-07-31 |
+| What time is the last ferry back from Nevis? | `kb-192` | 2026-07-31 |
+
+**Two questions were removed** for failing the bar:
+
+- *"Who do I contact about a shipment?"* — **0 citations.** The number-verification
+  guard fires and the answer becomes *"I could not verify one of the figures
+  against SCASPA's published sources, so I will not repeat it."* Correct
+  behaviour, useless as a demonstration of a cited answer.
+- *"How much is a 40-foot container?"* — the real schedule is blocked on SCASPA.
+
+**The deliberate no-answer** — *"Where is my container right now?"* returns
+`refusal: true`, `refusal_category: personal_record`, `grounded: false`, and the
+escalation renders with **4 `tel:` links** on the page. Reads as care, not as
+failure.
+
+**Calculator, live.** 12 × 40 ft, 3 storage days:
+
+| Line | Working | Amount |
+| --- | --- | --- |
+| Wharfage — 40 ft container | 12 × 44.44 | 533.28 |
+| Container handling | 12 × 33.33 | 399.96 |
+| Container storage | 12 × 3 × 5.55 | 199.80 |
+
+Maritime, 220 ft × 2 days — **and the vessel type genuinely moves the figure**:
+cruise `220 × 2 × 2.22 = 976.80`, commercial `220 × 2 × 1.11 = 488.40`, with
+pilotage 111.11 and harbour dues 44.44 on both.
+
+**Filters and search** — `/vessels` status All 11 → Expected 2 → En route 3 →
+Alongside 4; `/flights` Arrivals 7, Departures 5; search `CARRIER` → 1 row and
+`SAMPLE` → 2 rows, **field still focused, full term intact**.
+
+**Five screens × two viewports** (1280×900 and 390×800): every screen rendered,
+**0 console errors**, sample hatch present on all four fixture screens and
+correctly **absent on `/support`**, whose contacts are real.
+
+**Gates:** ruff clean · **584 pytest** · frontend lint, typecheck, format:check
+clean · **839 vitest** · build ✓ · budget **133.7 kB gz** · **check:integration
+126 passed** · **check:a11y 0 violations** (13 routes × 2 viewports, 0 manual
+failures).
+
+**Frozen commit:** `4c0b0e3`
 
 ---
 

@@ -46,6 +46,142 @@ contract shape, the sourcing and the design deviation it would need.
 
 ---
 
+## From M5
+
+### 26. The backend was serving the 10-row sample KB, and health called it `ok`
+
+Found at the start of the T-23 rehearsal, and it would have been found on stage
+otherwise. `/api/health` reported:
+
+```
+status: ok    ready: true
+kb_csv_filename: sample_kb.csv    kb_rows: 10    kb_version: 2026-06-01
+```
+
+**The configuration was correct.** `KB_CSV_PATH` resolves to
+`data/knowledge/scaspa_kb_2026-07-31.csv` and the file exists — the blank
+`KB_CSV_PATH=` in `.env` falls through to M1's default as intended. What was
+stale was the **persisted Chroma index** in `data/chroma`, built from the sample
+corpus in an earlier session and *loaded* rather than rebuilt. Health reports the
+metadata stored with the index, so it described the stale build accurately and
+still said `ok`.
+
+Rebuilt with `scripts/build_index.py` — 115 indexed, 4 rejected, matching M1.
+
+**This is the third stale-state defect this project has hit** — a stale uvicorn
+holding `:8000` with old config, a stale vite serving an old module graph, and
+now a stale index. All three present as a configuration bug and are not one.
+`demo-day.md` §8 now says to check `kb_csv_filename` on `/api/health` before
+presenting.
+
+Worth considering post-demo: health could compare the indexed filename against
+`settings.kb_csv_path.name` and degrade when they disagree. The information to
+catch this is already in the response; nothing compares the two.
+
+### 25. There is no facility filter in the interface
+
+`GET /api/vessels?facility=` and `/api/flights?facility=` both filter correctly —
+that was T-06 and M4a, and it was verified at the API. **No control reaches it.**
+
+- `features/ops/queries.ts` contains **no reference to `facility`**;
+- neither do `routes/vessels.tsx`, `routes/flights.tsx` or anything in
+  `components/ops/`.
+
+`/vessels` offers "Filter by status" and a density toggle; `/flights` offers
+Direction and density. Both have search. Neither has facility.
+
+So the field is reachable by curl and by nothing else. It is not WIRED-EMPTY in
+the audit's sense — it is **not wired at all**, which the audit's own category
+would have missed the same way F-23 did (entry 18).
+
+Not fixed for the demonstration: adding a filter control to two screens on the
+last working day is a change to the screens being demonstrated, for a filter over
+four facilities that fit on one page. `demo-day.md` §5 now says not to promise it
+and gives the honest answer if asked.
+
+### 24 (continued below). Also worth noting from the same pass
+
+`No source recorded` renders on **all 30 tariff rows** and on every calculator
+line item. That is F-22 behaving correctly — the `kb_id` mapping is blocked on
+SCASPA — but it is the most repeated string on the tariffs screen and it will be
+read as a defect unless it is named first. `demo-day.md` §2 says the data line
+before the screen is shown.
+
+### 23. Telephone format — **POST-DEMO**, and it is a different task than it looked
+
+`design/README.md:303`: *"Telephone numbers render `869 465 8121` in UI and
+`+1 869 465 8121` in contact cards."* The product renders `869-465-8121` in most
+places and the spaced form in five files, so it is written two ways today.
+
+Scoped as 43 frontend call sites. **It is 78, and it crosses into the backend:**
+
+| | sites |
+| --- | --- |
+| Frontend `src/` display strings (excluding `tel:+1869` hrefs, which are correct) | 29 |
+| Frontend tests | 19 |
+| Backend `app/` | 10 |
+| Backend `tests/` | 20 |
+
+**A frontend-only sweep makes it worse, not better.** `app/agent/prompts.py:20`
+`SCASPA_PHONE`, `app/routers/support.py:56` and `app/ops/fixtures.py:673` are
+assistant and API copy that the client only renders. Change one half and the
+number appears on one screen in two formats.
+`design/IMPLEMENTATION_PROGRESS.md:716` called this in advance — *"a product-wide
+decision, not a board-17 edit, and fixing it on this board alone would leave the
+number written two ways."*
+
+Two things checked that make the eventual sweep safer than it looks:
+
+- **Voice is unaffected.** `app/voice/tts.py`'s `_SCASPA_MULTI` and `_PHONE` are
+  both `[-.\s]` — they already accept a space. No regex needs touching, and
+  `test_voice.py`'s guard against "eight hundred sixty-nine million" still holds.
+- **The knowledge base is already spaced.** All 232 rows use `1 869 465 8121`;
+  **zero** are hyphenated. The code is the outlier, not the corpus. Note that
+  `app/rag/hybrid.py:41` justifies its tokeniser by saying `869-465-8121` "must
+  survive as single tokens" — a form its own corpus does not contain, and
+  `_TOKEN` splits the spaced form into three tokens regardless.
+
+**Dropped for the demonstration deliberately.** It is cosmetic, nobody in the
+room will notice two phone formats, and a 78-site sweep touching the system
+prompt on the last working day risks a regression in the assistant — which
+everybody would notice.
+
+### 24. How did a fabricated citation reach the landing page? — **POST-DEMO**
+
+Fixed in T-18; the question of how it got there is not answered, and that is the
+part worth an hour.
+
+`routes/index.tsx` rendered *"the last placeholder sailing back from Nevis on a
+weekday is 18:00"* under a source line reading *"Ferry — schedule · Official
+SCASPA website · Verified on 2026-04-01"*. **That row does not exist.** The
+corpus holds no ferry departure time at all, and `kb-192` — the row that does
+answer the question — is annotated *"ROUTING ROW … Never state a sailing time."*
+
+That is **CLAUDE.md absolute rule 4** — never a citation the backend has not
+verified against a retrieved row — broken on the first screen a visitor sees. It
+is also rule 5: invented knowledge-base content that a reader could mistake for a
+real SCASPA fact.
+
+Two questions to answer, neither of which the fix answers:
+
+1. **How did it get there?** The likeliest account is that it predates the real
+   232-row corpus: `kb-008` and `2026-04-01` are the *sample* knowledge base's
+   ids and dates, still used throughout `src/mocks/` and `src/dev/`. The landing
+   page appears to have been written against those fixtures and never rechecked
+   when the real KB landed in M1. If that is right, **the reindex invalidated
+   more than the `SMP-*` tariff codes**, and only the tariff codes were chased.
+2. **What else predates the reindex with no test?** The landing page had no test
+   at all, which is why every gate stayed green over a fabricated citation. The
+   sweep to run: every hardcoded citation-shaped string in `src/` — a `kb-0NN`
+   id, an `as_of` date, a source label — checked against the real corpus.
+
+Related and already known: the same invented `18:00` and `kb-008` live in
+`src/dev/rehearsedConversation.ts`, which is **the fallback shown to the client
+if the network fails**, and in `src/mocks/`. Those are marked "placeholder" and
+sit behind `import.meta.env.DEV`, so they are a lesser problem than the landing
+page was — but they are the same defect, from the same source, and they are shown
+to the client at the worst possible moment.
+
 ## From the pre-M5 pass
 
 ### 20. Currency — **POST-DEMO**, analysis complete so it need not be redone

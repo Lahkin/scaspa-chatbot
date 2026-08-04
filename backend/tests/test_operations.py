@@ -578,6 +578,45 @@ def test_a_cargo_quote_prices_every_line(fixture_api: TestClient) -> None:
     assert body["total"] == body["subtotal"]
 
 
+def test_a_unit_symbol_takes_no_plural(fixture_api: TestClient) -> None:
+    """`220 ft`, never `220 fts` — found by looking at the screen in the T-23 rehearsal.
+
+    A unit symbol abbreviates the unit; it is not a count of things, so it takes
+    no plural. Nobody writes `5 kgs` on an invoice. `container` and `day` ARE
+    counts and do pluralise, which is what `_plural` is for — so this asserts
+    both halves, or the fix would be to stop pluralising anything.
+
+    It reached a demonstration screen because `quantity_label` had no test at
+    all: it is a display string, so nothing that checked arithmetic could see it.
+    """
+    maritime = fixture_api.post(
+        "/api/tariffs/quote",
+        json={"category": "vessel_dues", "vessel_type": "cruise", "length_ft": 220, "stay_days": 2},
+    ).json()
+    labels = " | ".join(line["quantity_label"] for line in maritime["line_items"])
+    # Guard the guard: without a dockage line there is no `ft` label to check,
+    # and the assertion below would pass on an empty string.
+    assert any("ft" in line["quantity_label"] for line in maritime["line_items"]), maritime
+    assert "fts" not in labels, labels
+    assert "220 ft" in labels, labels
+
+    cargo = fixture_api.post(
+        "/api/tariffs/quote",
+        json={"category": "cargo", "container_size": "40ft", "units": 12, "storage_days": 3},
+    ).json()
+    cargo_labels = " | ".join(line["quantity_label"] for line in cargo["line_items"])
+    # A word that is a count still pluralises, and the singular still reads right.
+    assert "12 containers" in cargo_labels, cargo_labels
+    assert "3 days" in cargo_labels, cargo_labels
+
+    one = fixture_api.post(
+        "/api/tariffs/quote",
+        json={"category": "cargo", "container_size": "20ft", "units": 1, "storage_days": 1},
+    ).json()
+    one_labels = " | ".join(line["quantity_label"] for line in one["line_items"])
+    assert "1 container" in one_labels and "1 containers" not in one_labels, one_labels
+
+
 def test_vessel_type_selects_the_published_dockage_rate(fixture_api: TestClient) -> None:
     """§5.10's select was inert because nothing read this field. Now it does.
 
