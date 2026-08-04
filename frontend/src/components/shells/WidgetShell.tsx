@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import { ChatCore } from '@/components/chat/ChatCore';
 import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
-import { IconButton, Sheet } from '@/components/ui';
+import { Icon, IconButton, Sheet } from '@/components/ui';
+import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
+import { useVesselPositions } from '@/features/ops/queries';
 import { config } from '@/lib/config';
-import { SCASPA_PHONE_HREF, ScaspaMark } from './ScaspaMark';
+import { ScaspaMark } from './ScaspaMark';
 import { HealthBanner } from './HealthBanner';
 import { SourcePanel } from './SourcePanel';
 
@@ -46,8 +48,19 @@ export function WidgetShell() {
 }
 
 function WidgetShellInner() {
-  const { entries, highlighted, setHighlighted, scrollTo, panelOpen, setPanelOpen } =
+  const { entries, grounding, highlighted, setHighlighted, scrollTo, panelOpen, setPanelOpen } =
     useChatSessionContext();
+
+  /*
+   * The one thing the widget keeps from the sidebar.
+   *
+   * Same query the full-page shell uses, so the two agree and React Query
+   * serves it once. Null while it resolves, and the badge is then absent rather
+   * than guessed at — a provenance claim nothing behind it supports is worse
+   * than none.
+   */
+  const { data: positions } = useVesselPositions();
+  const opsSource = positions?.source ?? null;
 
   const close = () => {
     // Guard the same-window case: opened directly rather than embedded, there is
@@ -79,53 +92,68 @@ function WidgetShellInner() {
   });
 
   return (
-    <div className="flex h-widget max-h-dvh w-widget max-w-full flex-col overflow-hidden bg-surface text-ink">
-      {/* Compact header: one row, 44px targets, no strapline. Sixty pixels of a
-          600px panel is a tenth of the conversation. */}
+    /*
+     * The frame — §2.3.
+     *
+     * `--surface-1`, a 1px hairline and a 16px radius. It is `surface-1` and not
+     * `surface-2` on purpose: inside a host page this panel is the main content
+     * column, not a card, and the provenance cards that appear in it are
+     * `surface-2` and have to stay a step lighter than what they sit on.
+     *
+     * `w-widget h-widget` are the embed contract — `public/embed.js` creates an
+     * iframe of exactly 380 × 600, which sits inside the handoff's 380–560 wide
+     * by 480-minimum-high range. `max-w-full max-h-dvh` sit alongside so a
+     * directly-opened route on a 320px phone shrinks instead of forcing a
+     * sideways scroll.
+     */
+    <div className="flex h-widget max-h-dvh w-widget max-w-full flex-col overflow-hidden rounded-panel border border-border bg-surface-1 text-ink">
       <HealthBanner />
 
       {/*
-        The colour, but not the layout.
+        The header — 52px, `0 16px`, one bottom hairline.
 
-        `--grad-rail` on the header row only. At 380 × 600 a large gradient
-        surface eats the panel: the widget has about 500px of usable height and
-        the transcript needs all of it, so a navy band anywhere but this one row
-        would be decoration paid for out of the conversation. The body stays
-        flat — same rule as everywhere else, text is read on `--neutral-0`.
-
-        The layout is untouched: one row, 44px targets, no strapline. Everything
-        in here that was tuned for a light surface has moved to the `on-navy`
-        tokens, because none of the `ink` tokens survive a dark ground.
+        It used to carry four controls and two hairlines: a `border-b` plus a
+        separate 1px horizon div under it, which drew the divider twice.
       */}
-      <header className="flex shrink-0 items-center gap-1 bg-grad-rail px-3 py-2">
-        <ScaspaMark compact reversed />
+      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-4">
+        <ScaspaMark />
 
-        <span className="flex-1" />
+        {/*
+          ── THE PROVENANCE BADGE MOVES HERE WHEN THE SIDEBAR GOES ────────────
+          §2.3. Embedding drops the sidebar, and with it the data-source status
+          card — so the source-kind badge moves into the widget header instead.
+          "Embedding is not a reason to lose the one thing that says whether the
+          figures are real."
+        */}
+        {opsSource ? (
+          <span className="shrink-0">
+            <ProvenanceBadge kind="source" value={opsSource.kind} />
+          </span>
+        ) : null}
 
-        <IconButton label="Show sources" variant="onNavy" onClick={() => setPanelOpen(true)}>
-          <span aria-hidden="true">☰</span>
-        </IconButton>
+        {/*
+          ── THE ONE SECONDARY ACTION THAT SURVIVES, AND WHY ──────────────────
+          §2.3 drops "secondary actions" from this header, and the sources
+          button and the phone link went with them: a citation chip already
+          opens the source panel, and the escalation block on every refusal
+          already carries the number, so both were second routes to something
+          reachable.
 
-        <a
-          href={SCASPA_PHONE_HREF}
-          aria-label="Talk to a person — call SCASPA"
-          className="inline-flex size-touch-min shrink-0 items-center justify-center rounded-md text-on-navy-primary hover:bg-neutral-0/10"
-        >
-          <span aria-hidden="true">☎</span>
-        </a>
-
-        <IconButton label="Close the assistant" variant="onNavy" onClick={close}>
-          <span aria-hidden="true">✕</span>
+          The close button is different, and it is kept as a deliberate
+          deviation. `public/embed.js` sets `launcher.style.display = 'none'`
+          while the panel is open, so the host's own control is not on screen to
+          close it again. Escape is handled below, but a pointer user with no
+          launcher and no close button has no way out of the panel at all.
+        */}
+        <IconButton label="Close the assistant" variant="ghost" onClick={close}>
+          <Icon name="x" size={16} />
         </IconButton>
       </header>
-
-      {/* The horizon, closing the header band. */}
-      <div aria-hidden="true" className="h-px shrink-0 bg-hairline-horizon" />
 
       {/* min-h-0, for the same reason as the full-page shell: without it the
           transcript never scrolls and the composer is pushed out of the frame. */}
       <main id="main" className="min-h-0 flex-1">
-        <ChatCore />
+        <ChatCore variant="widget" />
       </main>
 
       {/* An internal sheet. `Sheet` is `position: fixed`, and inside an iframe the
@@ -137,6 +165,7 @@ function WidgetShellInner() {
         <SourcePanel
           headed={false}
           entries={entries}
+          grounding={grounding}
           highlighted={highlighted}
           onHighlight={setHighlighted}
           scrollTo={scrollTo}

@@ -231,15 +231,28 @@ describe('the voice button renders nothing when it cannot work', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('is absent when the feature flag is off', async () => {
+  it('is DRAWN when the feature flag is off, dashed and inert', async () => {
+    /*
+     * The two causes are different facts and only one of them is a state.
+     *
+     * This asserted an empty container for both. §6.15 draws **Voice off** — a
+     * dashed outline, inert — and board 15 already made the same correction to
+     * the speak button: "a control that vanishes is one the user has to
+     * remember existed; a dashed edge says this is a thing that is switched
+     * off." A browser that cannot record at all still renders nothing, which
+     * the test above pins.
+     */
     vi.stubGlobal('isSecureContext', true);
     vi.resetModules();
     vi.doMock('@/lib/config', () => ({
       config: { features: { voice: false, charts: true }, isDev: true, isProd: false },
     }));
     const { VoiceButton: Flagged } = await import('@/components/chat/VoiceButton');
-    const { container } = render(<Flagged onTranscript={vi.fn()} />);
-    expect(container).toBeEmptyDOMElement();
+    render(<Flagged onTranscript={vi.fn()} />);
+
+    const button = screen.getByRole('button', { name: /switched off/i });
+    expect(button).toBeDisabled();
+    expect(button.className).toContain('border-dashed');
     vi.doUnmock('@/lib/config');
     vi.resetModules();
   });
@@ -264,14 +277,29 @@ describe('SpeakButton', () => {
     expect(button).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('is absent when the feature flag is off', async () => {
+  it('draws the voice-off state rather than vanishing', async () => {
+    /*
+     * This asserted an empty DOM — "the control is absent rather than disabled,
+     * and the row simply has one fewer child".
+     *
+     * §3.13 lists **Voice off** as one of the seven states and draws it: a
+     * dashed outline with the waveform glyph in `--text-3`. That is the better
+     * answer for the reason the handoff gives everywhere else — a control that
+     * vanishes is one the user has to remember existed, and a dashed edge says
+     * "this is switched off" where an empty space says nothing at all.
+     *
+     * It is inert, so nobody can press it and wait for audio that is not coming.
+     */
     vi.resetModules();
     vi.doMock('@/lib/config', () => ({
       config: { features: { voice: false, charts: true }, isDev: true, isProd: false },
     }));
     const { SpeakButton: Flagged } = await import('@/components/chat/SpeakButton');
-    const { container } = render(<Flagged messageId="a1" text="x" />);
-    expect(container).toBeEmptyDOMElement();
+    render(<Flagged messageId="a1" text="x" />);
+
+    const button = screen.getByRole('button', { name: 'Reading aloud is switched off' });
+    expect(button).toBeDisabled();
+    expect(button.className).toContain('border-dashed');
     vi.doUnmock('@/lib/config');
     vi.resetModules();
   });
@@ -320,5 +348,82 @@ describe('the transcript lands in the composer', () => {
     // the user gets to correct it before anything is asked.
     expect(onSend).not.toHaveBeenCalled();
     expect(getDraft()).toContain('Nevis');
+  });
+});
+
+// ── Board 21: §6.15's six states, and §6.17's paused ─────────────────────────
+
+describe('the record button — board 21', () => {
+  beforeEach(() => {
+    vi.stubGlobal('isSecureContext', true);
+    vi.stubGlobal(
+      'MediaRecorder',
+      Object.assign(function () {}, {
+        isTypeSupported: (type: string) => type.startsWith('audio/webm'),
+      })
+    );
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia: vi.fn() },
+      configurable: true,
+    });
+  });
+
+  it('is a 44px circle drawing a real glyph, not an emoji', () => {
+    /*
+     * §6.15: "**44px circle at every breakpoint**", idle as `1px solid --border`
+     * with an 18px mic in `--text-2`.
+     *
+     * It drew 🎙, ■ and ✕. No icon rule can govern an emoji — the platform
+     * renders it in its own font at its own colour, so "mic in `--text-2`" was
+     * not expressible and the hover, denied and voice-off treatments could not
+     * exist. Same correction as the speak button's on board 15.
+     */
+    render(<VoiceButton onTranscript={vi.fn()} />);
+    const button = screen.getByRole('button', { name: 'Ask by voice' });
+
+    expect(button.className).toContain('size-11');
+    expect(button.className).toContain('rounded-full');
+    expect(button.querySelector('svg')).not.toBeNull();
+    expect(button.textContent).not.toMatch(/[🎙■✕🔊]/u);
+  });
+
+  it('names the microphone block, and says what to do about it', async () => {
+    /*
+     * §6.15's permission-denied state and its message: "Your browser is blocking
+     * the microphone for this site. Allow it in the address bar, or type your
+     * question instead." A refusal that does not say where the control is leaves
+     * the reader tapping a button that will never prompt again.
+     */
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('denied'), { name: 'NotAllowedError' })),
+      },
+      configurable: true,
+    });
+
+    render(<VoiceButton onTranscript={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Ask by voice' }));
+
+    expect(
+      await screen.findByText(/Your browser is blocking the microphone for this site/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/type your question instead/)).toBeInTheDocument();
+  });
+});
+
+describe('the playback control — board 21', () => {
+  it('draws paused as paused, not as never started', () => {
+    /*
+     * §6.17 draws Paused — `1px solid --brand-500`, play `--brand-200`. The
+     * store has had a `paused` status all along and the button mapped it to
+     * idle, so a paused answer looked exactly like one that had never started
+     * while its own label read "Resume reading this answer".
+     */
+    render(<SpeakButton messageId="m1" text="A sample answer." />);
+    const idle = screen.getByRole('button', { name: 'Read this answer aloud' });
+    expect(idle.className).not.toContain('border-brand-500');
   });
 });

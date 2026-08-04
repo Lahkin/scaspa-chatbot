@@ -2362,3 +2362,79 @@ mechanism.
   which teaches the next person to delete the check.
 - A guard asserts `CLAUDE.md` itself names `scaspa.prefs`. A rule relaxed in code
   but not in the rules file is a rule nobody can rely on.
+
+---
+
+## 0031 — Three signals the backend computed and then threw away
+
+The design import ("SCASPA Assistant Component Spec") marked seven components
+**blocked**, each naming a field the backend had to return before it could ship.
+Three of them turned out to be blocked on nothing but the wire boundary: the
+value was already computed on every request, logged, and then dropped when the
+response object was built.
+
+| Signal | Where it already lived | Now on |
+| --- | --- | --- |
+| `answer_replaced` | `AnswerResult.answer_replaced` | `ChatResponse`, `done` |
+| `step_limit_reached` | `AnswerResult.hit_tool_limit` | `ChatResponse`, `done` |
+| `unpriced` | `build_quote()`'s second return value | `TariffQuote` |
+
+**Why each matters more than it looks.**
+
+`answer_replaced` is true when the drafted answer carried a figure that could
+not be matched to a retrieved row, so the draft was discarded and the answer
+rebuilt from published values. That is the numeric grounding gate working — but
+it is invisible, and a silently rewritten answer looks exactly like one that was
+right first time. The spec's reasoning is the whole argument: *showing the note
+on every answer would be a lie; showing it on none hides the correction.*
+
+`step_limit_reached` separates two refusals that arrived identical and need
+**opposite** advice. "Ask for one thing at a time" resolves a question that took
+too many tool calls, and sends someone asking about a fact the knowledge base
+does not hold round in circles. `MessageBubble` checks it **before**
+`refusal_category`, because a step-limit refusal can arrive with no category and
+testing the category first routes an answerable question to the card that says
+it is unanswerable.
+
+`unpriced` is the one with money attached. A charge with no published rate is in
+no line item and in no figure, so a quote short by a whole charge is
+byte-for-byte as tidy as a complete one. The existing disclaimer does not cover
+it: "confirmed on invoice" is about rounding and revision, not about a charge
+that was never counted. When it is non-empty the heading reads "Total so far",
+the gap is named by code among the rows, and an alert says the amount payable is
+higher.
+
+All three default to the safe direction (`false`, `false`, `[]`) so a client
+parsing a response from an older build behaves exactly as it did before.
+
+### A fourth of the same kind: `question_sanitised`
+
+Board 14 draws a user's question with the neutralised span replaced in place by
+a chip, and an explanation beneath it. That needs the client to know two things:
+that safety fired, and **where** in the sentence.
+
+Both already existed. `sanitise_user_input` substitutes the literal marker
+`[instruction-like text removed]` at the matched position, so the position
+survives in the text itself — and the router then dropped the result. The stream
+was worse: it discarded the second return value entirely, so a neutralised
+question on that route was invisible in the logs as well as to the client.
+
+The field carries the sanitised text and is `null` when nothing changed. It
+rides on the stream's `meta` event rather than `done`, because it describes what
+was **sent**: a correction to the user's own words belongs on screen before the
+answer starts arriving, not after it has finished.
+
+**Only the marker crosses the wire, never the matched phrasing.** Echoing an
+injection attempt back into the DOM would show the next person exactly which
+wording to try, and it is the wrong direction for a product whose safety story
+is that user input is handled carefully.
+
+### A fifth was already unblocked and the code did not know
+
+The spec blocked the rate-limit countdown on "needs `Retry-After` exposed to the
+client". `app/main.py` already lists it in `EXPOSED_HEADERS`. The comment in
+`lib/api.ts` still described the old behaviour and pointed at a closed backend
+issue, so the countdown was documented as a guess while actually being accurate.
+The comment was corrected and the dev warning kept — it is now a regression
+check rather than a known bug, and it is the only thing that would notice if
+that header list were ever trimmed.

@@ -28,6 +28,7 @@ import {
   needsConfirmation,
   reconcile,
   sourceTypeLabel,
+  volatilityIsDefaulted,
   volatilityOf,
 } from '@/features/chat/citations';
 import {
@@ -244,33 +245,76 @@ describe('SourceEntry', () => {
     expect(sourceTypeLabel('something-new')).toBe('Other source');
   });
 
-  it('a high-volatility row demands confirmation, with a working tel: link', () => {
+  it('carries volatility as a badge, in the family every other badge uses', () => {
+    /*
+     * These three tests used to assert an escalating panel: an amber block with
+     * "Confirm with SCASPA before you travel" and a tel: link on a `high` row,
+     * a quieter sentence on `medium`, a bare date on `low`.
+     *
+     * §3.7 draws the chip as a title, a **volatility badge**, a verified-date
+     * badge, a snippet and a meta line. The instinct behind the panel was right
+     * and the vocabulary was not the product's: a reader who has learnt that a
+     * filled uppercase pill means provenance should not have to learn a second
+     * language in the source list. The phone number lives in the escalation
+     * block, which follows every refusal and every error without exception.
+     */
     renderEntry({ ...CITATION_SCHEDULE, volatility: 'high' });
-    expect(screen.getByText(/Confirm with SCASPA before you travel/)).toBeInTheDocument();
-    const call = screen.getByRole('link', { name: /Call 869-465-8121/ });
-    // "Confirm with SCASPA" is useless if confirming means going to find a number.
-    expect(call).toHaveAttribute('href', 'tel:+18694658121');
-  });
+    expect(screen.getByText('Check before use')).toBeInTheDocument();
 
-  it('a medium-volatility row still asks for confirmation, more quietly', () => {
     renderEntry({ ...CITATION_FARES, volatility: 'medium' });
-    expect(screen.queryByText(/before you travel/)).toBeNull();
-    expect(screen.getByText(/before you rely on it/)).toBeInTheDocument();
-  });
+    expect(screen.getByText('Changes often')).toBeInTheDocument();
 
-  it('a low-volatility row shows its date quietly', () => {
     renderEntry(CITATION_LOW);
-    expect(screen.queryByText(/Confirm/)).toBeNull();
-    expect(screen.getByText(/Verified on/)).toBeInTheDocument();
+    expect(screen.getByText('Rarely changes')).toBeInTheDocument();
   });
 
-  it('treats a citation the backend could not classify as high', () => {
-    // The backend sends null rather than a guess. Defaulting to quiet here would
-    // choose the harm: a stale ferry departure shown as a confident fact.
-    expect(volatilityOf(CITATION_UNCLASSIFIED)).toBe('high');
+  it('shows the verified date as a badge, and says so when there is none', () => {
+    renderEntry({ ...CITATION_FARES, as_of: '2026-04-01' });
+    expect(screen.getByText('Checked 2026-04-01')).toBeInTheDocument();
+
+    renderEntry({ ...CITATION_FARES, as_of: '' });
+    expect(screen.getByText('No check date')).toBeInTheDocument();
+  });
+
+  it('never falls back to the id when the label is null', () => {
+    // "Untitled source, and never the id." An id in a title slot looks like a
+    // name to anyone who does not know the schema.
+    renderEntry({ ...CITATION_FARES, label: null });
+    expect(screen.getByText('Untitled source')).toBeInTheDocument();
+    expect(screen.queryByText(/kb-/)).toBeNull();
+  });
+
+  it('removes the link entirely rather than leaving a dead anchor', () => {
+    // `source_url: ""` — "the link is removed entirely; the meta line reads
+    // `Scraped page · no link recorded`. No dead anchor."
+    renderEntry({ ...CITATION_FARES, source_url: '' });
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByText(/no link recorded/)).toBeInTheDocument();
+  });
+
+  it('renders a citation the backend could not classify as the cautious case', () => {
+    /*
+     * The backend sends null rather than a guess, and null is not `low`.
+     *
+     * This asserted `high` until the design handoff arrived. §1.2 Family A and
+     * §3.7 both name the rendering explicitly — "`volatility: null` renders as
+     * the cautious case — 'changes often' — never as static or low", with an
+     * extra ring so a reviewer can see the fallback fired — so the two
+     * documents agreed on the direction and disagreed by one rung, and the
+     * handoff is the source of truth for what appears on screen.
+     *
+     * What matters to the reader is unchanged and is asserted below: the row
+     * still carries the confirm-before-you-travel line, because
+     * `needsConfirmation` is true for `medium` as well as `high`.
+     */
+    expect(volatilityOf(CITATION_UNCLASSIFIED)).toBe('medium');
+    expect(volatilityIsDefaulted(CITATION_UNCLASSIFIED)).toBe(true);
+    // A row that really is medium is not marked as defaulted — otherwise the
+    // ring would say "we guessed" on every fare in the knowledge base.
+    expect(volatilityIsDefaulted(CITATION_FARES)).toBe(false);
     expect(needsConfirmation(CITATION_UNCLASSIFIED)).toBe(true);
     renderEntry(CITATION_UNCLASSIFIED);
-    expect(screen.getByText(/Confirm with SCASPA before you travel/)).toBeInTheDocument();
+    expect(screen.getByText('Changes often')).toBeInTheDocument();
   });
 
   it('prefers the backend label, and derives one only when there is none', () => {
@@ -280,16 +324,20 @@ describe('SourceEntry', () => {
     expect(entryLabel(CITATION_UNCLASSIFIED)).toBe('General — contact');
   });
 
-  it('omits the excerpt rather than inventing one', () => {
-    const { container } = renderEntry(CITATION_FARES);
+  it('says there is no extract rather than inventing one', () => {
+    // Scraped pages and PDFs genuinely have none, and a snippet is read as a
+    // quote from the source.
+    const { container } = renderEntry({ ...CITATION_FARES, snippet: null });
     expect(container.textContent).not.toContain('undefined');
+    expect(screen.getByText('No extract available for this source.')).toBeInTheDocument();
+
     renderEntry({ ...CITATION_FARES, snippet: 'A real excerpt.' });
-    expect(screen.getByText('A real excerpt.')).toBeInTheDocument();
+    expect(screen.getByText(/A real excerpt\./)).toBeInTheDocument();
   });
 
   it('links out safely', () => {
     renderEntry(CITATION_FARES);
-    const link = screen.getByRole('link', { name: /View the source/ });
+    const link = screen.getByRole('link', { name: /Open the source/ });
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.getAttribute('rel')).toContain('noopener');
   });
@@ -309,23 +357,48 @@ describe('EscalationCard', () => {
 
   it('gives the postal address', () => {
     render(<EscalationCard />);
-    expect(screen.getByText('P.O. Box 963')).toBeInTheDocument();
-    expect(screen.getByText('Basseterre')).toBeInTheDocument();
+    expect(screen.getByText(/P\.O\. Box 963/)).toBeInTheDocument();
+    expect(screen.getByText(/Basseterre/)).toBeInTheDocument();
   });
 
-  it('marks the email slot as pending rather than omitting or inventing it', () => {
+  it('offers telephone and post, and no other channel', () => {
+    /*
+     * Board 15 draws the escalation block with exactly two rows, and the
+     * "deliberately not designed" board says why: "Telephone and post only. No
+     * staff extension directory."
+     *
+     * The email slot this used to hold as "pending" is gone. A slot that has
+     * been pending since the project began is not a promise, and the support
+     * screen (board 19) is where unpopulated channel types are catalogued.
+     */
     render(<EscalationCard />);
-    // scaspa.com obfuscates it. A guessed address sends a cargo query into a void
-    // and the sender never learns it did not arrive.
-    expect(screen.getByText('Pending from SCASPA')).toBeInTheDocument();
     expect(screen.queryByText(/@/)).toBeNull();
+    expect(screen.queryByText(/email/i)).toBeNull();
+    expect(screen.queryByText(/extension/i)).toBeNull();
   });
 
-  it('explains the specific boundary that was hit', () => {
-    render(<EscalationCard category="personal_record" />);
-    expect(
-      screen.getByText(/cannot look up anything tied to a specific person/)
-    ).toBeInTheDocument();
+  it('names the specific boundary that was hit, with its own glyph', () => {
+    // Five refusals that must not look alike — board 15.
+    const { container, unmount } = render(<EscalationCard category="personal_record" />);
+    expect(screen.getByText('We do not hold records about people')).toBeInTheDocument();
+    expect(container.querySelector('[data-refusal-category="personal_record"]')).not.toBeNull();
+    unmount();
+
+    render(<EscalationCard category="vessel_or_aircraft_operations" />);
+    expect(screen.getByText('This assistant cannot advise on operations')).toBeInTheDocument();
+    expect(screen.getByText(/duty officers/)).toBeInTheDocument();
+  });
+
+  it('gives only the safety refusal a coloured edge', () => {
+    // It is the one where acting on a wrong answer has physical consequences.
+    const { container, unmount } = render(
+      <EscalationCard category="vessel_or_aircraft_operations" />
+    );
+    expect(container.firstElementChild!.className).toMatch(/border-critical/);
+    unmount();
+
+    const { container: personal } = render(<EscalationCard category="personal_record" />);
+    expect(personal.firstElementChild!.className).not.toMatch(/border-critical/);
   });
 
   it('falls back to the backend copy when no category arrives', () => {
@@ -363,7 +436,7 @@ describe('the three assistant states are visually distinct', () => {
         })}
       />
     );
-    expect(screen.getByText('Talk to SCASPA directly')).toBeInTheDocument();
+    expect(screen.getByText('Speak to the Authority')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '869-465-8123' })).toBeInTheDocument();
     expect(document.querySelector('[data-state="refusal"]')).not.toBeNull();
   });

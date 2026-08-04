@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon';
 import type { ChartSpec } from '@/lib/types';
 import { formatNumber } from '@/features/chat/chartLayout';
 
@@ -34,39 +35,59 @@ export function ChartDataTable({ spec }: { spec: ChartSpec }) {
   );
 
   return (
-    <table className="w-full border-collapse text-small tabular">
-      <caption className="sr-only">
-        {spec.title}. {spec.caption}
+    <table className="w-full border-collapse">
+      {/*
+        The header row — §4.3: `padding 12px 16px; border-bottom`, a 16px table
+        glyph in `--brand-300` and "Same figures as a table" at 500 13/18.
+        It is a `<caption>` so it is the table's own accessible name rather than
+        a heading floating above it.
+      */}
+      <caption className="border-y border-border px-4 py-3 text-left">
+        <span className="flex items-center gap-2 text-label font-medium text-ink">
+          <Icon name="table" size={16} className="text-brand-300" />
+          Same figures as a table
+        </span>
+        {/*
+          The title only. The chart's own `<figcaption>` sits at the foot of the
+          same card and carries the caption text — §4.2 makes it the card's last
+          child, §4.3 gives the table "the same caption obligation", and inside
+          one card one caption discharges both. Repeating it here reads the same
+          sentence to a screen reader twice.
+        */}
+        <span className="sr-only">{spec.title}</span>
       </caption>
       <thead>
-        <tr className="bg-navy text-ink-inverse">
-          <th scope="col" className="px-3 py-2 text-left font-semibold">
+        {/* `600 11/16 uppercase 0.06em --text-3` — the eyebrow every column
+            head in the product uses. It was a navy fill with white type, which
+            is the one treatment §5.1 gives a TABLE header, not a card's. */}
+        <tr className="text-micro font-semibold tracking-eyebrow text-ink-muted uppercase">
+          <th scope="col" className="px-4 py-2.5 text-left">
             {spec.x_label}
           </th>
           {spec.series.map((series, index) => (
-            <th key={index} scope="col" className="px-3 py-2 text-right font-semibold">
+            <th key={index} scope="col" className="px-4 py-2.5 text-right">
               {spec.series.length > 1 ? series.name : spec.y_label}
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {xs.map((x, rowIndex) => (
-          <tr
-            key={String(x)}
-            className={
-              rowIndex % 2 === 1
-                ? 'border-b border-border bg-surface-muted last:border-b-0'
-                : 'border-b border-border last:border-b-0'
-            }
-          >
-            <th scope="row" className="px-3 py-2 text-left font-normal">
+        {xs.map((x) => (
+          <tr key={String(x)} className="border-b border-border last:border-b-0">
+            {/* label 400 13/20 --text-1 · value 500 13/20 --text-1 tabular */}
+            <th
+              scope="row"
+              className="px-4 py-2.5 text-left text-label leading-5 font-normal text-ink"
+            >
               {x}
             </th>
             {lookup.map((points, index) => {
               const value = points.get(String(x));
               return (
-                <td key={index} className="px-3 py-2 text-right whitespace-nowrap">
+                <td
+                  key={index}
+                  className="px-4 py-2.5 text-right text-label leading-5 font-medium whitespace-nowrap text-ink tabular"
+                >
                   {/* An absent point is a gap, not a zero — on a tonnage table
                       those are very different claims. */}
                   {value === undefined ? '—' : formatNumber(value)}

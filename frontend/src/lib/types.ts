@@ -18,8 +18,27 @@
 
 // ── Requests ─────────────────────────────────────────────────────────────────
 
-/** Optional retrieval filter. The contract lists exactly these five. */
-export type Category = 'ferry' | 'cargo' | 'cruise' | 'airport' | 'general';
+/**
+ * Optional retrieval filter. The contract's list, mirrored exactly.
+ *
+ * Ten, not the five this was for most of the project's life. The five are the
+ * ones the 12-row fixture used; the researchers' delivered corpus adds `marine`,
+ * `payments`, `access`, `jobs` and `corporate`, which between them cover 47
+ * confirmed rows. Sending one the backend does not know is a **422**, not a
+ * silent empty result, so this union and `CATEGORIES` in `app/schemas.py` have
+ * to move together.
+ */
+export type Category =
+  | 'ferry'
+  | 'cargo'
+  | 'cruise'
+  | 'airport'
+  | 'general'
+  | 'marine'
+  | 'payments'
+  | 'access'
+  | 'jobs'
+  | 'corporate';
 
 export interface ChatRequest {
   /** 1–1000 characters. Whitespace-only is rejected with VALIDATION_ERROR. */
@@ -39,8 +58,9 @@ export type SourceType =
  * How fast this fact goes stale. `high` is a schedule; `low` is "there is Wi-Fi".
  *
  * Sent on every citation. It arrives as `null` — never as a guess — for a row
- * with no volatility on record, and `volatilityOf` then applies **high**,
- * because the failure that matters is a stale ferry time shown quietly.
+ * with no volatility on record, and `volatilityOf` then applies **medium**
+ * while `volatilityIsDefaulted` marks it as supplied rather than measured. The
+ * handoff draws that case with a ring around the badge for exactly that reason.
  */
 export type Volatility = 'low' | 'medium' | 'high';
 
@@ -176,6 +196,30 @@ export interface ChatResponse {
    * possibly-absent here so a missing key cannot throw.
    */
   refusal_category?: RefusalCategory;
+  /**
+   * The drafted answer carried figures that could not be matched to a retrieved
+   * row, so it was discarded and rewritten from the published values.
+   *
+   * The client shows a correction notice when this is true. It must not show one
+   * on every answer — that would be a lie — and it must not show one on none,
+   * which hides the fact that what the user is reading is not what was written.
+   */
+  answer_replaced: boolean;
+  /**
+   * The question as actually sent, when input safety changed it — null
+   * otherwise. Instruction-like phrasing is replaced in place with a marker, so
+   * the position in the sentence survives and the user can see what went.
+   */
+  question_sanitised?: string | null;
+  /**
+   * The agent ran out of tool calls before it could finish.
+   *
+   * Deliberately distinct from a plain no-answer. "Ask for one thing at a time"
+   * is good advice for a question that took too many steps and useless advice
+   * for a question about something the knowledge base does not hold — sending
+   * the second group round in circles is exactly what one shared code did.
+   */
+  step_limit_reached: boolean;
   citations: Citation[];
   /** Usually null. */
   chart: ChartSpec | null;
@@ -310,7 +354,17 @@ export interface TtsPreviewResponse {
  */
 export interface StreamMetaEvent {
   event: 'meta';
-  data: { conversation_id: string };
+  data: {
+    conversation_id: string;
+    /**
+     * The question as it was actually sent, when input safety changed it.
+     *
+     * Carried on `meta` rather than `done` because it describes what was SENT:
+     * the correction belongs on screen before the answer starts arriving, not
+     * after it has finished.
+     */
+    question_sanitised?: string | null;
+  };
 }
 
 export interface StreamTokenEvent {
@@ -374,6 +428,9 @@ export interface StreamDoneEvent {
     refusal: boolean;
     /** Lets a streamed refusal pick the same specific copy the JSON endpoint can. */
     refusal_category?: RefusalCategory;
+    /** As on `ChatResponse`. The stream loses no distinction by streaming. */
+    answer_replaced: boolean;
+    step_limit_reached: boolean;
     kb_version: string | null;
   };
 }
@@ -657,6 +714,18 @@ export interface TariffLineItem {
 
 export interface TariffQuote {
   line_items: TariffLineItem[];
+  /**
+   * Charges that applied to this movement and have no published rate.
+   *
+   * **A non-empty array means `total` is short by a whole charge.** Those codes
+   * are in no line item and in no figure, so nothing else in this object shows
+   * that anything is missing — a quote with a dropped charge otherwise looks
+   * exactly like a complete one. When it is non-empty the heading reads "Total
+   * so far", the gap is named, and the standard disclaimer is not treated as
+   * covering it: "confirmed on invoice" is about rounding, not about a charge
+   * that was never counted.
+   */
+  unpriced: string[];
   subtotal: number;
   total: number;
   currency: string;

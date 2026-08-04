@@ -1,42 +1,53 @@
 /* ═══════════════════════════════════════════════════════════════════════════
  *
- *   INTERIM TOKENS — REPLACED WHOLESALE WHEN THE DESIGNERS DELIVER
+ *   SCASPA ASSISTANT — DESIGN TOKENS
  *
- *   Every value below is a placeholder. This file is a designer deliverable and
- *   will be swapped out in full, not edited in place. Do not hand-tune a value
- *   here, and do not write an arbitrary hex into a className — if you need a
- *   colour that has no token, add a token and say so.
+ *   Imported from the Claude Design project "SCASPA Assistant Component Spec",
+ *   board A (Foundations, 00–00d). This file replaces the interim light-theme
+ *   placeholder wholesale, which is what that file said would happen to it.
  *
- *   Before merging a replacement, run:  npm run test
- *   tests/contrast.test.ts computes real WCAG ratios for the pairs this UI
- *   actually uses and fails on a regression in about ninety seconds, which is a
- *   much better place to find one than the accessibility slide.
+ *   THE PRODUCT IS DARK. There is no light theme and no theme switch. Depth
+ *   comes from surface lightness only — canvas, surface-1, surface-2,
+ *   surface-3 — and there are no drop shadows and no gradients anywhere inside
+ *   the frame. A gradient in the spec appears exactly once, on the cover
+ *   artwork, and the cover is not a product surface.
+ *
+ *   Every ratio quoted below was MEASURED against the surface it names, not
+ *   claimed. tests/contrast.test.ts recomputes all of them from this file in
+ *   about ninety seconds and fails on a regression.
  *
  *   Tailwind v4 is CSS-first: there is no tailwind.config.js. A token declared
  *   in @theme becomes BOTH a CSS variable and a utility class, so
- *   `--color-blue-600` yields `bg-blue-600`, `text-blue-600`, `border-blue-600`.
+ *   `--color-brand-500` yields `bg-brand-500`, `text-brand-500`,
+ *   `border-brand-500`.
  *
  *   BUT ONLY IN A NAMESPACE TAILWIND RECOGNISES, AND ONLY FOR THAT NAMESPACE'S
  *   UTILITIES. `--size-*` feeds `size-*`, NOT `w-*` / `h-*` / `min-h-*`, which
  *   read the spacing scale; `--container-*` feeds `max-w-*`; durations must be
- *   `--transition-duration-*`. A name outside every known namespace — `--grad-*`,
- *   `--on-navy-*` — produces no variable at all, because an unreferenced theme
- *   variable is tree-shaken.
+ *   `--transition-duration-*`. A name outside every known namespace produces no
+ *   variable at all, because an unreferenced theme variable is tree-shaken.
  *
- *   Four utilities have silently compiled to nothing in this project on that
- *   basis: `min-h-touch-min`, `duration-fast`, `w-sidebar` and every gradient
- *   token's first draft. When in doubt declare an explicit `@utility` at the
- *   foot of this file and add it to tests/tokens-compile.test.ts, which exists
- *   for precisely this and is the only thing that catches it.
+ *   When in doubt declare an explicit `@utility` at the foot of this file and
+ *   add it to tests/tokens-compile.test.ts, which exists for precisely this and
+ *   is the only thing that catches it.
  *
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 @import 'tailwindcss';
 
 /* ── Typeface ──────────────────────────────────────────────────────────────
- * Self-hosted. No external font CDN: users are on metered roaming data, and a
+ * Inter, one family throughout — the spec's type scale names no second face.
+ *
+ * Self-hosted, and deliberately not the way the spec's own board loads it — the
+ * board preconnects to a third-party font CDN, which is fine for a design
+ * document and not for this. Users are on metered roaming data, and a
  * third-party DNS + TLS round trip before first paint is a cost avoided by not
- * incurring it.
+ * incurring it. Same family, same weights, no third party.
+ *
+ * tests/no-arbitrary-values.test.ts scans this file for a font-CDN hostname, so
+ * the rule above is enforced rather than remembered. That check is a plain
+ * hostname match with no comment exemption, which is why none is written here:
+ * a scan that ignores comments is a scan that stops catching a real `<link>`.
  *
  * ONE file for every weight — Inter is a variable font. See public/fonts/README.md.
  */
@@ -52,122 +63,297 @@
 }
 
 @theme {
-  /* ══ Brand ═══════════════════════════════════════════════════════════════ */
-  --color-brand: #0069b4;
-  --color-navy: #003f6c;
-  --color-navy-deep: #002845;
-
-  /* ══ Blue ramp ═══════════════════════════════════════════════════════════
-   * 600 is SCASPA blue exactly. Lighter steps are surfaces and borders; darker
-   * steps carry white text.
+  /* ══ Surfaces — the whole of the product's depth ══════════════════════════
+   *
+   * Four steps and a border. Nothing else separates one plane from another:
+   * no shadow, no gradient, no glow. A card is lighter than the column it sits
+   * in; the column is lighter than the page.
+   *
+   *   canvas     the page ground, and the widget's outer frame
+   *   surface-1  the main column and the chat transcript
+   *   surface-2  the sidebar, and every card
+   *   surface-3  composer, inputs, and the inset strip inside a card
+   *   border     a 1px divider — DECORATIVE, and makes no contrast claim
+   *              (1.22:1 on surface-2, exactly like the light theme's before it)
    */
-  --color-blue-50: #e8f3fa;
-  --color-blue-100: #cbe4f4;
-  --color-blue-200: #9dcbe9;
-  --color-blue-300: #66acdb;
-  --color-blue-400: #308cca;
-  --color-blue-500: #0d76bd;
-  --color-blue-600: #0069b4;
-  --color-blue-700: #005490;
-  --color-blue-800: #003f6c;
-  --color-blue-900: #002845;
+  --color-canvas: #0a0b14;
+  --color-surface-1: #10121f;
+  --color-surface-2: #171a2b;
+  --color-surface-3: #1e2137;
+  --color-border: #262a42;
 
-  /* ══ Neutral ramp ════════════════════════════════════════════════════════ */
-  --color-neutral-0: #ffffff;
-  --color-neutral-50: #f7f9fb;
-  --color-neutral-100: #eef2f6;
-  --color-neutral-200: #dde4ec;
-  --color-neutral-300: #c2ccd8;
-  --color-neutral-400: #87929f;
-  --color-neutral-500: #5c6875;
-  --color-neutral-600: #515c69;
-  --color-neutral-700: #3d4650;
-  --color-neutral-800: #2a313a;
-  --color-neutral-900: #171c22;
+  /* ══ Brand — sampled from the seal ════════════════════════════════════════
+   *
+   * The seal is dark blue line art. This ramp is derived from it, and it is the
+   * only accent in the product.
+   *
+   *   700  #22245E  14.17:1 white   pressed fills, and the ink on a caution fill
+   *   600  #2C2E7A  11.80:1 white   hover
+   *   500  #383A97   9.46:1 white   the primary fill. 2.07:1 on canvas — it is a
+   *                                 FILL, never a text colour on a dark surface
+   *   400  #5457BE   6.03:1 white   chart series 1, tint ramps
+   *   300  #7A7CD6   5.31:1 canvas  icons, section glyphs
+   *   200  #A5A7E6   8.66:1 canvas  links, focus ring, the readable accent
+   *   100  #E5E5F7  11.39:1 on 700  text on a brand fill, hover link
+   */
+  --color-brand-700: #22245e;
+  --color-brand-600: #2c2e7a;
+  --color-brand-500: #383a97;
+  --color-brand-400: #5457be;
+  --color-brand-300: #7a7cd6;
+  --color-brand-200: #a5a7e6;
+  --color-brand-100: #e5e5f7;
+
+  /* ══ Text — measured on surface-2, the card ground ════════════════════════
+   *
+   * text-3 is 3.74:1 there. It is a PLACEHOLDER AND DISABLED COLOUR ONLY and
+   * clears nothing but the 3:1 non-text floor. Anything a user is expected to
+   * read is text-1 or text-2. The contrast test asserts that it fails AA, on
+   * purpose, so that reaching for it as body copy is caught rather than shipped.
+   */
+  --color-text-1: #f2f3f8; /* 15.55:1 on surface-2 — headings, body, figures */
+  --color-text-2: #a3a8c0; /*  7.32:1 — labels, metadata, secondary prose    */
+  --color-text-3: #6e7490; /*  3.74:1 — placeholder and disabled ONLY        */
 
   /* ══ Status ══════════════════════════════════════════════════════════════
    *
-   * TWO AMBERS, AND THE DIFFERENCE MATTERS.
+   * Five meanings. A chip is a 12% fill of its hue with the dot and the label
+   * at full strength — see --color-*-tint below for the composited values.
    *
-   *   --color-amber-board  #F5A623  departure-board amber. A FILL ONLY.
-   *                                 On white it measures 2.03:1. It is not a
-   *                                 text colour and never will be.
-   *   --color-amber-text   #8A5A00  the readable amber, for text and icons on
-   *                                 a light surface.
+   * TWO DERIVATIONS, BOTH FORCED BY THE 4.5:1 RULE, AND BOTH ARE TRAPS.
    *
-   * tests/contrast.test.ts asserts this specifically, because reaching for the
-   * brighter one is the natural mistake.
+   * 1. `--color-critical` (#D9564B) measures **4.42:1 on surface-2**. It is
+   *    under AA and it does not look it. It is the enum colour — the dot, the
+   *    border, the fill — and it clears the 3:1 bar for all three. The LABEL is
+   *    raised to `--color-critical-text` (#E4736A, 5.71:1). Never put
+   *    --color-critical on a word.
+   *
+   * 2. `--color-neutral-status` is a DOT colour, not a text colour: 3.74:1, the
+   *    same value as text-3. An "unknown" label sits at text-2 so it stays
+   *    readable while still reading as muted.
    */
-  --color-amber-board: #f5a623;
-  --color-amber-text: #8a5a00;
-  --color-success: #0f7a3d;
-  --color-danger: #b3261e;
+  --color-positive: #3ba776; /* 5.72:1 on surface-2 — berthed, on time, settled */
+  --color-caution: #d9a23b; /* 7.53:1 — delayed, estimated, stale, sample data  */
+  --color-critical: #d9564b; /* 4.42:1 — DOT/BORDER/FILL ONLY. See above        */
+  --color-critical-text: #e4736a; /* 5.71:1 — the label tint. This one is text  */
+  --color-neutral-status: #6e7490; /* dot only — the label lifts to text-2      */
+  --color-live: #3b9bd9; /* 5.64:1 — a live data source                         */
 
-  /* Tinted surfaces for status messages. */
-  --color-amber-surface: #fff6e5;
-  --color-success-surface: #e8f5ed;
-  --color-danger-surface: #fdecea;
+  /* The "no feed" provenance badge's fill.
+   *
+   * A THIRD DERIVATION, forced by the same 4.5:1 rule as the two above, and the
+   * spec did not measure this one.
+   *
+   * Every filled provenance badge carries the same near-black ink — that single
+   * ink is most of what makes the family read as a family. The board draws the
+   * "no feed" badge as that ink on #6E7490 (text-3), which measures **4.26:1**
+   * and is under AA at 11px.
+   *
+   * Two ways out. Flipping this one badge to white ink clears it at 4.60:1 and
+   * costs the family its common ink for the sake of 0.1 of a point. Lifting the
+   * fill instead keeps every badge on one ink and clears it at 5.32:1 — and at
+   * luminance 0.252 it still sits below live, positive, caution and critical,
+   * so it goes on reading as the muted one in a row of them.
+   *
+   * The fill moved. The ink, the shape and the family did not.
+   */
+  --color-absent: #7e84a0; /* 5.32:1 with ink-inverse — the "no feed" fill */
+
+  /* ══ Tinted surfaces ══════════════════════════════════════════════════════
+   *
+   * The spec paints these as `rgba(hue, 0.12)` over whatever is behind them.
+   * Declared here as the SOLID COMPOSITE over surface-2, because a contrast
+   * ratio cannot be computed against a translucent colour and an alpha fill is
+   * therefore a figure nobody has measured. Each hue clears AA on its own tint.
+   */
+  --color-positive-tint: #1b2b34; /* positive on it: 4.84:1      */
+  --color-caution-tint: #2e2a2d; /* caution on it:  6.18:1       */
+  --color-critical-tint: #2e212f; /* critical-text on it: 5.06:1 */
+  --color-live-tint: #1b2940; /* live on it: 4.78:1              */
+
+  /* ── The edges, and they were missing ────────────────────────────────────
+   *
+   * An outline status pill is "1px solid <hue at 45%>" and a notice panel is
+   * the same hue at 30–35% — handoff §5.5. Neither existed, so
+   * `border-caution-edge` in a className compiled to nothing at all and the
+   * pill drew its border in `currentColor`: the right colour by accident on a
+   * caution pill and the wrong one everywhere else.
+   *
+   * Solid composites over surface-2, for the same reason as the tints above: a
+   * contrast ratio cannot be computed against a translucent colour, so an alpha
+   * border is a figure nobody has measured. Each clears the 3:1 non-text bar
+   * that WCAG 1.4.11 asks of the boundary identifying a component.
+   */
+  --color-positive-edge: #27594d; /* positive 45% */
+  --color-caution-edge: #6e5732; /* caution 45%   */
+  --color-critical-edge: #6e3539; /* critical 45%  */
+  --color-live-edge: #275479; /* live 45%          */
+
+  /* Notice panels sit one step quieter than a pill — 30% for caution and live,
+   * 35% for critical, which is where the handoff puts each of them. */
+  --color-caution-notice-edge: #514330;
+  --color-critical-notice-edge: #5b2f36;
+  --color-live-notice-edge: #22415f;
+  /* brand-500 at 32–35%, for the user's own message bubble and a citation chip. */
+  --color-brand-tint: #232551; /* text-1 13.03:1, brand-200 6.37:1 */
 
   /* ══ Semantic aliases ════════════════════════════════════════════════════
-   * Components reference these, not the ramps, so a designer can restyle the UI
-   * by moving an alias instead of finding every usage.
+   *
+   * Components reference these, not the ramps, so the palette can move without
+   * finding every usage. They are also what carried the app across the
+   * light→dark handover without rewriting sixty files: the alias names did not
+   * change, only what they point at.
    */
-  --color-surface: var(--color-neutral-0);
-  --color-surface-muted: var(--color-neutral-50);
-  --color-surface-sunken: var(--color-neutral-100);
-  /* --color-border is a decorative divider and makes no contrast claim.
-   * --color-border-strong identifies an interactive component's boundary, so it
-   * must clear 3:1 — the contrast test asserts exactly that. They were the same
-   * shade until the test measured the boundary at 1.63:1. */
-  --color-border: var(--color-neutral-200);
-  --color-border-strong: var(--color-neutral-400);
-  --color-ink: var(--color-neutral-900);
-  --color-ink-muted: var(--color-neutral-600);
-  --color-ink-subtle: var(--color-neutral-500);
-  --color-ink-inverse: var(--color-neutral-0);
-  --color-focus: var(--color-blue-600);
+  --color-surface: var(--color-surface-2); /* a card                        */
+  --color-surface-muted: var(--color-surface-3); /* an inset strip, an input */
+  --color-surface-sunken: var(--color-surface-1); /* the column behind cards */
+  /* --color-border above is the decorative divider and claims nothing.
+   * --color-border-strong identifies an INTERACTIVE component's boundary, so it
+   * must clear 3:1 — the contrast test asserts exactly that. text-3 is the
+   * lightest thing in the set that is still unmistakably a boundary: 3.74:1. */
+  --color-border-strong: var(--color-text-3);
+  --color-ink: var(--color-text-1);
+  /* ── THE DARK SYSTEM HAS ONE METADATA INK, NOT TWO ────────────────────────
+   *
+   * The light theme had three readable inks: #171C22, #515C69 (7.4:1) and
+   * #5C6875 (6.4:1). All three carried prose, and `ink-subtle` was the
+   * quietest READABLE one — captions, timestamps, taglines, the ninety places
+   * that use it.
+   *
+   * The spec has three too, but its third is different in kind:
+   * `--color-text-3` is 3.44–3.74:1 and is documented "placeholder and
+   * disabled ONLY". Mapping `ink-subtle` onto it because the names matched put
+   * failing prose on eight routes — caught by axe, not by the token-pair scan,
+   * because those elements inherit their background from an ancestor and the
+   * scan only reads one line at a time.
+   *
+   * So both metadata aliases resolve to text-2, which is what the components
+   * were always asking for, and the placeholder tier gets its own name below
+   * rather than being reached for by a word that sounds similar. */
+  --color-ink-muted: var(--color-text-2);
+  --color-ink-subtle: var(--color-text-2);
+  /* Placeholder and disabled text, and nothing else. WCAG 1.4.3 exempts
+   * inactive controls; nothing a user is expected to READ may use this. */
+  --color-ink-disabled: var(--color-text-3);
+  /* ── TWO INKS FOR TWO KINDS OF FILL, AND CONFLATING THEM BREAKS BOTH ──────
+   *
+   * `--color-ink-inverse` stays WHITE. It means "ink on a dark fill" — a
+   * primary button, a table header, a selected nav row — and it is used that
+   * way in about thirty places. Pointing it at the near-black canvas, on the
+   * theory that "inverse" flips with the theme, put 2.07:1 text on every
+   * brand-filled control at once and 1.38:1 on every navy table header.
+   *
+   * The bright status fills genuinely do need a dark ink — white on the caution
+   * fill is 2.29:1 — so that is a SECOND token, not the same one repurposed.
+   *
+   *   --color-ink-inverse    #FFFFFF   on brand-500/600/700   9.46 – 14.17:1
+   *   --color-ink-on-bright  canvas    on live/positive/critical/absent/caution
+   *                                                           5.03 – 8.57:1
+   */
+  --color-ink-inverse: #ffffff;
+  --color-ink-on-bright: var(--color-canvas);
+  --color-focus: var(--color-brand-200);
+
+  /* ══ Compatibility aliases ═══════════════════════════════════════════════
+   *
+   * The names the components already use, pointed at the new palette. Kept
+   * rather than renamed across the codebase: a rename is a diff in every file
+   * and a chance to miss one, and these read correctly in the new system.
+   */
+  --color-brand: var(--color-brand-500);
+  --color-navy: var(--color-brand-700);
+  --color-navy-deep: var(--color-canvas);
+
+  /* The blue ramp is now the brand indigo ramp.
+   *
+   * NOT step-for-step: 50 and 100 were LIGHT TINTED SURFACES carrying dark
+   * text, and mapping them onto brand-100 — which is near-white — left
+   * near-white text on a near-white ground at 1.12:1. On a dark theme the
+   * equivalent of a pale brand wash is a dark brand wash, so those two point at
+   * the brand tint and the steps that were text colours keep being text
+   * colours. */
+  --color-blue-50: var(--color-brand-tint);
+  --color-blue-100: var(--color-brand-tint);
+  --color-blue-200: var(--color-brand-200);
+  --color-blue-300: var(--color-brand-300);
+  --color-blue-400: var(--color-brand-400);
+  --color-blue-500: var(--color-brand-500);
+  --color-blue-600: var(--color-brand-500);
+  --color-blue-700: var(--color-brand-200); /* was a link colour on white     */
+  --color-blue-800: var(--color-brand-700);
+  --color-blue-900: var(--color-canvas);
+
+  /* Neutrals. `neutral-0` was white and is now the card ground; the ramp runs
+   * the other way in a dark theme, which is why these are aliases and not a
+   * second set of hexes anyone could pick from by accident. */
+  --color-neutral-0: var(--color-surface-2);
+  --color-neutral-50: var(--color-surface-3);
+  --color-neutral-100: var(--color-border);
+  --color-neutral-200: var(--color-border);
+  --color-neutral-300: var(--color-text-3);
+  --color-neutral-400: var(--color-text-3);
+  --color-neutral-500: var(--color-text-2);
+  --color-neutral-600: var(--color-text-2);
+  --color-neutral-700: var(--color-text-1);
+  --color-neutral-800: var(--color-text-1);
+  --color-neutral-900: var(--color-text-1);
+
+  /* ══ Status compatibility ════════════════════════════════════════════════
+   *
+   * THE LIGHT THEME'S TWO-AMBER RULE IS GONE, AND THAT IS NOT A RELAXATION.
+   *
+   * On white, #F5A623 measured 2.03:1 and could only ever be a fill, so a
+   * second readable amber existed for text. On this dark ground the caution
+   * hue measures 7.53:1 and is a text colour, so both names now point at it.
+   * The rule that replaced it is the critical one above: --color-critical is
+   * the value that may not be a word, and --color-critical-text is its label.
+   */
+  --color-amber-board: var(--color-caution);
+  --color-amber-text: var(--color-caution);
+  --color-success: var(--color-positive);
+  /* Danger splits the same way critical does, and for the same reason: the
+   * readable tint is the TEXT (`text-danger`), and the enum hue is the FILL
+   * (`bg-danger-fill`), which carries --color-ink-on-bright. White on either of
+   * them fails — 2.60:1 and 3.60:1 — so a red button is dark-inked here. The
+   * spec's own emergency button on board 19 is drawn exactly that way. */
+  --color-danger: var(--color-critical-text);
+  --color-danger-fill: var(--color-critical);
+  --color-amber-surface: var(--color-caution-tint);
+  --color-success-surface: var(--color-positive-tint);
+  --color-danger-surface: var(--color-critical-tint);
 
   /* ══ Operations console ══════════════════════════════════════════════════
    *
-   * From the SCASPA Stitch design system (`St. Christopher Ports Interface`),
-   * adopted for the operations surfaces only — vessels, flights, tariffs,
-   * support. The chat surface keeps the blue ramp above; these sit alongside it
-   * rather than replacing it, so the shipped assistant is not restyled by a
-   * screen import.
+   * The operations screens used to carry a SECOND palette — a light "Stitch"
+   * design system that sat alongside the chat blue. The component spec has one
+   * palette for the whole product, so these now resolve into it and the two
+   * surfaces stop being two designs.
    *
-   * ── EVERY VALUE BELOW WAS MEASURED, AND TWO OF THEM ARE TRAPS ────────────
-   *
-   * The design marks #00AA58 as `on-tertiary-container` and uses it for the
-   * "Docked" and "Online" chips. Against white it measures **3.05:1** and fails
-   * AA for text. #2DBCFE, the cyan for "En route", measures **2.16:1**. Both
-   * are legible-looking and both are wrong, which is the same trap as
-   * --color-amber-board above.
-   *
-   * So the status colours are declared as MATCHED PAIRS: a fill, and the ink
-   * that is safe on that fill. Never put an -ops-*-fill on text, and never put
-   * -ops-*-ink on white. tests/contrast.test.ts asserts each pair.
+   * The old matched fill/ink status pairs survive as a shape, because the idea
+   * was right: a saturated chip fill still needs an ink that is safe ON it, and
+   * that ink is the near-black canvas rather than white. Each pair is asserted.
    */
-  --color-ops-navy: #001736; /* 17.86:1 on white — headers, primary buttons */
-  --color-ops-navy-soft: #002b5b; /* 14.03:1 — the container tone */
-  --color-ops-sky: #00658d; /* 6.47:1 — links and accents. Safe as text */
-  --color-ops-surface: #faf9fe;
-  --color-ops-surface-low: #f4f3f8;
-  --color-ops-surface-high: #e8e7ec;
-  --color-ops-ink: #1a1c1f; /* 17.08:1 */
-  --color-ops-ink-variant: #43474f; /* 9.32:1 — metadata, timestamps */
-  /* Interactive boundary; clears 3:1 against the ops surface at 4.27:1. */
-  --color-ops-outline: #747780;
-  /* Decorative divider ONLY — 1.63:1. Makes no contrast claim, exactly like
-   * --color-border. Do not use it to outline a control. */
-  --color-ops-outline-variant: #c4c6d0;
+  --color-ops-navy: var(--color-brand-700); /* 14.17:1 white — headers        */
+  --color-ops-navy-soft: var(--color-brand-600); /* 11.80:1 — container tone  */
+  --color-ops-sky: var(--color-brand-200); /* 7.60:1 on surface-2 — links     */
+  --color-ops-surface: var(--color-surface-2);
+  --color-ops-surface-low: var(--color-surface-1);
+  --color-ops-surface-high: var(--color-surface-3);
+  --color-ops-ink: var(--color-text-1);
+  --color-ops-ink-variant: var(--color-text-2);
+  /* Interactive boundary; 3.74:1 on the ops surface, so it clears the 3:1 bar. */
+  --color-ops-outline: var(--color-text-3);
+  /* Decorative divider ONLY — 1.22:1, exactly like --color-border. Do not use
+   * it to outline a control. */
+  --color-ops-outline-variant: var(--color-border);
 
   /* Status pairs. Fill first, then the only ink that is safe on it. */
-  --color-ops-active-fill: #6bfe9c; /* docked · on time · active */
-  --color-ops-active-ink: #003417; /* 10.83:1 on the fill above */
-  --color-ops-transit-fill: #2dbcfe; /* en route · expected */
-  --color-ops-transit-ink: #004866; /* 4.60:1 on the fill above */
-  --color-ops-alert-fill: #ffdad6; /* delayed · error */
-  --color-ops-alert-ink: #93000a; /* 7.24:1 on the fill above */
+  --color-ops-active-fill: var(--color-positive); /* docked · on time · active */
+  --color-ops-active-ink: var(--color-canvas); /* 6.51:1 on the fill above     */
+  --color-ops-transit-fill: var(--color-live); /* en route · expected          */
+  --color-ops-transit-ink: var(--color-canvas); /* 6.42:1 on the fill above    */
+  --color-ops-alert-fill: var(--color-critical); /* delayed · error            */
+  --color-ops-alert-ink: var(--color-canvas); /* 5.03:1 on the fill above      */
 
   /* ══ Spacing — 4px scale ═════════════════════════════════════════════════ */
   --spacing-0: 0px;
@@ -182,27 +368,57 @@
   --spacing-12: 48px;
   --spacing-16: 64px;
 
-  /* ══ Radii — three ═══════════════════════════════════════════════════════ */
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
+  /* ══ Radii ═══════════════════════════════════════════════════════════════
+   * NINE, named for what they wrap — handoff §5.7. Four of them were missing,
+   * and each absence had already been paid for somewhere: a segmented control
+   * whose inner segment took the button radius sits wrong inside a 12px track
+   * with 3px of padding, and a legend swatch at 10px is a lozenge.
+   *
+   *   16  panels, provenance cards, chat bubbles
+   *   12  composer, inputs, inline notice panels
+   *   10  chips-as-buttons, buttons, nav rows, icon buttons
+   *    9  segmented-control inner segments (inside a 12px track, 3px padding)
+   *    8  ghost icon buttons, small avatars
+   *    6  chart bar tops, inline citation markers, small tag chips
+   *    5  skeleton bars, checkbox
+   *    3  legend swatches
+   *  999  status pills, filter chips, provenance badges, the send button
+   */
+  --radius-panel: 16px;
+  --radius-input: 12px;
+  --radius-button: 10px;
+  --radius-segment: 9px;
+  --radius-ghost: 8px;
+  --radius-small: 6px;
+  --radius-tiny: 5px;
+  --radius-swatch: 3px;
+  --radius-pill: 999px;
+  /* The three legacy names, mapped onto the scale above. */
+  --radius-sm: var(--radius-button);
+  --radius-md: var(--radius-input);
+  --radius-lg: var(--radius-panel);
 
   /* ══ Typography ══════════════════════════════════════════════════════════
-   * A 1.20 minor-third ratio from 14px, rounded to whole pixels. Body is 16px:
-   * anything smaller invites a mobile browser to zoom on focus, and the reader
-   * is standing up holding a bag.
+   * The spec's scale, verbatim. One family, seven steps.
+   *
+   *   Greeting        30/38  600     Screen title   20/28  600
+   *   Section heading 16/24  600     Body           14/22  400
+   *   Label           13/18  500     Caption        12/16  500
+   *   Sidebar label   11/16  600     uppercase, 0.06em
    */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
+  --text-micro: 11px;
+  --text-micro--line-height: 16px;
   --text-caption: 12px;
   --text-caption--line-height: 16px;
-  --text-small: 14px;
-  --text-small--line-height: 20px;
-  --text-body: 16px;
-  --text-body--line-height: 24px;
-  --text-lead: 18px;
-  --text-lead--line-height: 28px;
+  --text-label: 13px;
+  --text-label--line-height: 18px;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-section: 16px;
+  --text-section--line-height: 24px;
   --text-h3: 20px;
   --text-h3--line-height: 28px;
   --text-h2: 24px;
@@ -212,10 +428,52 @@
   --text-display: 36px;
   --text-display--line-height: 44px;
 
-  /* ══ Elevation ═══════════════════════════════════════════════════════════ */
-  --shadow-card: 0 1px 2px rgb(23 28 34 / 0.06), 0 1px 3px rgb(23 28 34 / 0.1);
-  --shadow-sheet: 0 -4px 24px rgb(23 28 34 / 0.14);
-  --shadow-popover: 0 4px 16px rgb(23 28 34 / 0.16);
+  /* The wordmark, and the only 15px in the product.
+   *
+   * `SCASPA Assistant` beside the seal is set at 600 15/20 — handoff §1.1. It is
+   * off the modular scale on purpose: the lockup has to sit inside a 40px plate
+   * row without the type outgrowing the plate, and 14 reads as a label while 16
+   * reads as a heading. Declared rather than approximated, so nobody has to
+   * decide between the two steps either side of it again. */
+  --text-wordmark: 15px;
+  --text-wordmark--line-height: 20px;
+
+  /* Legacy step names, mapped. `small` and `body` are the same size now: the
+   * spec's body IS 14px, so the two collapsed rather than one of them drifting. */
+  --text-small: 14px;
+  --text-small--line-height: 22px;
+  --text-lead: 18px;
+  --text-lead--line-height: 28px;
+
+  /* ══ Tracking ════════════════════════════════════════════════════════════
+   *
+   * Three values, and the two uppercase ones are not interchangeable. An
+   * 11px eyebrow (sidebar group label, column head) is set at 0.06em; an 11px
+   * provenance badge label at 0.04em. The badge is tighter because it sits in a
+   * 22px pill with 8px of side padding and the wider tracking pushes a
+   * four-word label past the pill. Handoff §5.6.
+   */
+  --tracking-eyebrow: 0.06em;
+  --tracking-badge: 0.04em;
+  --tracking-tight: -0.01em;
+
+  /* ══ Elevation ═══════════════════════════════════════════════════════════
+   *
+   * "No drop shadows anywhere inside the frame" — spec, cover annotation.
+   * Depth is surface lightness, and a card is separated by being lighter than
+   * what it sits on plus a 1px border.
+   *
+   * `--shadow-card` is therefore `none`, and it is declared rather than deleted
+   * so that `shadow-card` in a className keeps compiling to a real rule instead
+   * of silently vanishing.
+   *
+   * The two floating layers keep a shadow. A sheet and a popover are ABOVE the
+   * frame rather than inside it, and on a dark ground the thing that separates
+   * them is a shadow darker than the canvas — there is no lighter step left.
+   */
+  --shadow-card: none;
+  --shadow-sheet: 0 -8px 32px rgb(0 0 0 / 0.55);
+  --shadow-popover: 0 8px 24px rgb(0 0 0 / 0.5);
 
   /* ══ Motion ══════════════════════════════════════════════════════════════
    * Short. Someone checking a sailing time is not here for the animation.
@@ -229,32 +487,26 @@
 
   /* ══ Layout ══════════════════════════════════════════════════════════════
    * 44px minimum touch target: the primary user is standing, one-handed,
-   * possibly on a moving ferry.
+   * possibly on a moving ferry. The spec agrees — "targets are 44px on touch".
    */
   --size-touch-min: 44px;
 
   /* The embedded widget's box. Fixed by the embed contract — public/embed.js
-   * creates an iframe of exactly this size — so the numbers live here rather than
-   * as arbitrary values scattered through the shell. */
+   * creates an iframe of exactly this size. The spec's 00a board sizes the
+   * widget 380–560 wide with a 480 minimum height; 380×600 sits inside that. */
   --size-widget-w: 380px;
   --size-widget-h: 600px;
 
-  /* The navigation sidebar, docked from lg and as a drawer below it.
-   *
-   * 260px is wide enough for the longest facility name on one line
-   * ("Basseterre Ferry Terminal") without truncation, and narrow enough that at
-   * 1024px it still leaves the conversation a readable measure once the source
-   * panel is an overlay rather than a third column. Both placements read this,
-   * so the docked rail and the drawer cannot drift apart. */
-  --size-sidebar: 260px;
+  /* The navigation sidebar. The spec draws it at 240px, and the data-source
+   * card at 216px inside it — 240 less 12px of padding either side. */
+  --size-sidebar: 240px;
+  --size-sidebar-card: 216px;
 
   /* The collapsed rail.
    *
    * 64px, not 0. A rail that collapses to nothing takes the navigation away
    * entirely and leaves the user hunting for the way back; 64px keeps every
-   * destination on screen as a target that still clears the 44px minimum with
-   * 10px of breathing room either side. It is also wide enough for the source
-   * count, which is the one number in the sidebar worth seeing at a glance. */
+   * destination on screen as a target that still clears the 44px minimum. */
   --size-sidebar-collapsed: 64px;
 
   /* Chart heights.
@@ -262,126 +514,66 @@
    * ResponsiveContainer needs a parent with a DETERMINATE height — a percentage
    * height resolving against `auto` is why a chart renders at zero pixels and
    * looks like it failed to load. These are explicit, so there is nothing to
-   * resolve. See ChartCanvas.tsx.
-   */
+   * resolve. See ChartCanvas.tsx. */
   --size-chart-h: 220px;
   --size-chart-h-lg: 300px;
 
-  /* A comfortable measure for reading. Around 65-75 characters per line is where
-   * the eye stops losing the start of the next line; a chat column stretched to a
-   * 1440px monitor is genuinely harder to read than one on a phone.
+  /* The conversation column. The spec draws it at 720px inside a 1440 shell.
    * `--container-*` is the namespace `max-w-*` reads. */
-  --container-measure: 68ch;
+  --container-measure: 720px;
+
+  /* ══ Structural heights ══════════════════════════════════════════════════
+   *
+   * The header is 60px in the app shell, 56px at 390px and 52px in the widget —
+   * handoff §5.9 layout block. Three numbers rather than one because the widget
+   * is a third layout and not a breakpoint, so it does not inherit either.
+   *
+   * The two row heights are the density toggle on Vessels and Flights, and the
+   * nav row is 34px — every table row in the product derives its height, its
+   * hairline and its hover fill from that sidebar nav row, which is what makes
+   * six dense operational tables read as the same product as the chat.
+   */
+  --size-header: 60px;
+  --size-header-sm: 56px;
+  --size-header-widget: 52px;
+  --size-row-comfortable: 44px;
+  --size-row-compact: 36px;
+  --size-nav-row: 34px;
 }
 
 @layer base {
-  /* ══ Structural gradients, and the text that is safe on them ══════════════
-   *
-   * DECLARED HERE AND NOT IN @theme, ON PURPOSE.
-   *
-   * Tailwind v4 only emits an `@theme` variable whose name sits in a namespace
-   * it recognises — `--color-*`, `--spacing-*`, `--text-*` and so on. It knows
-   * nothing about `--grad-*` or `--on-navy-*`, so declaring them up there
-   * produced no CSS at all: the build shipped, every class type-checked, and
-   * `var(--grad-sidebar)` resolved to nothing. That is the same failure as
-   * `min-h-touch-min` and `duration-fast` before it, and it is invisible until
-   * someone looks at a screenshot.
-   *
-   * A plain `:root` inside @layer base is not tree-shaken, keeps the token
-   * names the design asked for, and stays overridable by the
-   * `prefers-contrast` block below. The utilities at the foot of this file
-   * expose them to className, so no component needs an arbitrary value.
-   *
-   * ── STRUCTURE, NOT DECORATION ────────────────────────────────────────────
-   *
-   * Linear only, near-vertical, within one hue family. A gradient here says
-   * "this is chrome, not content".
-   *
-   * ── THE READING SURFACE STAYS FLAT ───────────────────────────────────────
-   *
-   * No gradient token may be applied to a surface carrying prose the user is
-   * expected to read: the conversation column, message bubbles, the source
-   * panel. Those stay --neutral-0 / --neutral-50. Contrast against a gradient
-   * changes down the paragraph, so any figure you measure is true of one line
-   * of it. Readability wins over decoration everywhere text is actually read.
-   * Recorded in docs/decisions.md 0025, asserted in tests/contrast.test.ts.
-   *
-   * ── CONTRAST ON A GRADIENT IS TWO MEASUREMENTS, NOT ONE ──────────────────
-   *
-   * A gradient has no single background colour, so a single ratio is
-   * meaningless. Every foreground must clear the bar against BOTH endpoints
-   * and passes only if the worse of the two passes. The test parses the stops
-   * back out of these declarations, so a stop edited here is re-measured
-   * rather than re-asserted from memory.
-   */
-  :root {
-    --grad-sidebar: linear-gradient(170deg, #002845 0%, #003f6c 100%);
-    --grad-hero: linear-gradient(165deg, #002845 0%, #003f6c 55%, #004c83 100%);
-    --grad-rail: linear-gradient(180deg, #003f6c 0%, #002845 100%);
-
-    /* Horizon hairline — a 1px structural boundary, not a decorative glow. It
-     * separates chrome from content, carries no text and no meaning, and so
-     * makes no contrast claim. */
-    --hairline-horizon: linear-gradient(
-      90deg,
-      transparent 0%,
-      #1d87cc 20%,
-      #6fb4e2 50%,
-      #1d87cc 80%,
-      transparent 100%
-    );
-
-    /* Text and accents on a navy gradient.
-     *
-     * Measured against the WORST endpoint of --grad-sidebar / --grad-rail,
-     * which is #003F6C: for a light foreground the lighter ground is always
-     * the harder one. Ratios pinned in tests/contrast.test.ts.
-     *
-     *   --on-navy-primary    #FFFFFF   10.89:1   AAA
-     *   --on-navy-secondary  #CFE6F6    8.46:1   AAA
-     *   --on-navy-muted      #6FB4E2    4.83:1   AA
-     *   --on-navy-accent     #F5A623    5.38:1   AA   quantities only
-     *
-     * TWO TRAPS, BOTH ASSERTED AS FAILURES ON PURPOSE.
-     *
-     * 1. --color-brand (#0069B4) measures 1.91:1 on #003F6C. Brand blue on
-     *    navy is invisible. It is the reasonable-sounding mistake — it is the
-     *    brand colour and the ground is brand navy — so the test rejects it.
-     *
-     * 2. --grad-hero has a THIRD stop at #004C83, lighter than either of the
-     *    others. Against it muted drops to 3.94:1 and accent to 4.39:1, both
-     *    under AA. White (8.89:1) and secondary (6.90:1) still clear it. On
-     *    the hero gradient, only primary and secondary are text colours.
-     *
-     * These are deliberately NOT the blue-100 / blue-300 of the ramp above
-     * (#CBE4F4 / #66ACDB). They are the design's own values for this surface,
-     * written literally rather than aliased — an alias would silently move
-     * these ratios if the ramp were ever retuned.
-     */
-    --on-navy-primary: #ffffff;
-    --on-navy-secondary: #cfe6f6;
-    --on-navy-muted: #6fb4e2;
-    --on-navy-accent: #f5a623; /* quantities only */
-  }
-
   html {
     font-family: var(--font-sans);
     /* Never let a mobile browser silently inflate text and break a layout. */
     -webkit-text-size-adjust: 100%;
+    /* The form controls, the scrollbars and the UA's own focus styling all read
+     * this. Declaring it is the difference between a dark app and a dark app
+     * with a white scrollbar down the side of it. */
+    color-scheme: dark;
   }
 
   body {
-    background-color: var(--color-surface);
+    background-color: var(--color-canvas);
     color: var(--color-ink);
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     -webkit-font-smoothing: antialiased;
+    /* The spec sets these two on its own board and they are why Inter's figures
+     * and its lowercase `l` read the way they do there. */
+    font-feature-settings: 'cv05', 'ss03';
   }
 
-  /* A visible focus ring on everything focusable. Tailwind's preflight removes
-   * the UA outline, so this puts one back deliberately rather than leaving
-   * keyboard users with nothing. :focus-visible, not :focus, so a mouse click
-   * does not outline the world. */
+  /* A visible focus ring on everything focusable.
+   *
+   * The spec draws it as `0 0 0 2px <surface>, 0 0 0 4px brand-200` — a 2px
+   * surface-coloured gap and then the ring. `outline` + `outline-offset` is the
+   * same picture with one declaration and, unlike a box-shadow, it is not
+   * clipped by an ancestor's `overflow: hidden` — which the cards, the tables
+   * and the sidebar all have.
+   *
+   * brand-200 is 8.66:1 on canvas and 6.98:1 on surface-3, so it survives on
+   * every surface in the set. :focus-visible, not :focus, so a mouse click does
+   * not outline the world. */
   :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
@@ -389,15 +581,31 @@
   }
 
   /* Figures must line up. A fare column that jitters between rows is hard to
-   * scan and easy to misread — CLAUDE.md rule 10. Applied by default to table
-   * cells; the .tabular utility covers quantities outside a table. */
+   * scan and easy to misread — CLAUDE.md rule 10, and the spec puts
+   * tabular-nums on every figure it draws. Applied by default to table cells;
+   * the .tabular utility covers quantities outside a table. */
   :where(td, th) {
     font-variant-numeric: tabular-nums;
   }
 
   ::placeholder {
-    color: var(--color-ink-subtle);
+    color: var(--color-ink-disabled);
     opacity: 1;
+  }
+
+  /* ── The 16px input rule, and why it outlives the spec's 14px ──────────────
+   *
+   * The spec draws input text at 14px. Mobile Safari zooms the viewport when a
+   * focused input's font-size is under 16px, and it does not zoom back out —
+   * the user is left in a magnified layout they have to pinch out of, one
+   * handed, holding a bag. That is the exact reader this product is for.
+   *
+   * So display text follows the spec at 14px and the actual editable controls
+   * stay at 16px. It is a one-step difference nobody will see and it is the
+   * difference between the composer working on a phone and not.
+   */
+  :where(input, textarea, select) {
+    font-size: max(16px, var(--text-body));
   }
 
   /* Respect a user who has asked their OS for less motion. Every animation is
@@ -416,11 +624,10 @@
 
   /* Respect a user who has asked their OS for more contrast.
    *
-   * This is why `/settings` has no high-contrast switch. The design's mockup has
-   * one, but a switch needs somewhere to remember itself and CLAUDE.md rule 5
-   * permits exactly one key in exactly one storage. Honouring the OS preference
-   * is strictly better anyway: it is set once and every site obeys it, and an
-   * accessibility setting that resets each visit is worse than none.
+   * This is why `/settings` has no high-contrast switch. A switch needs
+   * somewhere to remember itself and CLAUDE.md rule 5 permits exactly one key
+   * in exactly one storage. Honouring the OS preference is strictly better
+   * anyway: it is set once and every site obeys it.
    *
    * Only the decorative tokens move. The text and status pairs already clear AA
    * and are asserted in tests/contrast.test.ts — strengthening those would break
@@ -429,11 +636,10 @@
   @media (prefers-contrast: more) {
     :root {
       /* Dividers become real boundaries rather than hints. */
-      --color-border: var(--color-neutral-400);
+      --color-border: #3d4266;
       --color-ops-outline-variant: var(--color-ops-outline);
-      /* The muted inks step up to the full-strength ones. */
-      --color-ink-subtle: var(--color-neutral-700);
-      --color-ops-ink-variant: var(--color-ops-ink);
+      /* The placeholder ink steps up to the readable one. */
+      --color-text-3: #8f95b0;
     }
 
     :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
@@ -473,18 +679,13 @@
  *
  * ── `w-sidebar` COMPILED TO NOTHING FOR THE LIFE OF THE PROJECT ─────────────
  *
- * The note at the top of this file used to say `--size-*` feeds `w-*`. It does
- * not. Tailwind v4 resolves `w-*` against the SPACING scale — `w-80` emits
+ * Tailwind v4 resolves `w-*` against the SPACING scale — `w-80` emits
  * `calc(var(--spacing) * 80)` — and only `size-*` reads the `--size-*`
  * namespace. So `size-touch-min` worked, `min-h-touch-min` did not, and
  * `w-sidebar` silently did not either: no rule was emitted, `--size-sidebar`
  * was tree-shaken for having no referent, and the docked rail, the drawer panel
  * and three gallery previews were all sized by their content instead of by the
  * token they appeared to name.
- *
- * Nothing looked broken, which is why it lasted: 260px of nav content is about
- * 260px wide. It surfaced only when a second width was added and the rail
- * refused to animate between them.
  *
  * Declared explicitly here, like the touch targets above, and asserted in
  * tests/tokens-compile.test.ts. */
@@ -494,6 +695,34 @@
 
 @utility w-sidebar-collapsed {
   width: var(--size-sidebar-collapsed);
+}
+
+/* The data-source status card, pinned above the user row in the sidebar. 216px
+ * inside the 240px rail — spec board 06. */
+@utility w-sidebar-card {
+  width: var(--size-sidebar-card);
+}
+
+/* The structural heights.
+ *
+ * `h-*` reads the SPACING scale, exactly like `w-*` and `min-h-*` before it, so
+ * a `--size-header` token gives `size-header` — a square 60×60 box — and never
+ * `h-header`. Declared explicitly for the same reason as the widths above, and
+ * asserted in tests/tokens-compile.test.ts. */
+@utility h-header {
+  height: var(--size-header);
+}
+
+@utility h-nav-row {
+  height: var(--size-nav-row);
+}
+
+@utility h-row-comfortable {
+  height: var(--size-row-comfortable);
+}
+
+@utility h-row-compact {
+  height: var(--size-row-compact);
 }
 
 /* The widget box. `max-w-full` / `max-h-dvh` are applied alongside these at the
@@ -518,60 +747,68 @@
   height: var(--size-chart-h-lg);
 }
 
-/* ── The gradient and on-navy tokens, as utilities ───────────────────────────
+/* ── Text on a saturated brand fill ──────────────────────────────────────────
  *
- * Declared explicitly for the same reason as the touch-target utilities above:
- * these token names are outside every namespace Tailwind generates from, so
- * without these `bg-grad-sidebar` would be a class that compiles to nothing.
+ * Kept from the light theme, remeasured for this one. The name still says what
+ * it means: these are the colours that are safe on a filled brand control — a
+ * primary button, a selected nav row, a current page number — as opposed to on
+ * a surface.
  *
- * Backgrounds only for the gradients, text only for the on-navy colours —
- * `--on-navy-accent` is a quantity colour on a navy ground and is not a fill,
- * and a gradient is chrome and never a text colour. Anything wider than that is
- * a pairing nobody has measured. */
-@utility bg-grad-sidebar {
-  background-image: var(--grad-sidebar);
-}
-
-@utility bg-grad-hero {
-  background-image: var(--grad-hero);
-}
-
-@utility bg-grad-rail {
-  background-image: var(--grad-rail);
-}
-
-/* A 1px structural boundary. Apply to an element that already has a height of
- * 1px; this paints it, it does not size it. */
-@utility bg-hairline-horizon {
-  background-image: var(--hairline-horizon);
-}
-
+ * Measured against BOTH brand fills, because they are far enough apart that a
+ * ratio on one says nothing about the other — brand-500 (#383A97) is the
+ * ordinary fill and brand-700 (#22245E) is the pressed and header fill:
+ *
+ *                                   on brand-500   on brand-700
+ *   --on-navy-primary    #FFFFFF        9.46 AAA      14.17 AAA
+ *   --on-navy-secondary  #E5E5F7        7.60 AAA      11.39 AAA
+ *   --on-navy-muted      #A5A7E6        4.18  ✗        6.26 AA
+ *   --on-navy-accent     #D9A23B        4.14  ✗        6.20 AA
+ *
+ * TWO OF THE FOUR ARE NOT TEXT COLOURS ON brand-500, and they look as though
+ * they should be. Both land just under 4.5 — close enough to read as fine in a
+ * screenshot and to fail an audit. On the ordinary brand fill only primary and
+ * secondary carry words; muted and accent still clear the 3:1 floor, so they
+ * remain usable there for an icon or a rule and never for a sentence.
+ *
+ * This is the same shape as the light theme's hero-gradient finding before it:
+ * the constraint is recorded and asserted rather than accommodated by moving a
+ * colour the seal supplied. tests/contrast.test.ts pins all eight numbers.
+ *
+ * Declared in @theme's shadow rather than as colours because these names are
+ * outside every namespace Tailwind generates from — without the @utility
+ * blocks below, `text-on-navy-primary` would be a class that compiles to
+ * nothing, which is the failure the notes above keep describing. */
 @utility text-on-navy-primary {
-  color: var(--on-navy-primary);
+  color: #ffffff;
 }
 
 @utility text-on-navy-secondary {
-  color: var(--on-navy-secondary);
+  color: var(--color-brand-100);
 }
 
 @utility text-on-navy-muted {
-  color: var(--on-navy-muted);
+  color: var(--color-brand-200);
 }
 
 @utility text-on-navy-accent {
-  color: var(--on-navy-accent);
+  color: var(--color-caution);
+}
+
+/* Dividers and control boundaries on a brand fill. */
+@utility border-on-navy-muted {
+  border-color: var(--color-brand-200);
+}
+
+@utility border-on-navy-secondary {
+  border-color: var(--color-brand-100);
 }
 
 /* The sidebar collapse animation.
  *
- * Width only. `transition-all` on a 260px panel full of text animates colour,
+ * Width only. `transition-all` on a 240px panel full of text animates colour,
  * padding and transform on every child as well, which on a mid-range phone is
  * a visibly janky frame or two for no benefit — the only thing changing is the
  * rail's width.
- *
- * Declared as a utility rather than written `transition-[width]` at the usage
- * site so the reasoning has somewhere to live, matching the touch-target
- * utilities above.
  *
  * The duration and easing come from tokens, so `prefers-reduced-motion` in the
  * base layer collapses this to 0.01ms along with everything else. No JS gate is
@@ -583,20 +820,16 @@
   transition-timing-function: var(--ease-out-soft);
 }
 
-/* Dividers and control boundaries on a navy ground.
+/* ── The recorded-questions fade ─────────────────────────────────────────────
  *
- * blue-300 measures 4.83:1 at the worst endpoint of --grad-sidebar, so it is
- * strong enough to be a real boundary rather than a hint — which is what
- * --color-border is on a light surface, and why that token cannot simply be
- * reused here. Border only: this colour is a divider and an icon, and it is a
- * text colour only where the contrast test says so. */
-@utility border-on-navy-muted {
-  border-color: var(--on-navy-muted);
-}
-
-/* The boundary of a control sitting on navy — a filled button whose own fill is
- * too close to the ground to define its edge. 8.46:1, so the edge is
- * unambiguous. See the note on the primary button in Sidebar.tsx. */
-@utility border-on-navy-secondary {
-  border-color: var(--on-navy-secondary);
+ * The sidebar's question list runs under a fade to the sidebar's own colour
+ * rather than being clipped flat, so it reads as "more below" instead of as a
+ * list that happens to stop. Spec cover, sidebar.
+ *
+ * This is a MASK, not a gradient fill: it is the one place the spec's "no
+ * gradients inside the frame" rule does not apply, because nothing here is
+ * coloured — the fade is in the alpha channel and the surface underneath shows
+ * through unchanged. */
+@utility fade-out-bottom {
+  mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 72px), transparent 100%);
 }

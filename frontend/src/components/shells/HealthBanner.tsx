@@ -38,13 +38,27 @@ export function HealthBanner() {
         data-health="degraded"
         className="flex items-start gap-3 border-b border-amber-text/30 bg-amber-surface px-4 py-2"
       >
+        {/*
+         * Two causes, two messages — spec board 20.
+         *
+         * "'Degraded' alone tells a user nothing about whether the thing they
+         * came for still works." The index being unavailable stops the
+         * ASSISTANT and nothing else: vessels, flights and tariffs are a
+         * separate path with no model, no embeddings and no index in it. A
+         * banner that said "the service is degraded" would send someone away
+         * from three screens that would have answered them.
+         */}
         <div className="min-w-0 flex-1">
           <p className="text-small font-medium text-amber-text">
-            The assistant is not working properly at the moment
+            {health.index.ready
+              ? 'The assistant is not working properly at the moment'
+              : 'Search is unavailable'}
           </p>
           <p className="mt-0.5 text-caption text-ink-muted">
-            Its information is being updated, so answers may be missing or incomplete. For anything
-            you need now,{' '}
+            {health.index.ready
+              ? 'Answers may be missing or incomplete.'
+              : 'The assistant cannot answer questions. Vessels, flights and tariffs still work.'}{' '}
+            For anything you need now,{' '}
             <a href={SCASPA_TEL_HREF} className="font-medium text-blue-700 underline">
               call SCASPA on {SCASPA_TEL_TEXT}
             </a>

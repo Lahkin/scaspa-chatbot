@@ -80,7 +80,12 @@ export type ChatAction =
       text: string;
       transport: Transport;
     }
-  | { type: 'META'; conversationId: string }
+  | {
+      type: 'META';
+      conversationId: string;
+      /** The question as actually sent, when safety changed it. Null otherwise. */
+      questionSanitised?: string | null;
+    }
   | { type: 'TOKEN'; text: string }
   | { type: 'TOOL_START'; name: ToolName; summary: string }
   | { type: 'TOOL_END'; name: ToolName; summary: string; ms: number }
@@ -102,6 +107,11 @@ export type ChatAction =
        * honest but says the wrong thing about why.
        */
       refusalCategory: RefusalCategory;
+      /** Both carried on `done` too, so streaming loses no distinction. */
+      answerReplaced: boolean;
+      stepLimitReached: boolean;
+      /** What the server measured. See `Message.latency_ms`. */
+      latencyMs: number;
     }
   | { type: 'STREAM_ERROR'; error: ApiErrorBody }
   /** A failure before any answer existed — a 503, a timeout, offline. */
@@ -116,6 +126,9 @@ export type ChatAction =
       grounded: boolean;
       refusal: boolean;
       refusalCategory: Message['refusal_category'];
+      answerReplaced: boolean;
+      stepLimitReached: boolean;
+      latencyMs: number;
       toolCalls: { name: ToolName; summary: string; ms: number }[];
       conversationId: string;
     }
@@ -180,10 +193,29 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
       };
     }
 
-    case 'META':
+    case 'META': {
       // Adopted immediately, before any token, so the conversation is correct
       // even if the user navigates away mid-answer.
-      return { ...state, conversationId: action.conversationId };
+      const withConversation = { ...state, conversationId: action.conversationId };
+      if (!action.questionSanitised) return withConversation;
+
+      /*
+       * Input safety changed the question — spec board 14.
+       *
+       * The LAST user message is patched, not the streaming assistant one: it
+       * is the user's own words that changed, and the correction has to appear
+       * where those words are. Arriving on `meta` means it lands before the
+       * first token, so the bubble is never briefly wrong.
+       */
+      const messages = [...withConversation.messages];
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const candidate = messages[i];
+        if (candidate?.role !== 'user') continue;
+        messages[i] = { ...candidate, sanitised: action.questionSanitised };
+        break;
+      }
+      return { ...withConversation, messages };
+    }
 
     case 'TOKEN': {
       const message = state.messages.find((m) => m.id === state.streamingMessageId);
@@ -242,10 +274,21 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
       return patchStreaming(state, (message) => ({ ...message, card: action.card }));
 
     case 'REPLACE':
-      // The tool-call cap was hit: everything streamed so far was an internal
-      // message, not an answer. Discard it entirely, held tail included.
+      /*
+       * The backend threw the draft away and rebuilt the answer.
+       *
+       * The old text is KEPT, on `superseded`, rather than discarded — §3.5:
+       * "the accumulated tokens are shown struck through … **do not silently
+       * swap the text**". A reader watching a figure appear and then vanish,
+       * with a different one in its place and nothing to say why, has been
+       * shown two answers and told about neither.
+       *
+       * Only the first replacement is recorded. A second would overwrite the
+       * text the user actually read with an intermediate draft they never saw.
+       */
       return patchStreaming({ ...state, heldText: '' }, (message) => ({
         ...message,
+        superseded: message.superseded ?? message.text + state.heldText,
         text: action.text,
       }));
 
@@ -260,6 +303,16 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
         grounded: action.grounded,
         refusal: action.refusal,
         refusal_category: action.refusalCategory,
+        answer_replaced: action.answerReplaced,
+        step_limit_reached: action.stepLimitReached,
+        latency_ms: action.latencyMs,
+        /*
+         * The struck-through draft is a STREAMING-time treatment and is cleared
+         * here. Once the answer has settled, `answer_replaced` drives the
+         * correction notice instead — one explanation at a time, and the
+         * settled one names what happened rather than showing the wreckage.
+         */
+        superseded: undefined,
       }));
       return { ...patched, status: 'idle', streamingMessageId: null, heldText: '' };
     }
@@ -313,7 +366,18 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
         text: message.text + state.heldText,
         streaming: false,
         error: {
-          code: action.failure.kind === 'OFFLINE' ? 'INTERNAL' : action.failure.kind,
+          /*
+           * The two CLIENT-side kinds have no wire code, so neither can be
+           * stored on a message's `error`, which is typed as the contract's
+           * `ErrorCode`. Both collapse to `INTERNAL` here and only here: this
+           * field is the inline "a mid-stream failure happened" marker on a
+           * partly-arrived answer, and the full envelope with its own copy is
+           * rendered from `state.error` beside the composer.
+           */
+          code:
+            action.failure.kind === 'OFFLINE' || action.failure.kind === 'BAD_REQUEST'
+              ? 'INTERNAL'
+              : action.failure.kind,
           message: action.failure.message,
           request_id: action.failure.requestId ?? 'client-side',
         },
@@ -334,6 +398,9 @@ export function chatReducer(state: ChatMachineState, action: ChatAction): ChatMa
         grounded: action.grounded,
         refusal: action.refusal,
         refusal_category: action.refusalCategory,
+        answer_replaced: action.answerReplaced,
+        step_limit_reached: action.stepLimitReached,
+        latency_ms: action.latencyMs,
         activity: action.toolCalls.map((tool, index) => ({
           id: `${tool.name}-${index}`,
           name: tool.name,

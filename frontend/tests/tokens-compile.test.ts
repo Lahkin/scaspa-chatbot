@@ -52,12 +52,33 @@ const TOKEN_UTILITIES = [
   'rounded-sm',
   'rounded-md',
   'rounded-lg',
+  /*
+   * The five radii the four-value scale was missing — handoff §5.7 lists nine.
+   * `rounded-segment` in particular is load-bearing: a 9px segment inside a 12px
+   * track with 3px of padding is the only pairing whose inner and outer curves
+   * stay concentric, and the button radius put a visible kink in it.
+   */
+  'rounded-segment',
+  'rounded-ghost',
+  'rounded-small',
+  'rounded-tiny',
+  'rounded-swatch',
+  // --tracking-*
+  'tracking-eyebrow',
+  'tracking-badge',
+  'tracking-tight',
+  // structural heights, declared as @utility for the same reason as w-sidebar
+  'h-header',
+  'h-nav-row',
+  'h-row-comfortable',
+  'h-row-compact',
   // --shadow-*
   'shadow-card',
   'shadow-sheet',
   'shadow-popover',
   // --text-*
   'text-caption',
+  'text-wordmark',
   'text-small',
   'text-body',
   'text-lead',
@@ -81,6 +102,25 @@ const TOKEN_UTILITIES = [
   'text-success',
   'text-danger',
   /*
+   * The pill and notice edges — the fourth instance of the silent-failure bug.
+   *
+   * A status pill is "1px solid <hue at 45%>" and a notice panel is the same
+   * hue at 30–35%. No such token existed, so `border-caution-edge` emitted
+   * nothing and the pill drew its border in `currentColor`: the right colour by
+   * accident on a caution pill and the wrong one on every other one.
+   */
+  'border-positive-edge',
+  'border-caution-edge',
+  'border-critical-edge',
+  'border-live-edge',
+  /*
+   * `--color-caution-notice-edge` and `--color-critical-notice-edge` are
+   * declared and deliberately NOT listed here. Tailwind emits a utility only
+   * where the class appears in source, so a token with no call site yet has no
+   * rule to assert — listing it would fail this test for a token that is
+   * correct. Add them when the notice panels use them.
+   */
+  /*
    * The sidebar widths, and the third instance of this exact bug.
    *
    * `w-sidebar` was in three components for the life of the project and emitted
@@ -93,17 +133,28 @@ const TOKEN_UTILITIES = [
   'w-sidebar',
   'w-sidebar-collapsed',
   'transition-width',
+  /* The sidebar's data-source card, 216px inside the 240px rail — board 06. */
+  'w-sidebar-card',
   /*
-   * The gradient and on-navy tokens.
+   * The recorded-questions fade.
+   *
+   * A mask rather than a background, and the one place the dark system's
+   * "no gradients inside the frame" rule does not apply — nothing here is
+   * coloured, the fade is in the alpha channel.
+   */
+  'fade-out-bottom',
+  /*
+   * The on-navy tokens.
    *
    * These live outside every namespace Tailwind generates from, so they are
    * explicit `@utility` declarations too — and the first draft of them, written
    * inside `@theme`, produced no CSS at all. See decision 0025.
+   *
+   * The three gradient utilities and the hairline that used to sit here are
+   * GONE, not renamed: the dark system separates planes with a lighter surface
+   * and a 1px border, and `tests/contrast.test.ts` asserts that neither the
+   * tokens nor the classes came back.
    */
-  'bg-grad-sidebar',
-  'bg-grad-hero',
-  'bg-grad-rail',
-  'bg-hairline-horizon',
   'text-on-navy-primary',
   'text-on-navy-secondary',
   'text-on-navy-muted',

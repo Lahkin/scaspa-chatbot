@@ -1,74 +1,116 @@
 import { cn } from '@/lib/cn';
-import { SUGGESTED_QUESTIONS } from '@/features/chat/suggestions';
+import { Icon } from '@/components/ui/Icon';
+import {
+  NARROWED_QUESTIONS,
+  SUGGESTED_QUESTIONS,
+  type Suggestion,
+} from '@/features/chat/suggestions';
 
 /**
- * The starter chips.
+ * The suggestion chips — handoff §1.2 (Family C) and §3.4.
  *
  * Two jobs. The first is that most people do not know what to ask a port
- * authority, and a blank box with a cursor in it is a worse prompt than four
- * concrete questions. The second is the demo: on stage, a tapped chip cannot be
+ * authority, and a blank box with a cursor in it is a worse prompt than eight
+ * concrete topics. The second is the demo: on stage, a tapped chip cannot be
  * fat-fingered, autocorrected into a different question, or typed into an
  * unresponsive keyboard while a room watches.
  *
- * The four below are the demo script, one per facility — cruise, ferry, cargo
- * collection, container tariff — so whichever a judge picks lands on a different
- * part of the knowledge base.
- *
  * A chip **populates the composer rather than sending**. The user still presses
- * send, which keeps one habit for every question and leaves room to edit "a
- * 40-foot container" into "a 20-foot container" without retyping the sentence.
+ * send, which keeps one habit for every question and leaves room to edit
+ * "a 40ft container" into "a 20ft container" without retyping the sentence.
+ *
+ * ## The chip is not a filter chip and must not look like one
+ *
+ * 34px tall, `--surface-2`, a 1px border and a 14px `--brand-300` glyph — a
+ * related but distinct control from the 28px filter chip and the 26px outline
+ * status pill, both of which appear in the same answers. The heights are what
+ * keep the three apart in a row that contains all three.
+ *
+ * ## Three states, and the third is an absence
+ *
+ * | State            | Treatment                                              |
+ * | ---------------- | ------------------------------------------------------ |
+ * | Initial          | the eight topics, `1px solid --border`                 |
+ * | After a refusal  | narrowed to what we hold, `1px solid --brand-500`      |
+ * | Hidden           | **not rendered** — while streaming, and after a 429    |
+ *
+ * Hidden means removed from the DOM, not disabled. A greyed-out suggestion
+ * during a rate limit invites a click that cannot succeed, and a disabled
+ * control still costs a screen-reader user a stop in the tab order to discover
+ * that it does nothing.
  */
 
 interface SuggestedQuestionsProps {
   onSelect: (question: string) => void;
   /**
-   * `empty` is the opening state: the departure-board treatment, given room.
-   * `idle` is between answers, below the composer: quieter, so it offers a next
-   * step without competing with the answer just given.
+   * `initial` is the opening set. `narrowed` follows a refusal and offers only
+   * what the published record covers.
    */
-  variant?: 'empty' | 'idle';
-  disabled?: boolean;
+  variant?: 'initial' | 'narrowed';
+  /**
+   * True while streaming or under a rate limit. The section renders **nothing**
+   * — see the table above. It is a prop rather than the caller's `&&` so the
+   * rule lives with the component that has to obey it.
+   */
+  hidden?: boolean;
+  /**
+   * `compact` is the embedded widget: 32px rather than 34px, and only the first
+   * two topics.
+   *
+   * The count shrinks as well as the height because the widget is 380px wide
+   * and eight chips wrap to four rows, which is most of a 480px panel spent on
+   * suggestions rather than on the answer. §2.3 shrinks the chips; the board
+   * draws two of them.
+   */
+  size?: 'default' | 'compact';
 }
 
 export function SuggestedQuestions({
   onSelect,
-  variant = 'empty',
-  disabled = false,
+  variant = 'initial',
+  hidden = false,
+  size = 'default',
 }: SuggestedQuestionsProps) {
-  const empty = variant === 'empty';
+  if (hidden) return null;
+
+  const narrowed = variant === 'narrowed';
+  const compact = size === 'compact';
+  const all: readonly Suggestion[] = narrowed ? NARROWED_QUESTIONS : SUGGESTED_QUESTIONS;
+  const suggestions = compact ? all.slice(0, 2) : all;
 
   return (
-    <section aria-labelledby="suggested-heading" className={empty ? 'space-y-3' : 'space-y-2'}>
-      <h2
-        id="suggested-heading"
-        className={empty ? 'text-small font-semibold text-ink' : 'text-caption text-ink-subtle'}
-      >
-        {empty ? 'Try one of these' : 'Ask something else'}
+    <section aria-labelledby="suggested-heading">
+      {/*
+        The heading is for assistive technology only. On the board the chips
+        follow the composer with no label above them — the shapes say what they
+        are — but a list of eight buttons with no grouping announced is a worse
+        experience than a heading nobody sees.
+      */}
+      <h2 id="suggested-heading" className="sr-only">
+        {narrowed ? 'Questions this assistant can answer' : 'Suggested questions'}
       </h2>
 
-      <ul className={cn('flex flex-wrap gap-2', !empty && 'gap-1.5')}>
-        {SUGGESTED_QUESTIONS.map((question) => (
-          <li key={question}>
+      {/* Two wrapping rows, `gap: 8px` within and between. */}
+      <ul className="flex flex-wrap gap-2">
+        {suggestions.map((suggestion) => (
+          <li key={suggestion.label}>
             <button
               type="button"
-              onClick={() => onSelect(question)}
-              disabled={disabled}
+              onClick={() => onSelect(suggestion.label)}
               className={cn(
-                'min-h-touch rounded-md text-left transition-colors duration-fast ease-out-soft',
-                'disabled:cursor-not-allowed disabled:opacity-60',
-                empty
-                  ? // Departure board: navy ground, amber chevron. The amber is a
-                    // fill-and-dark-ground colour and this is the ground it is for.
-                    'flex items-center gap-2 bg-navy px-3 py-2 text-small font-medium text-ink-inverse hover:bg-navy-deep'
-                  : 'border border-border-strong bg-surface px-3 py-1.5 text-caption text-ink-muted hover:border-blue-600 hover:text-blue-700'
+                'flex items-center gap-2 rounded-pill border bg-surface-2 px-3.5',
+                compact ? 'h-8' : 'h-[34px]',
+                'text-label font-medium text-ink',
+                'transition-colors duration-fast ease-out-soft hover:bg-surface-3',
+                narrowed ? 'border-brand-500' : 'border-border'
               )}
             >
-              {empty && (
-                <span aria-hidden="true" className="text-amber-board">
-                  ›
-                </span>
-              )}
-              {question}
+              <Icon
+                name={suggestion.icon}
+                size={14}
+                className={narrowed ? 'text-brand-200' : 'text-brand-300'}
+              />
+              {suggestion.label}
             </button>
           </li>
         ))}

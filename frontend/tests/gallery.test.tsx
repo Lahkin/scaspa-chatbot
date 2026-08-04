@@ -78,7 +78,7 @@ describe('component gallery', () => {
 
   it('shows every IconButton variant plus disabled and loading', async () => {
     await renderGallery();
-    for (const variant of ['primary', 'secondary', 'ghost', 'danger']) {
+    for (const variant of ['bordered', 'ghost', 'primary', 'danger']) {
       expect(screen.getByRole('button', { name: `Send (${variant})` })).toBeInTheDocument();
     }
     expect(screen.getByRole('button', { name: 'Disabled send' })).toBeDisabled();

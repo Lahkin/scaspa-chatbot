@@ -316,6 +316,11 @@ async def post_tariff_quote(
 
     return TariffQuote(
         line_items=lines,
+        # The codes that applied and had no published rate. `build_quote` has
+        # always computed these and they were logged and then dropped, which
+        # left the client a clean-looking total that was short by a whole
+        # charge — the one outcome this calculator must not produce.
+        unpriced=unpriced,
         subtotal=subtotal,
         # Equal today. Separate fields because a real tariff schedule grows a
         # surcharge or a rebate on top of the subtotal, and a client that

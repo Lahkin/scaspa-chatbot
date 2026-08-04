@@ -4,8 +4,10 @@ import {
   Button,
   Card,
   Chip,
+  CopyToast,
   IconButton,
   Input,
+  Segmented,
   Sheet,
   Skeleton,
   Spinner,
@@ -13,7 +15,14 @@ import {
   Tooltip,
   VisuallyHidden,
 } from '@/components/ui';
-import { cn } from '@/lib/cn';
+import { OperationalAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
+import type { Density } from '@/components/ops/OpsTable';
+import {
+  FilteredOutState,
+  NoFeedState,
+  RateLimitedState,
+  TableSkeleton,
+} from '@/components/ops/TableStates';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
 import { SCENARIOS, getScenario, setScenario, subscribeToScenario } from '@/mocks/scenarios';
 import { setDraft as setComposerDraft } from '@/features/chat/draft';
@@ -43,6 +52,10 @@ import { isStale } from '@/features/chat/queries';
 import { ChartBlock } from '@/components/chat/ChartBlock';
 import { ALL_CHART_FIXTURES } from '@/mocks/chartFixtures';
 import { VoiceButton } from '@/components/chat/VoiceButton';
+import {
+  TranscriptionResult,
+  type TranscriptionState,
+} from '@/components/chat/TranscriptionResult';
 import { SpeakButton } from '@/components/chat/SpeakButton';
 import {
   CANDIDATE_MIME_TYPES,
@@ -69,7 +82,17 @@ import {
   CARD_TICKET,
   CARD_VESSELS,
   CARD_VESSELS_EMPTY,
+  FIXTURE_SOURCE,
+  MOCK_DISCLAIMER,
 } from '@/mocks/opsFixtures';
+import { QuoteResult } from '@/components/ops/QuoteResult';
+import { ContactPointCatalogue } from '@/components/ops/ContactPointRow';
+import { PrivacyNotice } from '@/components/ops/PrivacyNotice';
+import { TranscriptState } from '@/components/ops/TranscriptState';
+import { PositionMarker } from '@/components/ops/PositionMap';
+import { HealthPanel } from '@/components/ops/HealthPanel';
+import { IndexStatusPanel } from '@/components/ops/IndexStatusPanel';
+import type { HealthResponse, TariffQuote } from '@/lib/types';
 
 /**
  * Component gallery — every primitive in every state, one scrollable page.
@@ -131,18 +154,29 @@ export function Gallery() {
 
       <Section
         title="IconButton"
-        note="Label is required — an unlabelled icon button is invisible to a screen reader."
+        note="Two of the handoff's six button types, and they are not the same control: `bordered` is 36px on a 10px radius with a hairline, `ghost` is 28px on an 8px radius with none. Both grow to 44px at ≤640px. Label is required — an unlabelled icon button is invisible to a screen reader."
       >
         <div className="flex flex-wrap items-center gap-3">
-          {(['primary', 'secondary', 'ghost', 'danger'] as const).map((variant) => (
+          {(['bordered', 'ghost', 'primary', 'danger'] as const).map((variant) => (
             <IconButton key={variant} label={`Send (${variant})`} variant={variant}>
               <span aria-hidden="true">↑</span>
             </IconButton>
           ))}
-          <IconButton label="Disabled send" disabled>
+          <IconButton label="Disabled send" variant="bordered" disabled>
             <span aria-hidden="true">↑</span>
           </IconButton>
-          <IconButton label="Sending" loading>
+          <IconButton label="Sending" variant="bordered" loading>
+            <span aria-hidden="true">↑</span>
+          </IconButton>
+        </div>
+        <p className="text-caption text-ink-subtle">
+          The ghost row&rsquo;s two extra states — copied, and a pressed thumb.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <IconButton label="Copied" state="copied">
+            <span aria-hidden="true">✓</span>
+          </IconButton>
+          <IconButton label="Helpful" state="selected">
             <span aria-hidden="true">↑</span>
           </IconButton>
         </div>
@@ -367,10 +401,20 @@ export function Gallery() {
         </div>
       </Section>
 
-      <Section title="SuggestedQuestions">
+      <Section
+        title="SuggestedQuestions"
+        note="Three states, and the third is an absence — hidden means removed from the DOM, not disabled. A greyed-out suggestion during a rate limit invites a click that cannot succeed."
+      >
         <div className="max-w-measure space-y-6">
-          <SuggestedQuestions onSelect={() => {}} variant="empty" />
-          <SuggestedQuestions onSelect={() => {}} variant="idle" />
+          <Figure label="Initial — the eight opening topics">
+            <SuggestedQuestions onSelect={() => {}} />
+          </Figure>
+          <Figure label="After a refusal — narrowed to what we hold">
+            <SuggestedQuestions onSelect={() => {}} variant="narrowed" />
+          </Figure>
+          <Figure label="Hidden — while streaming, and after a 429">
+            <SuggestedQuestions onSelect={() => {}} hidden />
+          </Figure>
         </div>
       </Section>
 
@@ -572,9 +616,351 @@ export function Gallery() {
       <NavigationSection />
 
       <CardSection />
+
+      <OperationsTableSection />
+
+      <TariffSection />
+
+      <SupportSection />
+
+      <ConsoleSection />
+
+      <FeedbackSection />
     </div>
   );
 }
+
+/**
+ * The feedback matrix — board 22, `07-feedback-and-states.md`.
+ *
+ * Its own first line is the whole board: "One grid, so the same event never gets
+ * two treatments across screens." So this section draws the two things that had
+ * no home at all rather than re-drawing the states other sections already show:
+ * §7.1's eight envelopes, side by side, where a second apology would be obvious;
+ * and §7.6's toast.
+ */
+function FeedbackSection() {
+  return (
+    <>
+      <Section
+        title="Error envelopes — eight codes, eight copies"
+        note="The status is drawn in the leading slot and the fill says whose fault it is: caution for a 4xx the reader can act on, critical for a 5xx that is ours. Every one that offers a contact route ends at the same escalation block."
+      >
+        <div className="max-w-measure space-y-3">
+          {(Object.keys(ERROR_COPY) as FailureKind[]).map((kind) => (
+            <ErrorState key={kind} kind={kind} />
+          ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Copy toast"
+        note="The one action in this product with no visible result — the clipboard is invisible, so without this the reader presses the button, sees nothing happen, and presses it again. It appears at the same moment as the originating button's Copied state."
+      >
+        <CopyToast />
+      </Section>
+    </>
+  );
+}
+
+/**
+ * Console, health and index — board 20, §6.7–6.12.
+ *
+ * The marker legend is here rather than on the console: board 20 draws it
+ * inside the map card, but it is the board explaining its own three treatments
+ * — the same kind of panel as board 17's ETA/ATA combinations, which also does
+ * not ship. What ships is the markers.
+ */
+function ConsoleSection() {
+  return (
+    <>
+      <Section
+        title="Position markers — three claims, three shapes"
+        note="A transponder fix, a harbour master typing into a form, and a guess. They differ by SHAPE before hue, because a legend separated by colour alone collapses in greyscale — and the difference between a position and an opinion is the whole point of `reported_by`."
+      >
+        <ul className="flex flex-wrap gap-5">
+          {(
+            [
+              ['ais', 'AIS fix', 'solid, ringed'],
+              ['manual', 'Operator entry', 'square, solid'],
+              ['estimated', 'Estimated', 'hollow, dashed'],
+            ] as const
+          ).map(([kind, name, shape]) => (
+            <li key={kind} className="flex items-center gap-2.5">
+              <PositionMarker reportedBy={kind} />
+              <span className="flex flex-col">
+                <span className="text-label font-medium text-ink">{name}</span>
+                <span className="text-caption font-medium text-ink-muted">{shape}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section
+        title="Health — ok, and two distinct degradations"
+        note="“Degraded” alone tells a user nothing about whether the thing they came for still works. Search being unavailable stops the assistant and nothing else; voice being off stops neither."
+      >
+        <div className="max-w-measure space-y-4">
+          <HealthPanel health={HEALTHY} voiceEnabled />
+          <HealthPanel
+            health={{ ...HEALTHY, status: 'degraded', index: { ...HEALTHY.index, ready: false } }}
+            voiceEnabled
+          />
+          <HealthPanel health={HEALTHY} voiceEnabled={false} />
+        </div>
+      </Section>
+
+      <Section
+        title="Index status — every field reads unknown, never 0"
+        note="Zero documents is a fact about an index that was built; this index has not reported at all. The version string is the only visible trace of the offline scripts — no rebuild control, no progress, no job status."
+      >
+        <div className="max-w-measure">
+          <IndexStatusPanel index={HEALTHY.index} />
+        </div>
+      </Section>
+    </>
+  );
+}
+
+/** Obviously-fake, per CLAUDE.md rule 5. */
+const HEALTHY: HealthResponse = {
+  status: 'ok',
+  env: 'testing',
+  version: '0.0.0',
+  uptime_s: 0,
+  request_id: 'gallery',
+  models: { chat: 'sample-chat', embedding: 'sample-embed', transcribe: '', tts: '' },
+  index: {
+    ready: false,
+    kb_version: 'v0.0.0',
+    kb_rows: null,
+    kb_rows_rejected: null,
+    kb_csv_filename: null,
+    kb_updated_at: null,
+    index_built_at: null,
+    embedding_model: null,
+    web_docs: null,
+    message: null,
+  },
+};
+
+/**
+ * Support — board 19, and the row types that will never carry a value.
+ *
+ * `08-blocked-and-forbidden.md` #7 asks for the email, extension and web rows to
+ * be **drawn and covered by tests, not commented out and not deleted**. Nothing
+ * in the product renders one — the wire never sends a row with no value — so
+ * this is where they exist to be looked at.
+ */
+function SupportSection() {
+  const [attached, setAttached] = useState(true);
+
+  return (
+    <>
+      <Section
+        title="Contact point rows — all five kinds"
+        note="Two are populated and three are not: email is an open TODO, web is not populated, and no staff extension directory will ever be built — a caller routed to the wrong security-gate extension is worse off than one who was never offered the number."
+      >
+        <div className="max-w-measure rounded-panel border border-border bg-surface p-6">
+          <ContactPointCatalogue />
+        </div>
+      </Section>
+
+      <Section
+        title="Transcript state — the UI reflects the response"
+        note="The box shows what the SERVER did, never what was ticked. A tick that means “we tried” is the kind of thing people discover at the worst moment."
+      >
+        <div className="max-w-measure space-y-3">
+          <TranscriptState requested attached={attached} />
+          <Button size="sm" variant="secondary" onClick={() => setAttached((value) => !value)}>
+            Show the {attached ? 'not attached' : 'attached'} state
+          </Button>
+        </div>
+      </Section>
+
+      <Section
+        title="Why we ask for so little"
+        note="Required. Without it, the absence of a name, an email, a telephone number and an attachment reads as a broken form rather than as a careful one."
+      >
+        <div className="max-w-measure">
+          <PrivacyNotice />
+        </div>
+      </Section>
+    </>
+  );
+}
+
+/**
+ * The tariff quote's variants — board 18, §5.11.
+ *
+ * Three line counts and one blocked state, side by side, because the difference
+ * between them is the whole board: several lines, one line, **none at all**, and
+ * a total that is short by a whole charge.
+ */
+function TariffSection() {
+  return (
+    <>
+      <Section
+        title="Quote — several lines"
+        note="Subtotal and total are separate rows even when they are equal, so a future surcharge line has a place to land without a redesign. The disclaimer is the last child and is never collapsed."
+      >
+        <div className="max-w-measure">
+          <QuoteResult quote={GALLERY_QUOTE} />
+        </div>
+      </Section>
+
+      <Section
+        title="Quote — zero lines"
+        note="No total at all. `XCD 0.00` would read as free, and prices default to zero until configured — two different reasons to distrust a zero, and a reader can tell neither apart."
+      >
+        <div className="max-w-measure">
+          <QuoteResult quote={{ ...GALLERY_QUOTE, line_items: [], subtotal: 0, total: 0 }} />
+        </div>
+      </Section>
+
+      <Section
+        title="Quote — a charge with no published rate"
+        note="BLOCKED on nothing any more: `unpriced` is on the wire. The line still appears, the banner sits above the total, and the label becomes “Total so far” — only when the flag is present, never inferred."
+      >
+        <div className="max-w-measure">
+          <QuoteResult quote={{ ...GALLERY_QUOTE, unpriced: ['SMP-BTH'] }} />
+        </div>
+      </Section>
+    </>
+  );
+}
+
+/** Obviously-fake figures, per CLAUDE.md rule 5. */
+const GALLERY_QUOTE: TariffQuote = {
+  unpriced: [],
+  line_items: [
+    {
+      code: 'SMP-011',
+      label: 'Sample wharfage — 40 ft container',
+      basis: 'per container',
+      rate: 44.44,
+      quantity: 2,
+      quantity_label: '2 containers',
+      amount: 88.88,
+      kb_id: null,
+    },
+    {
+      code: 'SMP-012',
+      label: 'Sample container handling',
+      basis: 'per container',
+      rate: 33.33,
+      quantity: 2,
+      quantity_label: '2 containers',
+      amount: 66.66,
+      kb_id: 'kb-000',
+    },
+  ],
+  subtotal: 155.54,
+  total: 155.54,
+  currency: 'XCD',
+  derived: true,
+  disclaimer: MOCK_DISCLAIMER,
+  source: FIXTURE_SOURCE,
+  request_id: 'gallery',
+};
+
+/**
+ * The operations table's furniture — board 17, §5.1 to §5.8.
+ *
+ * The states here are the ones a screen only reaches by failing: a rate limit, a
+ * dead feed, a first paint. Every one of them shipped wrong at some point in
+ * this board's life precisely because it was never on a page anyone opened.
+ */
+function OperationsTableSection() {
+  const [density, setDensity] = useState<Density>('comfortable');
+
+  return (
+    <>
+      <Section
+        title="Segmented — two sizes"
+        note="`sm` is the toolbar control: 26px segments on an 8px radius inside a 10px track — §5.1's density toggle and §4.5's direction toggle. `md` is board 00d's 32px form control. Same component; a toolbar row is not a form row."
+      >
+        <div className="flex flex-wrap items-center gap-4">
+          <Segmented
+            label="Density"
+            size="sm"
+            value={density}
+            onChange={setDensity}
+            options={[
+              { value: 'comfortable', label: 'Comfortable' },
+              { value: 'compact', label: 'Compact' },
+            ]}
+          />
+          <Segmented
+            label="Density, form size"
+            value={density}
+            onChange={setDensity}
+            options={[
+              { value: 'comfortable', label: 'Comfortable' },
+              { value: 'compact', label: 'Compact' },
+            ]}
+          />
+        </div>
+      </Section>
+
+      <Section
+        title="Table skeleton — both densities"
+        note="§7.5: the column headers stay and the rows keep their REAL height, 44px or 36px, so nothing moves when the data lands. Use the toggle above."
+      >
+        <TableSkeleton
+          columns={['Vessel', 'Type', 'Berth', 'ETA', 'ATA', 'Status']}
+          rows={3}
+          density={density}
+        />
+      </Section>
+
+      <Section
+        title="Table states — the two emptinesses and the two failures"
+        note="One is about the source, one is about the query, and they lead to different actions. A rate limit is neither: the data was never fetched, so offering to clear a filter would be a lie."
+      >
+        <div className="space-y-4">
+          <NoFeedState noun="vessel" />
+          <NoFeedState noun="flight" department="Airport Operations" />
+          <FilteredOutState
+            filters={[{ label: 'Berth 3' }, { label: 'Alongside' }]}
+            onClear={() => {}}
+          />
+          {/* Counts down live, then hands the button back — §1.3. */}
+          <RateLimitedState retryAfterS={18} onRetry={() => {}} />
+          <RateLimitedState retryAfterS={null} />
+        </div>
+      </Section>
+
+      <Section
+        title="Operational advisory — §5.6's three fills"
+        note="Passthrough only. The caution fill is the claim that a named authority published it, so it is gated on attribution; without one the panel drops to the neutral fill. Absent is the third state and it is drawn nowhere: no panel at all."
+      >
+        <div className="max-w-measure space-y-3">
+          <OperationalAdvisoryPanel
+            advisory={GALLERY_ADVISORY}
+            publishedBy="Marine Operations"
+            at="05:40 AST"
+          />
+          <OperationalAdvisoryPanel advisory={GALLERY_ADVISORY} />
+          <p className="text-caption text-ink-subtle">
+            Above: attributed, and unattributed — which is what the wire can produce today.
+            <code> advisory: null</code> renders nothing at all, which is why there is no third box
+            here.
+          </p>
+        </div>
+      </Section>
+    </>
+  );
+}
+
+/** Obviously-fake, per CLAUDE.md rule 5. Nothing here is a real notice. */
+const GALLERY_ADVISORY = {
+  headline: 'Sample conditions',
+  detail: 'Placeholder advisory — not a real forecast',
+  temperature_c: null,
+  systems_status: '',
+};
 
 /**
  * The sidebar, the lockup and the About panel — every state on one screen.
@@ -587,41 +973,34 @@ function NavigationSection() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [lastAsked, setLastAsked] = useState<string | null>(null);
-  const [railCollapsed, setRailCollapsed] = useState(false);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
 
   const sidebarProps = {
     onAsk: (question: string) => setLastAsked(question),
-    onNewConversation: () => setLastAsked(null),
-    onOpenSources: () => {},
-    onOpenAbout: () => setAboutOpen(true),
-    busy: false,
-    hasConversation: true,
+    recordedQuestions: [
+      'Is the Vega Sirius alongside?',
+      'Wharfage on a 40ft container',
+      'Arrivals into RLB after 14:00',
+      'Who handles cruise berthing?',
+      'Tonnage dues for a 12,000 GT ship',
+    ],
   };
 
   return (
     <>
       <Section
         title="LogoLockup"
-        note="The asset is a documented placeholder — vector files, a reversed variant and written permission are outstanding client items. Below 32px the badge is dropped for a wordmark, because the real mark is a circular seal that turns to mud at that size."
+        note="The seal is dark blue line art on transparency and always sits on a white circular plate — 32 inside 40 in the sidebar, 24 inside 32 in the widget, the 404 and the mobile header. Never recoloured, outlined, cropped or knocked out to white, and never unplated at any size."
       >
         <div className="flex flex-wrap items-end gap-6">
-          <Figure label="lg — 48px">
-            <LogoLockup size="lg" tagline="Ports and travel, St. Kitts" />
+          <Figure label="lockup — 32 seal in a 40 plate, the sidebar">
+            <LogoLockup />
           </Figure>
-          <Figure label="md — 32px, the sidebar header">
-            <LogoLockup size="md" tagline="Ports and travel, St. Kitts" />
-          </Figure>
-          <Figure label="sm — wordmark fallback, no badge">
-            <LogoLockup size="sm" />
+          <Figure label="compact — 24 in 32; widget, 404, mobile header">
+            <LogoLockup size="compact" />
           </Figure>
           <Figure label="nameHidden — the mark carries the name">
-            <LogoLockup size="lg" nameHidden />
-          </Figure>
-        </div>
-        <div className="rounded-md bg-navy p-4">
-          <Figure label="reversed on navy — badge withheld until the asset arrives" inverse>
-            <LogoLockup size="lg" variant="reversed" tagline="Ports and travel, St. Kitts" />
+            <LogoLockup nameHidden />
           </Figure>
         </div>
       </Section>
@@ -644,7 +1023,7 @@ function NavigationSection() {
         title="On a navy ground"
         note="Sidebar, widget header and landing hero. Measured against the WORSE endpoint of the gradient — see tests/contrast.test.ts."
       >
-        <div className="space-y-4 rounded-md bg-grad-sidebar p-4">
+        <div className="space-y-4 rounded-md border border-border bg-surface p-4">
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="onNavy">Ask a question</Button>
             <Button variant="onNavy" disabled>
@@ -658,10 +1037,10 @@ function NavigationSection() {
             </IconButton>
           </div>
 
-          <ScaspaMark reversed />
+          <ScaspaMark />
 
           {/* The 1px horizon, at the size it is actually used. */}
-          <div aria-hidden="true" className="h-px bg-hairline-horizon" />
+          <div aria-hidden="true" className="h-px bg-border" />
 
           <div className="space-y-1">
             <p className="text-small text-on-navy-primary">
@@ -682,68 +1061,43 @@ function NavigationSection() {
 
       <Section
         title="Sidebar — docked"
-        note="From lg up. Four facility groups, collapsed. No conversation history: the backend keeps conversations in memory for 60 minutes, lists none of them, and the privacy page says message content never reaches the device."
+        note="240px. Lockup, search, three nav groups, the recorded questions under a fade, the data-source card and the demonstration profile row. A recorded question RE-ASKS: history is never fed back into the prompt, so nothing here may imply a thread."
       >
         <div className="h-160 w-sidebar overflow-hidden rounded-md border border-border">
-          <Sidebar {...sidebarProps} sourceCount={0} knowledgeVerifiedAt={null} />
-        </div>
-      </Section>
-
-      {/*
-        Both widths, side by side and live.
-
-        The collapse is a width transition on the wrapper, so a static preview
-        of each state would show the two ends and none of the thing that
-        matters. The toggle here is wired to real state: press it and the rail
-        animates exactly as it does in the shell.
-      */}
-      <Section
-        title="Sidebar — collapsed rail, and the transition between"
-        note="64px, not 0 — a rail that collapses to nothing takes the navigation away and leaves the user hunting for the way back. Every destination survives: four facilities, new conversation, the source count and the phone number, each with a real accessible name behind its glyph. The state is not persisted; frontend/CLAUDE.md rule 5 permits one key in one storage and this is not it."
-      >
-        <div className="flex gap-4">
-          <div
-            className={cn(
-              'h-160 overflow-hidden rounded-md border border-border',
-              'transition-width',
-              railCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
-            )}
-          >
-            <Sidebar
-              {...sidebarProps}
-              sourceCount={3}
-              knowledgeVerifiedAt="2026-06-01"
-              collapsed={railCollapsed}
-              onToggleCollapsed={() => setRailCollapsed((value) => !value)}
-            />
-          </div>
-          <p className="text-caption text-ink-subtle">
-            Currently <strong>{railCollapsed ? 'collapsed' : 'expanded'}</strong>. Use the toggle at
-            the top of the rail. Tapping a facility while collapsed does both things at once — it
-            widens the rail and opens that group, because the tap meant &ldquo;show me this
-            one&rdquo;.
-          </p>
+          <Sidebar {...sidebarProps} onToggleCollapsed={() => {}} />
         </div>
       </Section>
 
       <Section
-        title="Sidebar — with sources and a verified date"
-        note="The source count is hidden at xl, where the panel is already docked. The verified-as-of line is omitted entirely when health is unavailable, rather than showing a placeholder."
-      >
-        <div className="h-160 w-sidebar overflow-hidden rounded-md border border-border">
-          <Sidebar {...sidebarProps} sourceCount={4} knowledgeVerifiedAt="2026-06-01" />
-        </div>
-      </Section>
-
-      <Section
-        title="Facility group — expanded"
-        note="A real disclosure: aria-expanded on the trigger, aria-controls pointing at a region that is unmounted when closed. Questions use the departure-board treatment, matching the starter chips."
+        title="Sidebar — with a data source and the demonstration profile"
+        note="The status card is absent until an ops response resolves rather than skeletoned: a placeholder in that slot would occupy the space reserved for a provenance claim without making one. The bottom row is NOT a user row — in production `profile` is null and it is not rendered at all."
       >
         <p className="text-caption text-ink-subtle">
-          Expand any group below. Last question sent: <strong>{lastAsked ?? 'none yet'}</strong>
+          Last question re-asked: <strong>{lastAsked ?? 'none yet'}</strong>
         </p>
         <div className="h-160 w-sidebar overflow-hidden rounded-md border border-border">
-          <Sidebar {...sidebarProps} sourceCount={2} knowledgeVerifiedAt="2026-06-01" />
+          <Sidebar
+            {...sidebarProps}
+            dataSource={{
+              kind: 'fixture',
+              label: 'Test fixture',
+              as_of: '2026-08-01T06:10:00Z',
+              notice: 'Figures come from the test fixture. Do not quote them to a customer.',
+            }}
+            profile={{
+              is_demo: true,
+              display_name: 'Basseterre operator',
+              division: 'Marine Operations',
+              agent_id: 'demo-1',
+              jurisdiction: 'St Kitts',
+              role: 'Operator',
+              last_sync: null,
+              active: true,
+              verified: true,
+              notice: 'A fixed demonstration object. It is not a sign-in and never becomes one.',
+            }}
+            advisoryCount={2}
+          />
         </div>
       </Section>
 
@@ -808,7 +1162,7 @@ function NavigationSection() {
           <IconButton
             ref={hamburgerRef}
             label="Open navigation"
-            variant="secondary"
+            variant="bordered"
             aria-expanded={drawerOpen}
             aria-controls="gallery-drawer"
             onClick={() => setDrawerOpen(true)}
@@ -826,12 +1180,7 @@ function NavigationSection() {
           returnFocusTo={hamburgerRef}
           id="gallery-drawer"
         >
-          <Sidebar
-            {...sidebarProps}
-            sourceCount={2}
-            knowledgeVerifiedAt="2026-06-01"
-            onNavigate={() => setDrawerOpen(false)}
-          />
+          <Sidebar {...sidebarProps} onNavigate={() => setDrawerOpen(false)} />
         </SidebarDrawer>
       </Section>
 
@@ -1281,9 +1630,36 @@ function VoiceSection() {
           <SpeakButton messageId="gallery-2" text="The last sailing back from Nevis is 18:00." />
         </div>
       </div>
+
+      {/*
+        §6.16's eight states, every one of which names the limit it hit and the
+        value that broke it. "That recording is 26.4 MB. The limit is 20 MB."
+        tells someone what to do; "file too large" tells them they failed.
+      */}
+      <div className="space-y-2 rounded-md border border-border bg-surface-muted p-3">
+        <p className="text-caption text-ink-subtle">
+          Transcription — eight states, each error naming its real limit. The transcript lands in
+          the composer, editable, and is never sent on the user&rsquo;s behalf.
+        </p>
+        {TRANSCRIPTION_STATES.map((state, index) => (
+          <TranscriptionResult key={index} state={state} />
+        ))}
+      </div>
     </div>
   );
 }
+
+/** Obviously-fake figures, per CLAUDE.md rule 5. */
+const TRANSCRIPTION_STATES: readonly TranscriptionState[] = [
+  { kind: 'working' },
+  { kind: 'placed', text: 'What is wharfage on a forty foot container at Port Zante' },
+  { kind: 'no-speech' },
+  { kind: 'unsupported-format' },
+  { kind: 'too-large', megabytes: 26.4 },
+  { kind: 'too-long', seconds: 74 },
+  { kind: 'rate-limited', retryAfterS: 26 },
+  { kind: 'unavailable' },
+];
 
 /** The five widths the layout is verified at. */
 const BREAKPOINTS = [320, 390, 768, 1024, 1440];

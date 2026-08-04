@@ -25,7 +25,7 @@ const TONES: Record<Tone, string> = {
   warning: 'bg-amber-surface text-amber-text',
   danger: 'bg-danger-surface text-danger',
   // Departure-board style: bright amber as a fill on a dark ground.
-  board: 'bg-amber-board text-navy-deep',
+  board: 'bg-amber-board text-ink-on-bright',
 };
 
 export function Badge({ tone = 'neutral', children, srPrefix }: BadgeProps) {

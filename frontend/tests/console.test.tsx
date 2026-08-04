@@ -11,8 +11,9 @@
  *   4. relative times that imply a precision the source does not have.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {
   RouterProvider,
   createMemoryHistory,
@@ -22,13 +23,12 @@ import {
 } from '@tanstack/react-router';
 import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
 import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
-import {
-  ActivityPanel,
-  GatePanel,
-  MapPanel,
-  MarineAdvisoryPanel,
-} from '@/components/ops/console/SidePanels';
+import { ActivityPanel } from '@/components/ops/console/SidePanels';
+import { MarineAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
+import { PositionMap } from '@/components/ops/PositionMap';
+import { GateMap } from '@/components/ops/GateMap';
 import { Pagination } from '@/components/ops/console/Pagination';
+import { ELLIPSIS, pageWindow } from '@/components/ops/console/pageWindow';
 import { buildActivityFeed, relativeTime } from '@/features/ops/activity';
 import { FIXTURE_SOURCE, MOCK_VESSELS, UNAVAILABLE_SOURCE } from '@/mocks/opsFixtures';
 
@@ -214,103 +214,27 @@ describe('the activity feed', () => {
 
 // ── 3. No map is claimed ─────────────────────────────────────────────────────
 
-describe('the map panels', () => {
-  it('says there is no positioning feed rather than showing a Live AIS badge', () => {
-    const { container } = render(<MapPanel />);
-    expect(screen.getByText(/No AIS or positioning feed is connected/i)).toBeInTheDocument();
+describe('the console panels — board 20', () => {
+  /*
+   * These moved out of `console/SidePanels` and into `ops/`, where §6.7–6.9
+   * draw them. The panels here were the pre-handoff versions; the RULES they
+   * carried are asserted below against the components that carry them now.
+   */
 
-    // Match the badge, not the word. The copy legitimately contains "live" —
-    // in "there is no live map to show", the sentence that exists to prevent
-    // exactly the reading this is checking for.
+  it('says there is no positioning feed rather than showing a Live AIS badge', () => {
+    // §6.7: "empty is the normal state" — a meta strip saying NO FEED, and the
+    // plot saying what would fill it.
+    const { container } = render(<PositionMap positions={[]} source={UNAVAILABLE_SOURCE} />);
+    expect(screen.getByText('No positions are being reported')).toBeInTheDocument();
+    expect(screen.getByText(/No AIS receiver is connected/i)).toBeInTheDocument();
+
+    // Match the badge, not the word.
     expect(container.textContent).not.toMatch(/live (ais|data|feed|map view)/i);
     expect(screen.queryByRole('button', { name: /open .*map/i })).toBeNull();
-
-    // And it routes to someone who does know.
-    expect(screen.getByRole('link', { name: /Call/ })).toHaveAttribute(
-      'href',
-      expect.stringContaining('tel:')
-    );
-  });
-
-  it('the gate panel points at the published gate column when there is no feed', () => {
-    render(<GatePanel />);
-    expect(screen.getByText(/no apron feed connected/i)).toBeInTheDocument();
-    expect(screen.queryByText(/real-time/i)).toBeNull();
   });
 
   /*
-   * There is a gate feed now, and it changed what this panel does. What it did
-   * NOT change is the claim: the design asks for "real-time aircraft
-   * positioning and passenger flow across the terminal apron", and occupancy
-   * per stand is neither of those. So the populated panel is a grid of stands
-   * and still says nothing about aircraft, position or passengers.
-   */
-  it('the gate panel lists stands without claiming to be an apron view', () => {
-    render(
-      <GatePanel
-        gates={[
-          {
-            gate: 'Z1',
-            status: 'occupied',
-            flight_number: 'ZZ111',
-            airline: 'Placeholder Air',
-            scheduled_at: null,
-          },
-          { gate: 'Z2', status: 'free', flight_number: null, airline: '', scheduled_at: null },
-        ]}
-        active={1}
-        total={2}
-      />
-    );
-
-    expect(screen.getByText('Z1')).toBeInTheDocument();
-    expect(screen.getByText('Occupied')).toBeInTheDocument();
-    expect(screen.getByText('Free')).toBeInTheDocument();
-    // The count comes from the response, not from recounting the rows here.
-    expect(screen.getByText(/1 of 2 in use/)).toBeInTheDocument();
-    expect(screen.queryByText(/real-time/i)).toBeNull();
-    expect(screen.queryByText(/passenger flow/i)).toBeNull();
-  });
-
-  /*
-   * The one panel whose silence could be acted on.
-   *
-   * A skipper reading an empty advisory box may conclude conditions are fine.
-   * This assistant has no idea whether they are, so the empty state has to say
-   * that in words — and must never render a tick, a green chip or the word
-   * "clear", none of which a hurried reader distinguishes from an all-clear.
-   */
-  it('an empty marine advisory panel does not read as an all-clear', () => {
-    render(<MarineAdvisoryPanel />);
-
-    expect(screen.getByText(/not a statement that conditions are safe/i)).toBeInTheDocument();
-    for (const word of [/all[- ]clear/i, /\bclear\b/i, /\bsafe to sail\b/i, /\bno warnings\b/i]) {
-      expect(screen.queryByText(word)).toBeNull();
-    }
-  });
-
-  it('a marine advisory says its severity in words, not only in colour', () => {
-    render(
-      <MarineAdvisoryPanel
-        advisories={[
-          {
-            id: 'ma-1',
-            port: 'Placeholder Port',
-            headline: 'Sample advisory — not a real notice to mariners',
-            detail: 'Placeholder text.',
-            severity: 'moderate',
-            issued_at: null,
-          },
-        ]}
-      />
-    );
-
-    expect(screen.getByText(/Moderate severity/)).toBeInTheDocument();
-    expect(screen.getByText(/Not an official notice to mariners/i)).toBeInTheDocument();
-  });
-
-  /*
-   * Positions are a list, not a map.
+   * Positions are a list, not a chart.
    *
    * A chart is the most confident element a screen can carry: a reader takes
    * proximity and distance-to-shore off the picture, none of which this data
@@ -318,9 +242,10 @@ describe('the map panels', () => {
    * over the panel, because a transponder fix and a typed-in position are
    * different claims that a single badge would flatten into one.
    */
-  it('the map panel names who reported each position', () => {
+  it('names who reported each position, and never prints a null as zero', () => {
     render(
-      <MapPanel
+      <PositionMap
+        source={FIXTURE_SOURCE}
         positions={[
           {
             id: 'fx-vessel-1',
@@ -346,13 +271,103 @@ describe('the map panels', () => {
       />
     );
 
-    expect(screen.getByText(/Reported by AIS transponder/)).toBeInTheDocument();
-    expect(screen.getByText(/Reported manually/)).toBeInTheDocument();
+    expect(screen.getByText(/AIS fix/)).toBeInTheDocument();
+    expect(screen.getByText(/Operator entry/)).toBeInTheDocument();
     // Hemispheres, not signed decimals — a minus sign meaning "south" is a
     // database convention, not a chart one.
     expect(screen.getByText(/17\.100°N 62\.900°W/)).toBeInTheDocument();
-    // A null speed is omitted rather than printed as zero.
+    /*
+     * §6.7: "Null heading draws no arrow at all. **Null speed is never 0
+     * knots** — that would say the vessel is stopped." Both say so in words.
+     */
+    expect(screen.getAllByText(/not reported/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/0\.0 kn/)).toBeNull();
+  });
+
+  it('points at the published gate column when there is no apron feed', () => {
+    render(<GateMap gates={[]} active={0} total={0} />);
+    expect(screen.getByText(/No apron feed is connected/i)).toBeInTheDocument();
+    expect(screen.queryByText(/real-time/i)).toBeNull();
+  });
+
+  /*
+   * There is a gate feed, and it changed what this panel does. What it did NOT
+   * change is the claim: the design asks for "real-time aircraft positioning
+   * and passenger flow across the terminal apron", and occupancy per stand is
+   * neither of those.
+   */
+  it('lists stands without claiming to be an apron view, and counts from the server', () => {
+    render(
+      <GateMap
+        active={1}
+        total={8}
+        gates={[
+          {
+            gate: 'Z1',
+            status: 'occupied',
+            flight_number: 'ZZ111',
+            airline: 'Placeholder Air',
+            scheduled_at: null,
+          },
+          { gate: 'Z2', status: 'free', flight_number: null, airline: '', scheduled_at: null },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('Z1')).toBeInTheDocument();
+    // Family B's own labels — `occupied` is drawn "Open", `free` is "Unassigned".
+    expect(screen.getByText('Open')).toBeInTheDocument();
+    expect(screen.getByText('Unassigned')).toBeInTheDocument();
+    /*
+     * §6.8: "**The active count comes from the server.** It is never recomputed
+     * from the visible rows, which would drop to zero under a filter." Two rows
+     * on screen, and the header still reads the response's 1 of 8.
+     */
+    expect(screen.getByText('1 active of 8')).toBeInTheDocument();
+    expect(screen.queryByText(/real-time/i)).toBeNull();
+    expect(screen.queryByText(/passenger flow/i)).toBeNull();
+  });
+
+  /*
+   * The one panel whose silence could be acted on.
+   *
+   * A skipper reading an empty advisory box may conclude conditions are fine.
+   * This assistant has no idea whether they are, so the empty state has to say
+   * that in words — and must never render a tick, a green chip or the word
+   * "clear", none of which a hurried reader distinguishes from an all-clear.
+   */
+  it('an empty marine advisory panel does not read as an all-clear', () => {
+    render(<MarineAdvisoryPanel advisories={[]} total={0} />);
+
+    expect(screen.getByText('No notice has been published to this assistant')).toBeInTheDocument();
+    expect(screen.getByText(/not confirmation that conditions are normal/i)).toBeInTheDocument();
+    // And it gives the number to ring, which "telephone Marine Operations"
+    // alone does not.
+    expect(screen.getByRole('link', { name: /869/ })).toBeInTheDocument();
+    for (const word of [/all[- ]clear/i, /\bclear\b/i, /\bsafe to sail\b/i, /\bno warnings\b/i]) {
+      expect(screen.queryByText(word)).toBeNull();
+    }
+  });
+
+  it('a marine advisory says its severity in words, not only in colour', () => {
+    render(
+      <MarineAdvisoryPanel
+        total={1}
+        advisories={[
+          {
+            id: 'ma-1',
+            port: 'Placeholder Port',
+            headline: 'Sample advisory — not a real notice to mariners',
+            detail: 'Placeholder text.',
+            severity: 'moderate',
+            issued_at: null,
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('Warning')).toBeInTheDocument();
+    expect(screen.getByText(/Not an official notice to mariners/i)).toBeInTheDocument();
   });
 });
 
@@ -363,14 +378,14 @@ describe('pagination', () => {
     render(
       <Pagination offset={0} limit={10} total={42} onOffsetChange={() => {}} noun="arrivals" />
     );
-    expect(screen.getByText('Showing 1–10 of 42 arrivals')).toBeInTheDocument();
+    expect(screen.getByText('Showing 1–10 of 42')).toBeInTheDocument();
   });
 
   it('clamps the range to the total on the last page', () => {
     render(
       <Pagination offset={40} limit={10} total={42} onOffsetChange={() => {}} noun="arrivals" />
     );
-    expect(screen.getByText('Showing 41–42 of 42 arrivals')).toBeInTheDocument();
+    expect(screen.getByText('Showing 41–42 of 42')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
 
@@ -381,11 +396,86 @@ describe('pagination', () => {
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
   });
 
-  it('says "No arrivals" rather than "Showing 0–0 of 0"', () => {
-    render(
+  it('renders no control at all at zero results', () => {
+    /*
+     * Board 01: "The table and the pagination control are both removed — an
+     * empty table with a 'Showing 0–0 of 0' readout reads as a fault."
+     *
+     * This used to say "No arrivals" here. That is still true and still worth
+     * saying — it just belongs in the empty state, next to the active filters
+     * and the one action that clears them, rather than in a paging control that
+     * has nothing to page.
+     */
+    const { container } = render(
       <Pagination offset={0} limit={10} total={0} onOffsetChange={() => {}} noun="arrivals" />
     );
-    expect(screen.getByText('No arrivals')).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('collapses to the readout when everything fits on one page', () => {
+    render(
+      <Pagination offset={0} limit={100} total={42} onOffsetChange={() => {}} noun="arrivals" />
+    );
+    expect(screen.getByText('Showing 1–42 of 42')).toBeInTheDocument();
+    // Arrows that can never fire are furniture.
+    expect(screen.queryByRole('button', { name: /page/i })).toBeNull();
+  });
+
+  it('numbers the pages and marks the current one', () => {
+    render(
+      <Pagination offset={25} limit={25} total={100} onOffsetChange={() => {}} noun="vessels" />
+    );
+    expect(screen.getByText('Showing 26–50 of 100')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Page 2 of 4' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+    expect(screen.getByRole('button', { name: 'Page 1 of 4' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('keeps a disabled arrow in the row rather than removing it', () => {
+    // "The control must not reflow as the user pages" — an arrow that vanishes
+    // at the first page moves every other control sideways at the exact moment
+    // somebody is aiming at one.
+    render(
+      <Pagination offset={0} limit={25} total={100} onOffsetChange={() => {}} noun="vessels" />
+    );
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeEnabled();
+  });
+
+  it('jumps to the offset a page number stands for', async () => {
+    const user = userEvent.setup();
+    const onOffsetChange = vi.fn();
+    render(
+      <Pagination
+        offset={0}
+        limit={25}
+        total={100}
+        onOffsetChange={onOffsetChange}
+        noun="vessels"
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Page 3 of 4' }));
+    expect(onOffsetChange).toHaveBeenCalledWith(50);
+  });
+});
+
+describe('the page window', () => {
+  it('shows every page up to five, without a gap', () => {
+    expect(pageWindow(1, 4)).toEqual([1, 2, 3, 4]);
+    expect(pageWindow(3, 5)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('elides the middle of a long run, keeping first, last and the neighbours', () => {
+    expect(pageWindow(1, 20)).toEqual([1, 2, ELLIPSIS, 20]);
+    expect(pageWindow(10, 20)).toEqual([1, ELLIPSIS, 9, 10, 11, ELLIPSIS, 20]);
+    expect(pageWindow(20, 20)).toEqual([1, ELLIPSIS, 19, 20]);
+  });
+
+  it('fills a gap of exactly one rather than eliding it', () => {
+    // "1 … 3" is the same width as "1 2 3" and tells the reader less.
+    expect(pageWindow(4, 10)).toEqual([1, 2, 3, 4, 5, ELLIPSIS, 10]);
   });
 });
 

@@ -15,3 +15,4 @@ timestamp,label,git_sha,kb_version,questions,hit_at_1,hit_at_3,hit_at_5,mrr,fact
 2026-07-30T12:38:00+00:00,C-stab,f4c2fc2,2026-06-01,15,0.6364,1.0,1.0,0.8182,,,,,,,True,True,False,False,0.3,5,False
 2026-07-30T12:38:01+00:00,C-stab,f4c2fc2,2026-06-01,15,0.6364,1.0,1.0,0.8182,,,,,,,True,True,False,False,0.3,5,False
 2026-07-30T12:40:07+00:00,shipped-defaults,f4c2fc2,2026-06-01,15,0.6364,1.0,1.0,0.8182,,,,,,,True,True,False,False,0.3,5,False
+2026-08-03T23:42:08+00:00,m1-real-kb,587ee94,2026-07-31,15,0.7273,0.8182,0.8182,0.7727,0.5,0.2,0.1,0.7,0,2975,True,True,False,False,0.3,5,True

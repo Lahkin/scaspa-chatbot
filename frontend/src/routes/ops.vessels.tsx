@@ -4,15 +4,23 @@ import { Button, Input } from '@/components/ui';
 import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
 import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
 import { Pagination } from '@/components/ops/console/Pagination';
-import { ActivityPanel, MapPanel, MarineAdvisoryPanel } from '@/components/ops/console/SidePanels';
+import { ActivityPanel } from '@/components/ops/console/SidePanels';
+import { MarineAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
+import { PositionMap } from '@/components/ops/PositionMap';
+import { HealthPanel } from '@/components/ops/HealthPanel';
+import { IndexStatusPanel } from '@/components/ops/IndexStatusPanel';
+import { useHealth } from '@/features/chat/queries';
+import { config as appConfig } from '@/lib/config';
 import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState } from '@/components/ops/OpsPage';
 import { SourceAge, SourceNotice } from '@/components/ops/SourceNotice';
 import { VesselStatusChip } from '@/components/ops/StatusChip';
+import { ActualTime, EstimatedTime } from '@/components/ops/TimeCell';
 import { useMarineAdvisories, useVesselPositions, useVessels } from '@/features/ops/queries';
 import { useNow } from '@/lib/hooks/useNow';
 
 const PAGE_SIZE = 10;
+const COLUMNS = ['Vessel', 'IMO', 'Type', 'Agent', 'Berth', 'ETA', 'ATA', 'Status'] as const;
 
 /**
  * `/ops/vessels` — the design's `vessel_arrivals` desktop screen.
@@ -38,6 +46,7 @@ function OpsVesselsRoute() {
   // and a future real AIS integration may be slow without slowing the table.
   const positions = useVesselPositions();
   const marine = useMarineAdvisories();
+  const health = useHealth();
 
   const query = useVessels({
     limit: PAGE_SIZE,
@@ -65,8 +74,24 @@ function OpsVesselsRoute() {
       aside={
         <>
           <ActivityPanel vessels={vessels} source={data?.source} now={now} />
-          <MapPanel positions={positions.data?.positions} source={positions.data?.source} />
-          <MarineAdvisoryPanel advisories={marine.data?.advisories} source={marine.data?.source} />
+          {/*
+            §6.7 and §6.9, from `ops/` rather than `console/SidePanels`.
+            Both existed twice: the console kept its own pre-handoff versions —
+            a heading and a paragraph for positions, and a marine panel whose
+            empty state was a different sentence in a neutral fill. §6.9's empty
+            state is the one place in the product where a wrong sentence has
+            physical consequences, so there is one of it now.
+          */}
+          {positions.data ? (
+            <PositionMap positions={positions.data.positions} source={positions.data.source} />
+          ) : null}
+          <MarineAdvisoryPanel
+            advisories={marine.data?.advisories ?? []}
+            total={marine.data?.total ?? 0}
+          />
+          {/* §6.11 and §6.12 — the health and index panels have no other home. */}
+          <HealthPanel health={health} voiceEnabled={appConfig.features.voice} />
+          {health ? <IndexStatusPanel index={health.index} /> : null}
         </>
       }
     >
@@ -113,6 +138,8 @@ function OpsVesselsRoute() {
       </form>
 
       <OpsListState
+        // §7.5's one skeleton, with the headings that keep the shape stable.
+        columns={COLUMNS}
         isLoading={query.isPending}
         error={query.error ?? null}
         isEmpty={vessels.length === 0}
@@ -138,14 +165,23 @@ function OpsVesselsRoute() {
                 <Th>Type</Th>
                 <Th>Agent</Th>
                 <Th>Berth</Th>
-                <Th>Arrival</Th>
+                {/*
+                  ── TWO COLUMNS, AND THEY WERE ONE ────────────────────────────
+                  This was a single "Arrival" column printing whichever of the
+                  two existed, with `Actual` / `Estimated` in a caption beneath.
+                  Global rule 2 and §5.4 both refuse it: "One is a prediction,
+                  one is a record. **That distinction is the entire point of
+                  having two fields.**" A caption under a figure is read after
+                  the figure has been believed, and it is the first thing lost
+                  when a column is narrow.
+                */}
+                <Th>ETA</Th>
+                <Th>ATA</Th>
                 <Th>Status</Th>
               </>
             }
           >
             {vessels.map((vessel, index) => {
-              const arrived = Boolean(vessel.ata);
-              const stamp = vessel.ata ?? vessel.eta;
               return (
                 <Tr key={vessel.id} index={index}>
                   <Td>
@@ -159,21 +195,16 @@ function OpsVesselsRoute() {
                   <Td muted nowrap>
                     {vessel.berth || '—'}
                   </Td>
+                  {/*
+                    §5.4's cells, from the one place that draws them: the tilde,
+                    the italic and the weight carry the difference at once, so it
+                    survives greyscale and a screen reader.
+                  */}
                   <Td nowrap>
-                    {stamp ? (
-                      <>
-                        <time dateTime={stamp}>{formatStamp(stamp)}</time>
-                        {/* The ETA/ATA distinction, in the cell rather than in a
-                            column header a scrolled-away reader cannot see. A
-                            prediction read as a record is how someone drives to
-                            a port for a ship that has not arrived. */}
-                        <span className="block text-caption text-ops-ink-variant">
-                          {arrived ? 'Actual' : 'Estimated'}
-                        </span>
-                      </>
-                    ) : (
-                      '—'
-                    )}
+                    <EstimatedTime value={vessel.eta} />
+                  </Td>
+                  <Td nowrap>
+                    <ActualTime value={vessel.ata} />
                   </Td>
                   <Td nowrap>
                     <VesselStatusChip status={vessel.status} />
@@ -194,17 +225,6 @@ function OpsVesselsRoute() {
       ) : null}
     </ConsoleShell>
   );
-}
-
-function formatStamp(iso: string): string {
-  const when = new Date(iso);
-  if (Number.isNaN(when.getTime())) return iso;
-  return when.toLocaleString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export const Route = createFileRoute('/ops/vessels')({

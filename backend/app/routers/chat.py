@@ -116,14 +116,18 @@ def _to_response(
     request_id: str,
     kb_version: str | None,
     card: AssistantCard | None = None,
+    question_sanitised: str | None = None,
 ) -> ChatResponse:
     """Map the service result onto the wire shape."""
     return ChatResponse(
         answer=result.answer,
         conversation_id=conversation_id,
+        question_sanitised=question_sanitised,
         grounded=result.grounded,
         refusal=result.refusal,
         refusal_category=result.refusal_category,
+        answer_replaced=result.answer_replaced,
+        step_limit_reached=result.hit_tool_limit,
         citations=[Citation(**c.model_dump()) for c in result.citations],
         chart=result.chart,
         card=card,
@@ -201,7 +205,17 @@ async def post_chat(
     # measurable change.
     store.append(conversation_id, message, result.answer)
 
-    return _to_response(result, conversation_id, request_id, kb_version, _card_for(result, source))
+    return _to_response(
+        result,
+        conversation_id,
+        request_id,
+        kb_version,
+        _card_for(result, source),
+        # Only when safety actually changed the question. Echoing it back
+        # unchanged would make every client compare two identical strings to
+        # decide whether to show a notice.
+        question_sanitised=message if message != payload.message else None,
+    )
 
 
 def sse(event: str, data: dict) -> str:
@@ -232,14 +246,30 @@ async def post_chat_stream(
     inline and reconciles against `citations` when it arrives.
     """
     enforce_rate_limit(request, limiter, scope="chat")
-    message, _injections = clean_message(payload, settings)
+    message, injections = clean_message(payload, settings)
+    if injections:
+        # Logged on both routes now. The stream used to discard the result of its
+        # own safety pass, so a neutralised question was invisible in the logs
+        # and invisible to the client.
+        logger.warning("injection_neutralised route=/api/chat/stream count=%d", len(injections))
     kb_version = _require_index(settings)
     conversation_id = store.adopt_or_mint(payload.conversation_id)
     request_id = getattr(request.state, "request_id", "-")
 
     async def generate() -> AsyncIterator[str]:
         # Sent before any token so the client can attach state immediately.
-        yield sse("meta", {"conversation_id": conversation_id})
+        #
+        # `question_sanitised` rides on `meta` rather than on `done` because it
+        # describes what was SENT, not what came back — the user's own words
+        # changed on screen and the correction belongs there before the answer
+        # starts arriving, not after it has finished.
+        yield sse(
+            "meta",
+            {
+                "conversation_id": conversation_id,
+                "question_sanitised": message if message != payload.message else None,
+            },
+        )
 
         pieces: list[str] = []
         try:

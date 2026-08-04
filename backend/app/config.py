@@ -187,7 +187,12 @@ class Settings(BaseSettings):
     RETRIEVAL_HYBRID_SEMANTIC_WEIGHT: float = Field(default=0.5, ge=0.0, le=1.0)
 
     # --- Paths ------------------------------------------------------------
-    KB_CSV_PATH: Path = Path("../data/knowledge/latest.csv")
+    # Points at the dated export the researchers actually delivered, not at a
+    # `latest.csv` pointer. The pointer convention still works — `build_kb_index`
+    # resolves a symlink and records the real filename — but nothing in this repo
+    # creates one, so a `latest.csv` default meant a fresh checkout resolved to a
+    # file that does not exist and indexed nothing, silently.
+    KB_CSV_PATH: Path = Path("../data/knowledge/scaspa_kb_2026-07-31.csv")
     CHROMA_DIR: Path = Path("../data/chroma")
     SCRAPED_DIR: Path = Path("../data/scraped")
 

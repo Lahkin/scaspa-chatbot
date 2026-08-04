@@ -110,7 +110,7 @@ for when the *service* broke, not for when the *answer* is "I don't know".
 | --- | --- | --- | --- |
 | `message` | `string` | yes | 1–1000 characters. Whitespace-only is rejected |
 | `conversation_id` | `string \| null` | no | Omit on the first request; send back what you were given. Anything that is not a well-formed UUID is replaced with a fresh id |
-| `category` | `string \| null` | no | Optional retrieval filter: `ferry`, `cargo`, `cruise`, `airport`, `general`. Anything else is a **422** |
+| `category` | `string \| null` | no | Optional retrieval filter: `ferry`, `cargo`, `cruise`, `airport`, `general`, `marine`, `payments`, `access`, `jobs`, `corporate`. Anything else is a **422** |
 
 **About `category`.** It is a hard constraint, not a hint. It restricts
 retrieval to rows in that area and it **overrides** the category the agent would
@@ -137,6 +137,9 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 | `grounded` | `boolean` | See the warning below |
 | `refusal` | `boolean` | True when the assistant declined |
 | `refusal_category` | `string \| null` | `vessel_or_aircraft_operations`, `personal_record`, or null |
+| `question_sanitised` | `string \| null` | The question as actually sent, when input safety changed it. See below |
+| `answer_replaced` | `boolean` | The draft was discarded as ungrounded and rewritten. See below |
+| `step_limit_reached` | `boolean` | The agent ran out of tool calls. **Not** the same as "not in our data" |
 | `citations` | `Citation[]` | Verified sources, built from stored metadata |
 | `chart` | `ChartSpec \| null` | A chart to render, or null. Usually null |
 | `card` | `AssistantCard \| null` | An interactive card to render below the answer, or null |
@@ -153,7 +156,7 @@ has none. Do not require it.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `kb_id` | `string` | The row id, matching the `[kb-xxx]` marker |
-| `category` | `string` | `ferry`, `cargo`, `cruise`, `airport`, `general` |
+| `category` | `string` | `ferry`, `cargo`, `cruise`, `airport`, `general`, `marine`, `payments`, `access`, `jobs`, `corporate` |
 | `subcategory` | `string` | Narrower topic, e.g. `fares` |
 | `source_url` | `string` | The published source |
 | `source_type` | `string` | `official-site`, `official-pdf`, `client-interview`, `press`, `regulator` |
@@ -167,10 +170,17 @@ Every field is copied from the stored metadata of a row that was really
 retrieved. **None of it is model output**, and none of it is inferred.
 
 > **`volatility` is `null` when the row has none, and that is not the same as
-> `low`.** Treat an absent or unrecognised value as `high`. The failure that
-> matters here is a stale ferry departure shown quietly as a confident fact, so
-> the unknown case has to be the cautious one. Do not let a missing field
-> downgrade a schedule.
+> `low`.** Render an absent or unrecognised value as `medium` — "changes often"
+> — and mark it as defaulted rather than reported. The failure that matters here
+> is a stale ferry departure shown quietly as a confident fact, so the unknown
+> case has to be a cautious one, and it must still carry the
+> confirm-before-you-rely-on-it line. Do not let a missing field downgrade a
+> schedule to `low` or to `static`.
+>
+> This paragraph said `high` until the design handoff landed. The handoff names
+> the rendering explicitly in two places — §1.2 Family A and §3.7 — and adds the
+> signal the stricter rule never had: a ring around the badge, so a reviewer can
+> see that the value was supplied by the fallback rather than measured.
 
 `snippet` is truncated server-side at 180 characters and **only ever cut at
 whitespace**, so a figure is never split — `XCD 44.44` cannot arrive as
@@ -228,6 +238,51 @@ Example:
 
 `ToolCall`: `name`, `summary`, `ms`. `summary` is written to be rendered
 directly, e.g. `"Searching SCASPA knowledge base — ferry fares"`.
+
+> ### `answer_replaced` and `step_limit_reached`
+>
+> Both are computed on every turn. Both used to be dropped at the wire boundary,
+> which left a client able to see that *an* answer came back but not that it had
+> been rewritten, nor that it stopped early.
+>
+> **`answer_replaced`** is true when the drafted answer carried a money or time
+> value that could not be matched to a retrieved row, so the draft was thrown
+> away and the answer rebuilt from published figures. The user is reading
+> something different from what was written, and a client that says so on every
+> answer is lying while one that says so on none is hiding a correction. Show the
+> notice on exactly these.
+>
+> **`step_limit_reached`** is true when the agent hit its tool-call cap before
+> finishing. It is a different failure from "we do not hold that", and it takes
+> different copy: *"ask for one thing at a time"* resolves this one and sends the
+> other group round in circles, because no amount of simplifying reaches a fact
+> the knowledge base does not contain. When it is true, `replace` has already
+> carried the text to show (streaming) and `refusal` is `true`.
+>
+> Both default to `false`. A client parsing a response from a build that predates
+> them gets the behaviour it had before they existed.
+
+> ### `question_sanitised` — when the user's own words changed
+>
+> Input safety neutralises instruction-override phrasing rather than rejecting
+> it, because *"ignore the sign at the gate"* is a reasonable thing for a
+> traveller to type. The matched span is replaced **in place** with the literal
+> marker `[instruction-like text removed]`, so the position in the sentence
+> survives.
+>
+> This field carries the resulting text, and is `null` when nothing changed —
+> which is almost always. It rides on `meta` in the stream rather than on `done`,
+> because it describes what was **sent**: the correction belongs on screen before
+> the answer starts arriving, not after it has finished.
+>
+> Two obligations for a client:
+>
+> 1. **Show it instead of the draft the user typed.** Rendering the original
+>    while the assistant answered something else is the interface lying about
+>    what it sent.
+> 2. **Never reconstruct the removed text.** Only the marker crosses the wire.
+>    Echoing an injection attempt back into the DOM shows the next person exactly
+>    which wording to try.
 
 > ### What `grounded` actually means
 >
@@ -361,7 +416,7 @@ defeat the point).
 ### Event sequence
 
 ```
-event: meta        → { "conversation_id": "..." }
+event: meta        → { "conversation_id": "...", "question_sanitised": null }
 event: tool_start  → { "name", "summary" }
 event: tool_end    → { "name", "summary", "ms" }
 event: token       → { "text": "..." }              (repeated)
@@ -369,7 +424,8 @@ event: replace     → { "text": "..." }              (rare — see below)
 event: citations   → { "citations": [ Citation ] }
 event: chart       → ChartSpec                      (only when there is a chart)
 event: card        → AssistantCard                  (only when there is a card)
-event: done        → { "latency_ms", "grounded", "refusal", "refusal_category", "kb_version" }
+event: done        → { "latency_ms", "grounded", "refusal", "refusal_category",
+                       "answer_replaced", "step_limit_reached", "kb_version" }
 event: error       → { "code", "message", "request_id" }
 ```
 
@@ -417,11 +473,12 @@ discard everything accumulated from `token` so far and render `replace.text`.
 
 ### The `done` event
 
-Same fields the non-streaming response carries, including `refusal_category`, so
-a streamed refusal can pick the same specific copy. `kb_version` and
-`refusal_category` are both nullable. **Parse `done` tolerantly**: it is the last
-event, so a client that rejects it has no later event to recover on and the
-answer stays stuck mid-stream forever.
+Same fields the non-streaming response carries, including `refusal_category`,
+`answer_replaced` and `step_limit_reached`, so a streamed answer loses no
+distinction by being streamed. `kb_version` and `refusal_category` are both
+nullable; the two booleans default to `false`. **Parse `done` tolerantly**: it is
+the last event, so a client that rejects it has no later event to recover on and
+the answer stays stuck mid-stream forever.
 
 Guarantees:
 
@@ -769,6 +826,30 @@ to boot. `profile.is_demo` is a required literal `true` and `profile.notice` is
 required non-empty; a client must render that notice at least as prominently as
 the card.
 
+### Filtering and paging on the three list endpoints
+
+Every filter below is applied **server-side**, and `total` is the count of
+matching records **after** filtering and **before** paging. That is what makes
+the range readout (`Showing 1–25 of 100`) true, and it is why a client must not
+filter the rows it was handed: filtering a page while quoting the unfiltered
+total describes a result set that does not exist.
+
+| Endpoint | Filters | Paging |
+| --- | --- | --- |
+| `GET /api/vessels` | `q` (name or IMO, substring, case-insensitive) · `vessel_type` · `berth` · `status` | `limit` 1–100, default 25 · `offset` |
+| `GET /api/flights` | `q` (flight number or port) · `airline` · `status` · `direction` (`arrival` / `departure`) | `limit` 1–100, default 25 · `offset` |
+| `GET /api/tariffs` | `q` (code or description) · `category` | `limit` 1–100, default 100 · `offset` |
+
+`metrics` on `/api/vessels` and `/api/flights` describes **the feed, not the
+query**: it is unaffected by every parameter above, including `direction`. So
+`FlightMetrics.total_flights` counts arrivals and departures together whatever
+`direction` was asked for, and it is not a count of either one. A client that
+labels it "Arrivals today" is publishing a wrong figure under a right-looking
+label.
+
+**Positions, gates and advisories take no parameters at all** — they return the
+complete set with a total. Do not send `limit` or `offset` to them.
+
 ### `DataSource`, on every operations response
 
 | Field | Type | Notes |
@@ -827,6 +908,26 @@ Applies published rates to the quantities you send and totals them.
 > required: a quote arriving without them is a contract violation, and rendering
 > a bare total is worse than rendering nothing, because someone will budget a
 > shipment against it.
+
+> ### `unpriced` — the total that is short by a whole charge
+>
+> `unpriced` lists codes that **applied to this movement and have no published
+> rate**. They appear in no `line_items` entry and in no figure, so nothing else
+> in the response reveals that anything is missing: a quote with a dropped charge
+> is byte-for-byte as tidy as a complete one.
+>
+> When `unpriced` is non-empty the total is not the amount payable, and the three
+> rules above are not enough on their own — the disclaimer covers *"confirmed on
+> invoice"*, which is about rounding and revision, not about a charge that was
+> never counted. So a client must additionally:
+>
+> 1. Label the figure **"Total so far"**, not "Total".
+> 2. Name what is missing, by code, in the lines where it would have appeared.
+> 3. Say that the amount payable is higher and point at the department.
+>
+> The array is empty on a complete quote, which is the overwhelmingly common
+> case. A silently dropped charge is the worst outcome this endpoint can produce,
+> and it was previously only visible in a server log line.
 
 Only `XCD` is accepted. Converting a published fee applies an exchange rate
 nobody published — a **422**, not a silent conversion.

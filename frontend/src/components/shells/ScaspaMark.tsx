@@ -1,64 +1,21 @@
-import { cn } from '@/lib/cn';
+import { LogoLockup } from '@/components/brand/LogoLockup';
 
 /**
- * The SCASPA mark.
+ * The compact lockup — 24px seal inside a 32px white plate.
  *
- * A wordmark, not a logo file. The real asset is a client deliverable and has not
- * been supplied; inventing one — or lifting the image off scaspa.com — would put a
- * fake identity in front of judges and passengers. So this is honest typography
- * that reads as a placeholder to anyone who knows, and as a title to anyone who
- * does not, and swapping it for the real asset is a one-file change.
+ * The handoff names three places for it: the widget header, the 404 header and
+ * the mobile header. It is `LogoLockup` at its second size and nothing else;
+ * this file survives as the name those three shells already import, and because
+ * the switchboard number below has to live somewhere a component can reach
+ * without pulling in the whole facts module.
+ *
+ * It used to draw its own plate, its own wordmark and a "Ports and travel,
+ * St. Kitts" sub-line. The handoff's lockup is the seal and the string
+ * `SCASPA Assistant`, full stop — no tagline, no second line — so the duplicate
+ * implementation went rather than being kept in step by hand.
  */
-export function ScaspaMark({
-  compact = false,
-  /**
-   * For a navy ground — the widget's `--grad-rail` header.
-   *
-   * The navy tile would disappear into it, so reversed inverts the tile to a
-   * light chip with navy type rather than recolouring the type on a navy tile
-   * that is no longer distinguishable from its surroundings. Same reasoning as
-   * `LogoLockup`'s reversed variant, and the same rule: never a mid-tone
-   * ground, never a tinted asset.
-   */
-  reversed = false,
-}: {
-  compact?: boolean;
-  reversed?: boolean;
-}) {
-  return (
-    <span className="flex min-w-0 items-center gap-2">
-      <span
-        aria-hidden="true"
-        className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-sm text-caption font-bold',
-          reversed ? 'bg-neutral-0 text-navy' : 'bg-navy text-ink-inverse'
-        )}
-      >
-        SC
-      </span>
-      <span className="min-w-0">
-        <span
-          className={cn(
-            'block truncate leading-tight font-semibold',
-            compact ? 'text-small' : 'text-body',
-            reversed && 'text-on-navy-primary'
-          )}
-        >
-          SCASPA Assistant
-        </span>
-        {!compact && (
-          <span
-            className={cn(
-              'hidden text-caption sm:block',
-              reversed ? 'text-on-navy-secondary' : 'text-ink-subtle'
-            )}
-          >
-            Ports and travel, St. Kitts
-          </span>
-        )}
-      </span>
-    </span>
-  );
+export function ScaspaMark() {
+  return <LogoLockup size="compact" />;
 }
 
 /**

@@ -14,7 +14,6 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ChartBlock } from '@/components/chat/ChartBlock';
 import { ChartDataTable } from '@/components/chat/ChartDataTable';
 import { MessageBubble } from '@/components/chat/MessageBubble';
@@ -39,6 +38,12 @@ import type { ChartSpec } from '@/lib/types';
 
 // ── Task 1: the spec, consumed exactly ───────────────────────────────────────
 
+/** The caption now shares its element with the source chip, so it is matched
+ *  as a substring rather than by exact text. */
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 describe('the ChartSpec is consumed as sent', () => {
   it('renders every field the contract defines', () => {
     render(<ChartBlock spec={CHART_VESSEL_CALLS} />);
@@ -48,8 +53,9 @@ describe('the ChartSpec is consumed as sent', () => {
     expect(chart.getAttribute('aria-label')).toContain('Vessel calls per year');
     expect(chart.getAttribute('aria-label')).toContain('calls');
 
-    // caption, verbatim
-    expect(screen.getByText(CHART_VESSEL_CALLS.caption)).toBeInTheDocument();
+    // caption, verbatim. The caption element now carries the source chip too,
+    // so it is matched as a substring of its own <figcaption>.
+    expect(screen.getByText(new RegExp(escapeRe(CHART_VESSEL_CALLS.caption)))).toBeInTheDocument();
     // source
     expect(screen.getByText('kb-008')).toBeInTheDocument();
   });
@@ -128,7 +134,7 @@ describe('provenance is always present', () => {
     }
   });
 
-  it('renders the source as a chip and as text for a screen reader', () => {
+  it('renders the source as a chip inside the caption', () => {
     render(<ChartBlock spec={CHART_CARGO_TONNAGE} />);
     // Text, so it is announced even when the chip resolves to nothing.
     expect(screen.getByText('kb-004')).toBeInTheDocument();
@@ -184,12 +190,26 @@ describe('accessibility', () => {
     expect(description).toContain('Charter:');
   });
 
-  it('always exposes a data table to a screen reader, toggle or not', () => {
+  it('renders the data table once, visibly, with no toggle', () => {
+    /*
+     * This asserted an `sr-only` copy behind a toggle. §4.3 and §7.7 both forbid
+     * that arrangement, and the old one broke each of them:
+     *
+     *   §4.3 — "a real equivalent, not a fallback. Always in the DOM … do not
+     *           hide it behind a toggle that defaults to off."
+     *   §7.7 — "do not `aria-hidden` the chart and duplicate it, and do not hide
+     *           the table behind a toggle."
+     *
+     * It rendered THREE copies: sr-only, a closed toggle, and an `aria-hidden`
+     * visible one. Now there is one table, visible, always — so a sighted reader
+     * who cannot judge a shallow slope gets the figures without hunting for a
+     * control, and nobody hears the same numbers twice.
+     */
     const { container } = render(<ChartBlock spec={CHART_VESSEL_CALLS} />);
-    // A chart is data; the data must never be behind a button for someone who
-    // cannot see the drawing.
-    const hidden = container.querySelector('.sr-only table');
-    expect(hidden).not.toBeNull();
+    expect(screen.getAllByRole('table')).toHaveLength(1);
+    expect(container.querySelector('.sr-only table')).toBeNull();
+    expect(container.querySelector('[aria-hidden="true"] table')).toBeNull();
+    expect(screen.queryByRole('button', { name: /view as table|hide the table/i })).toBeNull();
   });
 
   it('the table matches the series exactly', () => {
@@ -228,18 +248,15 @@ describe('accessibility', () => {
     expect(firstRow.querySelectorAll('td')[1]?.textContent).toBe('—');
   });
 
-  it('offers a visible toggle that reveals the table', async () => {
-    const user = userEvent.setup();
+  it('names the table so it is reachable rather than anonymous', () => {
     render(<ChartBlock spec={CHART_VESSEL_CALLS} />);
 
-    const toggle = screen.getByRole('button', { name: /View as table/ });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getAllByRole('table')).toHaveLength(1); // only the sr-only one
-
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    // The visible copy is aria-hidden, so a screen reader is not read it twice.
-    expect(document.querySelectorAll('table')).toHaveLength(2);
+    // §4.3's header row is the table's `<caption>` — "Same figures as a table" —
+    // so it is the table's own accessible name rather than a heading floating
+    // above it.
+    expect(screen.getByText('Same figures as a table')).toBeInTheDocument();
+    // One table in the document, and one exposed. Not two of either.
+    expect(document.querySelectorAll('table')).toHaveLength(1);
     expect(screen.getAllByRole('table')).toHaveLength(1);
   });
 });

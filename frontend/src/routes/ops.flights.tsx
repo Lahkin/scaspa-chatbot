@@ -4,7 +4,8 @@ import { Button, Input } from '@/components/ui';
 import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
 import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
 import { Pagination } from '@/components/ops/console/Pagination';
-import { AdvisoryPanel, GatePanel } from '@/components/ops/console/SidePanels';
+import { AdvisoryPanel } from '@/components/ops/console/SidePanels';
+import { GateMap } from '@/components/ops/GateMap';
 import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState } from '@/components/ops/OpsPage';
 import { SourceAge, SourceNotice } from '@/components/ops/SourceNotice';
@@ -49,12 +50,15 @@ function OpsFlightsRoute() {
       aside={
         <>
           <AdvisoryPanel advisory={data?.advisory ?? null} />
-          <GatePanel
-            gates={gates.data?.gates}
-            active={gates.data?.active}
-            total={gates.data?.total}
-            source={gates.data?.source}
-          />
+          {/*
+            §6.8. `active` and `total` are the SERVER's figures — "never
+            recomputed from the visible rows, which would drop to zero under a
+            filter" — so they are required props rather than optional ones, and
+            the panel does not render until the response carries them.
+          */}
+          {gates.data ? (
+            <GateMap gates={gates.data.gates} active={gates.data.active} total={gates.data.total} />
+          ) : null}
         </>
       }
     >
@@ -119,6 +123,15 @@ function OpsFlightsRoute() {
       </div>
 
       <OpsListState
+        // §7.5's one skeleton, with the headings that keep the shape stable.
+        columns={[
+          'Flight',
+          'Airline',
+          direction === 'arrival' ? 'From' : 'To',
+          'Time',
+          'Gate',
+          'Status',
+        ]}
         isLoading={query.isPending}
         error={query.error ?? null}
         isEmpty={flights.length === 0}

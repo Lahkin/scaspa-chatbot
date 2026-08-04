@@ -207,6 +207,29 @@ def test_a_quote_prices_only_published_rates(fixture_api: TestClient) -> None:
         assert line["rate"] == published[line["code"]], "a rate was not the published one"
 
 
+def test_a_quote_reports_the_charges_it_could_not_price(fixture_api: TestClient) -> None:
+    """A dropped charge must be visible in the response, not only in a log line.
+
+    `build_quote` has always known which applicable codes had no published rate.
+    It returned them, the router logged the count, and the field never reached
+    the client — so a quote missing a whole charge arrived byte-for-byte as tidy
+    as a complete one, and the reader had no way to tell. That is the worst
+    outcome this endpoint can produce, and `unpriced` is the only thing in the
+    payload that reveals it.
+    """
+    body = fixture_api.post(
+        "/api/tariffs/quote",
+        json={"category": "cargo", "container_size": "40ft", "units": 2, "storage_days": 5},
+    ).json()
+
+    assert "unpriced" in body, "the client cannot detect a short total without this field"
+    assert isinstance(body["unpriced"], list)
+    # Every code named here is absent from the lines, which is precisely why it
+    # has to be named: nothing else in the payload accounts for it.
+    priced = {line["code"] for line in body["line_items"]}
+    assert priced.isdisjoint(body["unpriced"])
+
+
 def test_the_printed_lines_add_up_to_the_printed_total(fixture_api: TestClient) -> None:
     """A reader who checks the arithmetic must not find it off by a cent.
 

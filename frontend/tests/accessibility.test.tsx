@@ -181,10 +181,17 @@ describe('interactive primitives are keyboard reachable and hit the target size'
       </IconButton>
     );
     const button = screen.getByRole('button', { name: 'Send message' });
-    // size-touch-min resolves to --size-touch-min: 44px. Asserting the class is
-    // the honest check here — jsdom does not lay anything out, so a measured
-    // height would be 0 and prove nothing.
-    expect(button.className).toContain('size-touch-min');
+    /*
+     * `size-11` is 44px, and `sm:size-7` is the handoff's 28px ghost box above
+     * the 640px threshold — §1.3 draws these at 28 and 36, and §7 grows them to
+     * 44 at ≤640px. It used to be `size-touch-min` at every width, which is a
+     * 44px ghost button sitting in a row of 28px ones on a desktop.
+     *
+     * Asserting the class is the honest check here — jsdom does not lay
+     * anything out, so a measured height would be 0 and prove nothing.
+     */
+    expect(button.className).toContain('size-11');
+    expect(button.className).toContain('sm:size-7');
   });
 
   it('an input is labelled, and an invalid one is described by its error', () => {

@@ -1520,3 +1520,1371 @@ has failed, so a labelled fallback reads as preparation rather than a cover-up.
 
 It is dev-only, so the presenting machine must run `npm run dev`. That is a
 deliberate trade: a recorded conversation on a public URL is a liability.
+
+---
+
+## F010 — The token file was replaced wholesale, and so were its tests
+
+`tokens.css` opened by saying it was interim and would be "REPLACED WHOLESALE
+WHEN THE DESIGNERS DELIVER". The design import is that delivery, and the product
+went from a light theme to a dark one in one file.
+
+**What made a sixty-file re-theme a one-file change.** Components reference
+semantic aliases — `bg-surface`, `text-ink-muted`, `border-border` — rather than
+ramp steps. Those names still read correctly in the new system, so they were
+re-pointed instead of renamed: `--color-surface` now resolves to `#171A2B`
+rather than white. The `ops-*` family, which used to be a second light palette
+imported from a different design system, collapses into the same tokens; the
+operations screens and the chat surface stop being two designs.
+
+**The contrast test was rewritten, not adjusted.** It measured ink-on-white, an
+amber that was a fill because it read 2.03:1 on white, and a brand blue that
+vanished on navy. None of those pairings exists now. An assertion edited until
+it passes has stopped being a check, so the file was replaced and the method
+kept: parse the real token file, compute real ratios, assert the pairings the UI
+actually puts on screen, and pin the numbers as well as the thresholds.
+
+Two things it now catches that nothing else would:
+
+- **The parser reads the `@theme` block, not the whole file.** `--color-border`
+  and `--color-text-3` are re-declared under `prefers-contrast: more`. A
+  whole-file scan takes the last declaration of each name, so every assertion
+  would have measured the high-contrast palette, passed comfortably, and proved
+  nothing about what almost everyone sees.
+- **Three colours are asserted to FAIL**, on purpose, because each looks usable:
+  `--color-critical` (4.42:1 — the enum hue, never its label), `--color-text-3`
+  (3.74:1 — placeholder and disabled only), and `--color-brand-500` (1.82:1 — a
+  fill; white goes on it).
+
+### A defect in the spec, fixed rather than copied
+
+The spec draws the "no feed" provenance badge as the family's near-black ink on
+`#6E7490`. That measures **4.26:1** — under AA at 11px, and the spec's own
+foundations board insists on "measured contrast, not claimed contrast".
+
+Two ways out. Flipping that one badge to white ink clears it at 4.60:1 and costs
+the family its single shared ink, which is most of what makes the badges read as
+one family. Lifting the fill to `#7E84A0` keeps one ink everywhere and clears it
+at 5.32:1 — and at luminance 0.252 it still sits below live, positive, caution
+and critical, so it goes on reading as the muted one in a row of them.
+
+The fill moved. The ink, the shape and the family did not. Recorded as
+`--color-absent`, with the derivation next to it.
+
+### Gradients are gone, not renamed
+
+"Depth comes from surface lightness only. No drop shadows anywhere inside the
+frame." The three navy gradients and the hairline glow were the light theme's
+chrome; a lighter surface plus a 1px border does the same work. The tokens and
+the utilities were deleted and `contrast.test.ts` asserts neither came back —
+a gradient on a reading surface is the readability problem F-0025 existed to
+prevent, since contrast against one changes down the paragraph.
+
+`--shadow-card` is `none` rather than deleted, so `shadow-card` in a className
+keeps compiling to a real rule instead of silently vanishing. The two floating
+layers keep a shadow: a sheet and a popover are above the frame rather than
+inside it, and on a dark ground there is no lighter step left to separate them.
+
+### The one place the spec is not followed to the pixel
+
+The spec draws input text at 14px. Mobile Safari zooms the viewport when a
+focused input is under 16px and does not zoom back out, leaving someone
+one-handed in a magnified layout — which is the exact reader this product is
+for. Display text follows the spec at 14px; `input`, `textarea` and `select`
+stay at 16px via a base-layer rule. It is a one-step difference nobody will see
+and it is the difference between the composer working on a phone and not.
+
+---
+
+## F011 — Boards 16 to 22, and the three rules that shaped them
+
+### Two emptinesses, told apart
+
+Board 16's card keeps rendering at `total: 0` "so the meta strip is kept" —
+dropping the block would silently lose the statement about where the emptiness
+came from. But there are two emptinesses and they take different words:
+
+- a feed that answered with **no rows** is a fact about today;
+- a feed that is **not connected** is a fact about the service, and it is the
+  production default.
+
+Saying "nothing recorded for today" when no feed exists is a claim about the day
+that nothing behind it supports. `EmptyBoard` keys on `source.kind`.
+
+### Never invent an identifier
+
+Board 16's airline avatar "falls back to an outline glyph when no code exists —
+never to invented initials". Deriving `CH` from _Charter_ puts two letters that
+look like an IATA code beside a flight number, in a product where a code means
+something. The same rule is why the tariff table says "No source recorded"
+rather than an em dash, and why the gate cell says "not reported" rather than
+"TBD" — which sounds like the Authority has decided and is withholding.
+
+### Only one notice in the product may be dismissed
+
+Board 17: _"Only the live banner carries a dismiss control, and live is the one
+kind that cannot currently occur. A notice that says the data is not real must
+outlive the user's patience with it."_
+
+So `SourceNotice` renders a close button for exactly one of its three kinds, and
+`tests/matrix.test.tsx` holds the line from the other direction — a source scan
+that fails if any component grows a way to hide a disclaimer, a caption or a
+provenance notice. That guard needed its own self-test: the first version
+matched the `text-caption` utility class and reported the dev gallery.
+
+### The one empty state drawn in caution
+
+Marine advisories, and nothing else. An empty list is **not** an all-clear:
+"a quiet screen read as safety has physical consequences here" — someone decides
+to sail. The panel is amber rather than grey, says what it does not know rather
+than what is fine, and is asserted to contain no tick, no positive colour and
+not the word "clear".
+
+### Degraded is not a message
+
+Board 20 splits the health banner in two. A missing index stops the **assistant**
+and nothing else — vessels, flights and tariffs are a separate path with no
+model, no embeddings and no index in it. A banner reading "the service is
+degraded" would send someone away from three screens that would have answered
+them.
+
+---
+
+## F013 — The foundations, and four values that compiled to nothing
+
+The two entries above are numbered F010 and F011 and collide with the chart and
+voice records of the same number. Left as they are rather than renumbered — a
+decision record's number appears in commit messages and in code comments, and
+moving one breaks every reference to it. This entry continues from the highest
+number actually used.
+
+### The radius scale had four of its nine values
+
+`--radius-*` held panel, input, button and pill. The handoff names nine, and
+each of the five missing ones had already been paid for somewhere: a segmented
+control whose inner segment took the 10px button radius sits visibly wrong
+inside a 12px track with 3px of padding, and only 9px keeps the two curves
+concentric. A legend swatch at 10px is a lozenge; the handoff wants 3.
+
+### Four utilities emitted no CSS at all, and this keeps happening
+
+`w-sidebar` was the third instance of it and is documented above. This round
+found a fourth, and it is the worst kind because the wrong thing still looked
+deliberate:
+
+> **`border-caution-edge` compiled to nothing**, so the pill fell back to
+> `currentColor` — the right colour by accident on a caution pill and the wrong
+> one on every other one.
+
+The handoff draws a status pill as `1px solid <hue at 45%>` and a notice panel
+as the same hue at 30–35%. No such token existed. They are declared now as solid
+composites over surface-2 rather than as `rgba()`, for the same reason as the
+12% tints: a contrast ratio cannot be computed against a translucent colour, so
+an alpha border is a figure nobody has measured.
+
+`tests/tokens-compile.test.ts` grew the new names — except the two notice edges,
+which have no call site yet. Tailwind emits a utility only where the class
+appears in source, so listing a correct-but-unused token would fail the test for
+being right.
+
+### The status pill was a fill and should have been an outline
+
+"Outline pill with a leading dot. Sits in table cells by the hundred, so it must
+not shout." Every variant carried a 12% fill. Exactly one is supposed to —
+`urgent`, where the fill is the difference between an advisory a reader scrolls
+past and one they stop at. A filled pill competes with the provenance badge
+beside it, and provenance has to win: **a wrong status is a mistake and a wrong
+source is a lie.**
+
+### The seal had no plate at the size the handoff plates it
+
+`LogoLockup` declined to draw the badge below 32px, reasoning that a circular
+seal with an aircraft over a ship turns to mud at 24. The handoff's smallest
+pairing **is** 24-inside-32, and it is required: "never use it without the plate
+at any size". The two pairings are now an enum — 32-in-40 for the sidebar,
+24-in-32 for the widget, the 404 and the mobile header — so a caller cannot
+invent a third. The tagline prop went with it: the lockup is the seal and the
+string `SCASPA Assistant`, and the strapline is a sentence about SCASPA that
+belongs in the About panel's own prose.
+
+### Four glyphs were drawn twice
+
+`panel`, `copy`, `microphone` and `headset` each had their frame transcribed
+**both** as a square-cornered `<path>` and as a rounded `<rect>`, and `Icon`
+renders both lists. At 16px a sharp corner poking out from under a rounded one
+reads as a rendering fault rather than as a glyph. Eleven glyphs the sprite has
+and this set lacked were added at the same time — attach, edit, thumb, table,
+file, waveform, play, pause, map, dollar, plus — each of them a control the
+handoff specifies and none of which could be drawn before.
+
+---
+
+## F014 — Three places the handoff was not followed to the letter, and why
+
+Two of them are the handoff disagreeing with itself, and the third is it
+disagreeing with a project document. All three are recorded rather than quietly
+resolved, because a silent deviation is indistinguishable from a mistake.
+
+### 1. `--text-3` on a label a user is expected to read
+
+§5.3 is unambiguous: `text-3` is "**Placeholders and disabled only** — never
+body copy", at 3.74:1 on surface-2. §2.1 then sets the sidebar's group label,
+its search glyph and the demonstration profile's second line in `--text-3`.
+§7 calls the 4.5:1 requirement non-negotiable.
+
+The requirement outranks the individual value, so every one of those labels is
+`--text-2`. `--text-3` survives where it is genuinely a placeholder — the search
+field's own placeholder text — and on the collapse glyph, where the 3:1 non-text
+bar applies. This is the same shape as the `--color-absent` derivation recorded
+in the entry two above: the handoff's own measured-contrast rule is used to
+settle a case its value table gets wrong.
+
+### 2. `volatility: null` — the one place following the handoff LOWERS a caution
+
+`docs/api-contract.md` said "treat an absent or unrecognised value as `high`".
+The handoff says, twice, that null renders as **`medium`** — "changes often",
+never static, never low — with an extra ring so a reviewer can see the fallback
+fired.
+
+The handoff wins, and the contract paragraph was rewritten to match rather than
+left contradicting the code. What protects the reader is unchanged:
+`needsConfirmation` is true for `medium` as well as `high`, so a row with no
+volatility on record still carries the confirm-before-you-rely-on-it line. And
+the ring is a stronger signal than the word it replaced — it says the value was
+_supplied_ rather than measured, which "check before use" never did.
+
+**This is the only change in the whole pass that moves a safety signal down a
+rung, and it is flagged here so that a reviewer who disagrees can find it.**
+
+### 3. The recorded-questions fade is a mask, not a gradient
+
+§2.1 draws it as `linear-gradient(to bottom, rgba(23,26,43,0), #171A2B 82%)`.
+It ships as a `mask-image` instead. Same picture, and it keeps two other rules
+intact: nothing is recoloured, so "no gradients inside the frame" survives, and
+an alpha mask cannot swallow a click on the row beneath it the way an
+absolutely-positioned overlay can.
+
+---
+
+## F015 — Boards 00a to 15, reverified line by line
+
+Nothing was accepted because it already existed. Every board was re-read against
+its handoff section and its screenshot before being touched, including the ones
+an earlier pass had recorded as done — and several of those turned out to be the
+ones with the most drift, because "implemented" had been recorded from the prose
+without the board beside it.
+
+### The board that disagrees with its own screenshot
+
+**Board 07.** §1.2 Family B writes the status pill as `background: transparent —
+or the 12% tint where noted`, and notes a background on exactly one variant.
+Read alone, every other pill is a transparent outline, and the previous pass
+implemented it that way.
+
+The board draws them all filled, and its own ANATOMY panel states the rule
+without the qualifier: _"26px tall · 12px side padding · full pill / 7px dot ·
+7px gap · 12/16 medium label / **fill at 12%** · dot and label at full
+strength."_
+
+**Reported rather than resolved by preference.** What ships is the intersection:
+the 45% edge the prose specifies and the 12% fill the board draws. Neither
+document shows a pill with an edge and no fill, so nothing there is invented.
+`absent` stays unfilled under both readings — a fill would make an absence look
+like a value.
+
+### Four things that were drawn but not wired
+
+- **No streaming cursor at all.** §3.5 specifies `8px × 16px`, `--brand-200`,
+  `vertical-align: -3px`. Without it a stream that paused mid-answer looked
+  identical to one that had finished. Gated on `useReducedMotion`, per §7.
+- **The composer was a field and a button**, not the handoff's single box. §3.2
+  draws one container holding the field and the control row; the send control
+  read as belonging to the page rather than to the question. It is now a 34px
+  circle that is _blocked, never hidden_ — the first line of the board — and the
+  edge carries states 2 to 4.
+- **The counter appeared at 900 characters.** The board draws `42/1000` in the
+  ordinary typing state. A counter that appears at 900 arrives as a warning to
+  someone who never knew a cap existed.
+- **The source list was a different design.** §3.7's chip is a title, a
+  volatility badge, a verified-date badge, a snippet in quotes and a meta line.
+  What was there escalated by volatility into an amber panel with a phone
+  number. The instinct was right and the vocabulary was not the product's: a
+  reader who has learnt that a filled uppercase pill means provenance should not
+  have to learn a second language in the source list.
+
+### The one that was a permanent alarm
+
+`DataSourceCard` drew `unavailable` as a solid red dot reading "Data
+unavailable". §5.4 is explicit — _"a feed that was never connected is a known
+state, not a failure … copy for this state is 'No feed connected', never
+'Error'"_ — and it is the **production default**, so what that card says is what
+every user sees on every visit. A red alarm that is always on is how a warning
+stops being read. It is now a hollow neutral ring.
+
+### Two systematic errors the token file had been hiding
+
+`rounded-md` aliases `--radius-input` at 12px, so **every button in the product**
+was two pixels rounder than the 10px §1.3 gives it. And `min-h-touch` at every
+width made inputs, primary buttons and icon buttons taller than the 40/36/28 the
+handoff draws — the 44px minimum belongs at ≤640px, which is what §7 actually
+says. Both are now `h-11 sm:h-<designed>`.
+
+### Additions removed, and the standard applied to all of them
+
+A per-turn timestamp, a permanent "Enter to send, Shift + Enter" caption, a
+footer link on the location card, a noun in the pagination readout, and
+"Estimated" in front of the quote's total. Each was defensible on its own and
+none is drawn by the handoff. The timestamp is the one worth naming: a clock
+beside every turn is the strongest possible hint that the transcript is a thread
+being kept, in a product whose greeting exists to stop that expectation forming.
+
+### The contrast rule keeps overruling the value table, and that is not drift
+
+§5.3 says `--text-3` is "placeholders and disabled only" at 3.74:1; §7 calls the
+4.5:1 requirement non-negotiable; and §2.1, §2.7 and §3.7 then set readable
+labels in `--text-3` anyway. The requirement wins each time, exactly as it did
+for `--color-absent`. Where the token is genuinely on a glyph — the ghost icon
+button at rest, the search placeholder — it stays, because the 3:1 non-text bar
+is what applies there, and `tests/contrast.test.ts` now names that exemption
+rather than pattern-matching it.
+
+---
+
+## F016 — Closing boards 00 to 15, and how the board 07 conflict was settled
+
+### The conflict, and how it was adjudicated
+
+The question asked was not "which treatment appears more often" but **"does
+board 07 define a different component or a special state, or is it simply
+inconsistent?"** Four checks against the exported source, and all four say
+inconsistent:
+
+1. **It defines no distinct component.** Both boards' chips are
+   `inline-flex; gap:7px; height:26px; padding:0 12px; border-radius:999px`
+   wrapping a 7px dot and a `500 12px/16px` label. Identical markup. Board 07
+   introduces no new element, no modifier class and no second geometry — only
+   the container's fill and edge differ.
+2. **Same surface.** Both boards' panels are `#171A2B`. Nothing about the ground
+   could justify a different treatment.
+3. **No label, note or metadata declares a special state.** Board 07's subtitle
+   is "The full enumerations, including the values today's fixtures never
+   produce" — a claim about COVERAGE — and its two section headings are
+   "Anatomy" and "Why unknown is drawn, not guessed". Nothing reads "shown
+   filled", "in context", "on a light surface" or "alternative".
+4. **It is a subset of what board 00c already draws.** 00c's "Operational family
+   — 5 enums" renders all twenty variants (Vessel 5, Flight 6, Gate 4, Severity
+   3, Health 2); board 07 re-draws nine of them with explanatory captions. It
+   adds explanation, not treatment.
+
+It also diverges on **three unrelated axes plus a label**, which is drift rather
+than design: hued chips filled instead of outlined, `departed`/`scheduled`
+gaining a `#1E2137` fill, the absent chip dashed in `--border` instead of
+`--text-3`, and the vessel `unknown` chip labelled "Unknown" where §1.2, §5.4
+and board 00c all say "not reported". A deliberate variant would be coherent.
+
+**Board 00c is canonical and nothing was changed to accommodate board 07.** The
+inconsistency is documented here and guarded by five assertions in
+`tests/boards.test.tsx`, so reading board 07 on its own cannot quietly flip the
+family back.
+
+Two of our own variants had already drifted toward board 07 and were corrected
+in the process: `settled` carried a `--surface-3` ground it should not have, and
+the absent chip's dash was `ink-subtle` (text-2) rather than `--text-3`.
+
+### The supporting count
+
+§1.2 Family B writes the status pill as an outline — `border: 1px solid <hue at
+45%>`, `background: transparent`, "or the 12% tint where noted", noted on one
+variant. Board 07 draws every chip **filled and borderless**, and its anatomy
+panel says "fill at 12%" with no qualifier.
+
+README §4 sets the tie-break — "where this document and the file disagree, the
+file wins" — which appeared to hand it to board 07. Counting every pill in the
+source says otherwise, because the disagreement is not prose-versus-file. It is
+**one board against the rest of the same file**:
+
+| Where                              | Outline | Filled |
+| ---------------------------------- | ------- | ------ |
+| board 00c — the badge-family board | 18      | 0      |
+| in context — 00b, 14, 17, 20       | 12      | 0      |
+| board 07 — the enumeration         | 0       | 7      |
+
+And §5.12, which is board 07's own prose, opens **"Full spec in
+`01-foundations.md` §1.2. Anatomy, for the record"** and restores the qualifier
+the panel dropped: "fill at 12% **(where used)**". Board 07 is a restatement
+that defers to §1.2, and it is the outlier on three counts at once — it also
+draws the absent chip's dash in `--border` where §1.2 and board 00c both use
+`--text-3`, and labels it "Unknown" where §1.2 and §5.4 both say "not reported".
+
+**Recommendation, and what shipped: the outline.** A filled pill also breaks the
+hierarchy the whole badge system exists to hold — provenance is the loud family
+because "a wrong status is a mistake and a wrong source is a lie", and a filled
+status pill competes with the provenance badge beside it in every table row.
+The 12% fill survives where the handoff notes it: `urgent`, and the "Not priced"
+line in a tariff quote.
+
+### Two things that were not blocked and had been treated as though they were
+
+**The replace handler.** §3.5 says the superseded tokens are struck through with
+"Rewriting with the published figures…" beneath them, and **"do not silently
+swap the text"**. The `replace` event has been on the wire and in the reducer
+the whole time — and the reducer discarded the accumulated text, which is the
+exact thing the sentence forbids. The draft is now kept on `superseded`, drawn
+struck through for the rest of the stream, and cleared on `done` where the
+settled correction notice takes over. The struck text is `aria-hidden`: reading
+a discarded draft aloud word by word would announce the very figures the backend
+had just refused to stand behind.
+
+**The grounding indicator.** §3.8's four states are derived from the same
+reconciliation pass that numbers the chips, so the badge and the chips cannot
+disagree about which markers matched. `partial` is the state only reconciliation
+can know — a single `grounded` boolean flattens it.
+
+### The diagnostics panel, and the one row that IS blocked
+
+§3.14 has three rows. Two are available and shipped: `latency_ms` off the
+response for "Answer time" — what the **server** measured, because a stopwatch
+started in the browser would include the reader's own network — and
+`index.kb_rows` for "Records searched", rendering "unknown" and never `0`.
+
+The third is **blocked on a named dependency**: `tracked_clients` is computed by
+`backend/app/ratelimit.py` but returned only from `/admin/stats`, behind the
+administrator secret. This panel sits beside an ordinary answer. The row is
+built and gated on the field, per `08-blocked-and-forbidden.md`, and its
+footnote travels with it because the footnote exists to qualify that one figure.
+
+### Three of the eight error envelopes were wrong or missing
+
+- **404 carried the 500 copy** — "Something went wrong … that is our problem,
+  not yours" — which §3.11 forbids by name: "Never a generic 'something went
+  wrong' for a code that knows better." It now reads "Page not found", byte
+  identical to `NotFound`'s own wording, because §2.8 ships one 404.
+- **422 was generic.** §3.11 requires it to name "the field and the actual limit
+  it hit". It names the 1,000-character cap.
+- **400 had no copy at all** and fell through to `INTERNAL`. `ErrorCode` is the
+  wire contract and has no 400, so `BAD_REQUEST` is a client-side kind alongside
+  `OFFLINE`, reached from the status only when the body did not classify itself.
+
+### The speak button was three emoji
+
+🔊, ⏸ and ■ — and no icon rule can govern an emoji, which the platform renders
+in its own font at its own colour, so "waveform in `--text-3`" was not
+expressible. All seven states of §3.13 now draw real sprite glyphs, including
+**voice off**, which used to render nothing at all. A control that vanishes is
+one the user has to remember existed.
+
+---
+
+## F017 — Board 16, and the shared provenance card it forced
+
+### The card the handoff asked for twice
+
+Implementation requirement #2: "Make the provenance card a single shared
+component. Meta strip, mandatory notice, body slot, optional footer link. **Every
+operations block on every screen is an instance of it.** This is what stops the
+rule eroding over time." It did not exist. Each block drew its own box, and the
+rule had already eroded: the inline cards had a `<h3>` title where the meta strip
+belongs, a 12px radius instead of 16, and `--surface-3` where the handoff says
+`--surface-2`.
+
+`ProvenanceCard` now takes `source` as a **required** prop with no way to
+suppress the strip, so a caller cannot render operations data without saying
+where it came from — the type system refuses. There is no `dismissible` prop
+either; the one notice in the product that may be dismissed is the `live`
+banner, which is a different component precisely so this one cannot grow the
+control by accident.
+
+### The chart data table broke two rules at once
+
+§4.3: "a real equivalent, not a fallback. Always in the DOM … **do not hide it
+behind a toggle that defaults to off**." §7.7: "do not `aria-hidden` the chart
+and duplicate it, and do not hide the table behind a toggle."
+
+It rendered the table **three times**: an `sr-only` copy, a toggle defaulting to
+closed, and an `aria-hidden` visible copy behind it. Now: one table, visible,
+always. A sighted reader who cannot judge a shallow slope on a projector gets the
+figures without hunting for a control, and nobody hears the same numbers twice.
+
+### Two cards were carrying figures the assistant chose
+
+§4.6 is unambiguous — the calculator card "**carries no figures at all — not
+even a prefilled quantity** … a prefilled quantity would read as a quote the
+Authority had made". It was a working calculator with a units field defaulting
+to **1**, a storage-days field and an inline total. The placeholders are now
+drawn and inert, and the button goes to the real calculator.
+
+§4.7's ticket card is a subject field and a way out. It was the entire enquiry
+form, submitting inline and rendering its own receipt — and the real form has a
+4000-character details field and a transcript checkbox whose consequence line is
+load-bearing (§6.5), none of which fits or belongs inside a chat turn.
+
+### The chart's meta strip is blocked, and is not fabricated
+
+§4 opens: "Every block in this chapter is an operations payload, so every one
+carries a meta strip", and the board draws the chart card with a SAMPLE DATA
+strip reading `Vessel calls fixture · as of 06:10 AST`.
+
+`ChartSpec` carries `source: string` — a single `kb-xxx` citation — and **no
+`DataSource`**. A citation is not a provenance record: no kind, no label, no
+`as_of`, no notice. Composing one here would be inventing the exact claim the
+strip exists to make truthfully, so the card, title, plot, table and caption are
+all built and the strip is not.
+
+**Waiting on:** `source: DataSource` on `ChartSpec`. When it lands the figure
+becomes a `ProvenanceCard` and nothing else changes.
+
+---
+
+## F018 — Board 17, and a screen that had no table on it
+
+### The Vessels screen was a card list at every width
+
+§5.1 requires real `<table>` semantics; §5.8 puts the card treatment **below
+640px only**. `/vessels` rendered `VesselCard` in a `<ul>` at every width, so
+nothing above the rows said what the values were — a screen-reader user got six
+unlabelled strings per vessel, and a sighted one got no column to scan down.
+
+It also had three metric tiles that were not the handoff's four, no status
+filter, no density toggle and no pagination.
+
+Both screens are now built on `OpsTable`, which carries §5.1's primitives in one
+place: the 16px container, the 12px/20px toolbar, the 11px eyebrow column heads,
+44px/36px rows, the hairline dividers and the `--surface-3` hover. Row height,
+hairline weight and hover fill all derive from the sidebar's nav row, which is
+what makes six dense tables read as the same product as the chat.
+
+Both the table and the card list are rendered, with CSS choosing. A width read
+in JavaScript is wrong on first paint, wrong after a rotation until the listener
+fires, and wrong in every print stylesheet.
+
+### `VesselCard` and `FlightCard` are deleted, not left lying about
+
+The rebuild left both with no callers. A dead component with passing tests is
+worse than no component: it reads as covered. The **rules** they carried are now
+asserted against the cells that carry them — `EstimatedTime`, `ActualTime`,
+`FlightTime`, `GateCell`.
+
+### The metric tile, and the most dangerous default in the product
+
+> "Rendering 0 in the occupancy tile would say the port is empty. **That is the
+> single most dangerous default in the product.**"
+
+The null handling was already right and stays right. What was wrong was
+everything around it: an uppercase letter-spaced label (the 11px eyebrow, which
+§5.3 does not use here), a 24px value where the handoff says `600 30/38`, a 12px
+radius, and the whole tile drawn in the legacy `ops-*` aliases from the
+operations screens' second palette. The handoff has one palette.
+
+The second line is now "not reported" — §5.3's own words — rather than "Not
+reported by this source".
+
+### Two figures that are derived, and why that is not a recount
+
+§9.5 forbids deriving a count **from the visible rows**. "Alongside of expected"
+is `vessels_at_berth / (vessels_at_berth + arrivals_next_24h)` — arithmetic on
+two server figures, which is what produces the board's own `4 / 11` — and it
+renders `—` if either operand is null, because half a ratio is a stronger claim
+than none.
+
+The status filter is applied in the client because the endpoint takes no status
+parameter, and `total` therefore stays the **server's** figure. A recount there
+would drop to zero under a filter and lie.
+
+### The tile the handoff labels and the wire does not quite carry
+
+"Expected today" reads `arrivals_next_24h` — a rolling 24-hour window rather
+than a calendar day. The label is the handoff's shipping string and the field is
+the nearest figure on the wire; the mismatch is small, real, and recorded rather
+than hidden. It is the one item on this board that would be closed by a backend
+field (`arrivals_today` on `VesselMetrics`) rather than by client work.
+
+### Times were being written in the browser's own format
+
+`SourceNotice`'s stamp was `toLocaleString()`, which on a US-configured browser
+renders `8/1/2026, 6:10:00 AM` — a 12-hour clock with no zone, on a banner read
+by agents who work in AST whatever their laptop is set to. §10 fixes the form:
+24-hour with the zone. Same correction as `DataSourceCard`'s.
+
+---
+
+## F019 — Board 17 re-verified, and the components that were right on screens that were not
+
+F018 built board 17's components and every one of them was tested. This pass
+rendered the **screens**, and found eight deviations that the component tests
+could not see — because no test had ever mounted `/vessels` or `/flights`.
+
+That is the finding behind all the others. `tests/operations.test.tsx` now renders
+both routes through the real route tree.
+
+### The banner said it twice
+
+`OpsPage` renders §5.2's source notice for every operations screen — "far more
+reliable when it is the shell's job than when it is each page's", which is right.
+Both screens then rendered a second one as their first child, so the same
+provenance badge, the same sentence and the same timestamp appeared twice in a
+row above the tiles.
+
+§5.2 draws one. A warning shown twice is a warning being used as decoration, and
+this is the one warning on the screen that carries the whole product's honesty
+claim. The duplicates are gone; the shell's stays.
+
+### The status filter filtered the page, not the table
+
+The route said, in a comment, that "the endpoint takes no status parameter". It
+does — `GET /api/vessels?status=`, applied by `filter_vessels`, with `total`
+counted after it — and `VesselQuery.status` was already in the client's own API
+module.
+
+Filtering in the client filtered the twenty-five rows of the **current page**
+while the readout went on reading `Showing 1–25 of 100`. A status with two
+matches on page 3 looked like a status with none, and the pagination underneath
+described a result set that no longer existed. Both filters now go to the server
+and `total` comes back matching them, which is what §9.5 asks for in the first
+place: the count is the server's, and nothing is recounted from the rows.
+
+The mock handler ignored `status` too, which is what let the client-side filter
+look correct in development.
+
+### A rate limit was being rendered as an empty filter result
+
+`vessels` is `[]` on **any** failure, so a 429 and a 500 both fell through to
+"No movements match these filters" — an offer to clear filters the reader may
+never have set, over data that was never fetched.
+
+§5.7 draws the rate limit its own card and `RateLimitedState` had been built to
+it — with no caller. §7.1 gives every other code the shared envelope, "so the
+same event never gets two treatments across screens". Both now go through one
+`TableError`, so the third operations screen does not have to re-derive which
+failures are special.
+
+The 429 card also **counts down and hands the button back at zero**, which is
+§1.3's retry control. A frozen `Refresh in 0:18` says the wait ends in eighteen
+seconds and then never says anything again, so the reader reloads to find out.
+When `Retry-After` is absent there is no countdown at all rather than a default:
+a made-up wait is a made-up number, and §7.2 allows exactly one figure here.
+
+### The flights tiles were the wrong three, and one of them was wrong
+
+§5.3: "**Flights — three tiles**: Arrivals today · Departures today · Delayed."
+
+`FlightMetrics` carries `total_flights`, `on_time_percent`, `gates_active` and
+`gates_total`. **None of them is one of those three.** The screen rendered
+`total_flights` under the label "Arrivals today" and relabelled the same figure
+"Departures today" when the direction toggle flipped — and `total_flights` counts
+the whole feed in both directions, so on the sample feed it read **4 arrivals
+where there are 3**.
+
+A wrong number under the handoff's label is worse than the handoff's label with
+no number, and §5.3 already draws the second: "any null takes the em-dash
+treatment". So the three tiles are the three the handoff names, each gated on its
+own field, each reading `—` and "not reported" until the wire carries it. The two
+figures that were standing in are gate and punctuality statistics, which the
+handoff puts on the Console (§6.7–6.13).
+
+This is the same shape as F018's "Expected today", and the opposite conclusion,
+for a reason worth writing down: `arrivals_next_24h` is the same _quantity_ as
+"expected today" over a slightly different window, so it is an approximation.
+`total_flights` is a different quantity that includes departures, so under
+"Arrivals today" it is not an approximation but a wrong answer.
+
+### §5.6's advisory panel existed and no screen rendered it
+
+`OperationalAdvisoryPanel` had no callers at all — the same dead-component state
+that got `VesselCard` and `FlightCard` deleted in F018. `FlightSchedulesResponse`
+carries `advisory`, so the panel is now on the flights screen.
+
+**Its caution fill is gated on attribution.** §5.6: "Always attributed to whoever
+published it, with a time", and the fill is what claims a named authority
+published this — drawing it over unattributed text is the panel implying the
+forecast is ours, which is the one thing the section exists to prevent.
+`OperationalAdvisory` carries no publisher and no time, so the panel renders in
+§5.6's neutral fill until `published_by` and `published_at` land. Absent stays
+absent: no empty container in that position.
+
+### The table cells were writing the browser's own clock
+
+F018 fixed `toLocaleString()` in the source banner. `TimeCell` — the ETA, ATA,
+gate and revised-time cells that board 17 is actually _about_ — was still calling
+`toLocaleTimeString([], …)`, which renders **`06:40 AM`** on a US-configured
+browser, in a column §5.4 draws as `06:40`, underneath a banner that says
+`as of 06:10 AST`. Same correction, same constant as `CardBlock`'s row clock.
+
+`SourceAge` was the third instance and sits directly above the banner, so the two
+were writing the same instant in two formats on every operations screen.
+
+### Three measurements that were not the handoff's
+
+- **The density toggle is 26px.** §5.1 says so and the exported spec draws the
+  track at 10px with 8px segments and a 12/16 label; ours was board 00d's 32px
+  form control. `Segmented` has a size now, because §4.5 draws the card's
+  direction toggle the same way — one control, two rows it can sit in.
+- **The vessels columns are `1.5fr 0.9fr 0.8fr 1fr 1fr 1fr`.** The table laid out
+  automatically, so it sized its columns from whatever text happened to be in
+  them: the same table drew differently on page 1 and page 2, and a reader
+  scanning the ETA column lost it every time they paged.
+- **Three tiles do not go in a four-column grid.** `MetricRow` was fixed at four,
+  so the flights screen drew a quarter of its row empty.
+
+### The skeleton ignored the density toggle
+
+§7.5: "Rows keep their **real** height (44px/36px)." Switching to compact and
+refetching moved every row twice — once as the skeleton drew tall, once as the
+real rows came back short. "No layout shift in any loading state" is the rule
+being kept.
+
+### The flights no-feed state told a passenger to ring the harbour
+
+`NoFeedState` took a noun and nothing else, so §5.7's vessel copy — "Telephone
+**Marine Operations** on 869 465 8121" — was what an empty arrivals board said.
+The department is a prop now, and flights name Airport Operations. Both are on
+§1.4's published department list; neither is invented, and the switchboard number
+is the same either way.
+
+### The toolbar control never grew for a thumb
+
+`Segmented` was the one control in the product with no touch treatment — 32px at
+every width, and 26px once §5.1's size was applied. §7 is not ambiguous: "Touch
+targets are 44px minimum … at ≤640px they grow to 44px", and F013 already made
+`Button`, `Input`, `IconButton` and `Textarea` `h-11 sm:h-<designed>` for exactly
+this. It now does the same, so the density and direction toggles are 44px on a
+phone and the handoff's 26px above 640.
+
+`npm run check:responsive` named it at 320 and 390. That harness is otherwise
+stricter than the handoff — it applies the 44px floor at every width, so it flags
+the 34px suggestion chips and 36px toolbar select the handoff draws — but this
+one was a real failure at a real breakpoint.
+
+### And one thing the tests changed back
+
+The route-level tests were briefly written against `export function VesselsRoute`.
+The router plugin cannot code-split a route file's extra exports, and both screens
+silently folded into the entry chunk — 433 kB became 469 kB. The tests go through
+the real route tree instead. **A test harness does not get to change what ships.**
+
+---
+
+## F020 — Board 18, and a date that printed a day early
+
+`/tariffs` was the pre-handoff screen throughout: a navy-headed zebra table with
+an amber rate column borrowed from a departure board, one cargo calculator, and
+a quote rendered as a four-column spreadsheet. All of it in the legacy `ops-*`
+palette. §5.9 to §5.11 draw something else, in two steps.
+
+### A verification date that was a day early for every reader in the Caribbean
+
+`TariffRow.as_of` is a **plain date** — "ISO date the rate was verified". The
+cell printed it raw (`Checked 2026-01-01`), so the first fix was §10's dense-row
+form, `1 Jan 2026`. That is when the real defect appeared: a date-only string
+parses as **UTC midnight**, so formatting it in the reader's own zone moves it
+back a day anywhere west of Greenwich. `2026-01-01` rendered as
+**`Checked 31 Dec 2025`** in AST — the zone this port is in, and the zone nearly
+every reader of this table is in.
+
+The formatter is pinned to UTC. A verification date is not an instant and has no
+zone to convert to; it is the same day everywhere. `DataSource.as_of` in the meta
+strip above it is the opposite case — a real moment, correctly shown in the
+reader's zone with the zone named — and the two now say so in their own comments,
+because the difference is invisible and the failure is silent.
+
+### The table had no meta strip at all
+
+An operations payload rendering with no statement of where it came from, which
+the definition of done forbids outright: "No operations payload renders anywhere
+without a meta strip." It is a `ProvenanceCard` now, like every other operations
+block, which also gives it the mandatory sample-data notice it never had.
+
+`OpsTable` grew a `bare` prop for this — the primitives (column heads, 44px rows,
+hairlines, hover, the ≤640px row cards) stay in one component while the card
+chrome comes from `ProvenanceCard`. Drawing both would be a card inside a card.
+
+### The rate is printed, not computed
+
+§5.9: "Rendered exactly as published — `186.00 per container`, `0.42`,
+`37.50 per day`. No rounding, no conversion, no normalised unit column."
+
+`toFixed(2)` would round a rate published to three decimal places, so the figure
+goes through `Intl.NumberFormat` with a **minimum** of two fraction digits and no
+maximum. The basis stays in the cell with the amount: "per container" is part of
+the published rate, not metadata about it, and a tidy unit column would be a
+different claim.
+
+### The source cell, and a link with nowhere to go — BLOCKED
+
+§5.9 draws a citation link labelled with the source's title, beside a
+verified-date badge. `TariffRow` carries `kb_id` and nothing else: **no title to
+label it with, and no route in this product that renders a knowledge-base row.**
+
+"Never a link to nowhere" is the rule the `kb_id: null` case exists to keep, and
+a `--brand-200` label with no destination breaks it from the other side — it
+looks clickable. So a sourced row names the feed in ordinary text and carries the
+badge, which is real; the link ships unchanged the day the row carries a title
+and a href. Every fixture row is `kb_id: null` today, so what is actually on
+screen is "No source recorded", which is the honest answer.
+
+### The verified-date badge says what kind of date it is
+
+Board 18 draws the badge reading `1 APR 2026`. §1.2 gives the same badge the
+label `CHECKED 1 APR 2026`, and the export itself renders it that way **twice
+elsewhere** — including in the same compact 20px form board 18 uses. One board
+against the rest of the file is the shape §4.1 already adjudicated, and the word
+does real work here: a bare date beside a source, in a column headed SOURCE,
+reads just as easily as the rate's effective date, which is a different and
+materially important fact.
+
+### Two calculators, and the one that did not exist
+
+There was one cargo form. §5.10 draws two, "deliberately unlike each other …
+a user must never fill in the wrong one by muscle memory" — and the wire has
+supported both all along: `TariffQuoteRequest` carries `vessel_type`,
+`length_ft`, `stay_days`, `container_size`, `units` and `storage_days`, with
+exactly the ranges §5.10 prints (0–2000, 0–365, 0–10,000).
+
+The surfaces swap all the way down, including the inner field backgrounds, so
+the two never read as one form with two halves.
+
+**Vessel type is BLOCKED and drawn disabled.** `build_quote` never reads it — the
+maritime lines are dockage (length × stay), pilotage and harbour dues, none of
+which varies by type — and no list of vessel types is published anywhere in the
+handoff or the API. Inventing four would be inventing SCASPA's tariff structure.
+An enabled select that changed nothing would be the product implying a rule it
+does not apply, so the control is drawn, disabled, and carries a note saying what
+the estimate actually uses.
+
+**Currency is a fixed label, not a select**, per §5.10 and §1.4's ninth input:
+`--canvas`, 1px dashed, not focusable, with the inline note. The API validates
+`XCD` and refuses anything else, because converting a published fee applies a
+rate of exchange nobody published — with more authority than a sentence.
+
+### The quote was a spreadsheet, and its disclaimer was drawn in red
+
+Four failures in one component:
+
+- **No meta strip.** It is a `ProvenanceCard` now, with the `CALCULATED` badge
+  **beside** the source-kind badge rather than instead of it. A quote worked out
+  from sample rates is both derived and sample data, and dropping the second to
+  make room for the first hides the more important of the two.
+- **`XCD` on every figure.** §10: "Currency is `XCD 9,288.00` in totals, bare
+  `9,288.00` in line items under an XCD-labelled total." Repeating it is how a
+  breakdown starts reading like an invoice.
+- **The disclaimer sat on `--color-ops-alert-fill`** — a full-strength critical
+  fill with near-black ink. §5.11 draws it in `--caution-fill` with `--text-1`.
+  The single most important string on the screen was styled as an error.
+- **The incomplete-quote banner sat below the total it contradicts.** §5.11 puts
+  it **above**: a warning under a figure is read after the figure has been
+  believed, which is the whole failure it exists to prevent.
+
+The zero-line variant keeps its meta strip, where the board draws a plain card.
+The definition of done is unconditional, and a quote worked out from sample rates
+is still worked out from sample rates when it comes to nothing.
+
+**The unpriced line's charge name is BLOCKED.** §5.11 draws the row with the
+charge's own label ("Berthage") above the code. `TariffQuote.unpriced` is
+`list[str]` — codes and nothing else — and by definition the code is absent from
+the tariff table, so there is no row to read a name from either. The code stands
+in until the wire carries a name.
+
+### The toolbar disappeared on the click that used it
+
+§5.9 puts the search box and the category chips **inside** the table's card. A
+filter change is a new `queryKey`, so it is a new query with no data and
+`isPending` is genuinely true — which dropped the whole card to the skeleton and
+took the control the user was operating with it. The chips vanished on the click
+that selected one.
+
+`placeholderData: keepPreviousData` on `useTariffs`. The previous rows stay until
+the new ones arrive, which is also the honest picture: they are rates, just not
+yet the filtered ones.
+
+This is the same defect as the open item recorded against the vessels and flights
+tables, met from a different direction. It is fixed here because the control that
+vanishes is one this board draws; the other two screens are board 17's and still
+carry it.
+
+### And the screen said "sample data" twice
+
+`OpsPage` renders §5.2's screen banner for the tables that have no meta strip of
+their own — vessels and flights. Every payload on this screen has one, so passing
+the source to the shell as well put the same sentence on screen twice, one line
+above the card that was already saying it. The shell no longer gets it.
+
+---
+
+## F021 — Board 19, and four finished components nobody could reach
+
+The support screen was the pre-handoff design in the legacy `ops-*` palette: the
+emergency notice as a red paragraph, locations as unstyled list items, no privacy
+notice, no transcript control, and a receipt that was a heading and two rows.
+
+**Every component §6.1–6.6 asks for already existed.** `EmergencyStrip` was built
+to §6.1 exactly. `ContactCard` had been verified against board 08. `EnquiryReceipt`
+had been verified against board 11. `ContactPointRow` handled all five kinds.
+**None of the four had a caller outside its own tests** — the route imported none
+of them.
+
+That is the third pass in a row where the components were right and the screen
+was not, and the reason is always the same: the suite renders components.
+
+### The row the two boards draw differently
+
+§6.2 writes each contact row as "16px glyph `--brand-300` (3px top offset) + a
+**label/value stack**" and gives both label styles. Board 08 draws exactly that —
+`Telephone` above `+1 869 465 8121`. **Board 19's five location cards draw the
+value alone**, with no label.
+
+Kept the label, on the evidence and on what it carries:
+
+- §6.2's prose specifies it, with measurements, for two row kinds.
+- Board 08 renders it that way; board 19's five cards are the only instances
+  without.
+- The label is the **feed's** word, not the kind's. Four of the five locations
+  send `"Via SCASPA"` — a fact about how to reach a terminal with no line of its
+  own, which the phone glyph cannot carry and which board 19's own example data
+  never had to show, because its five cards each have a number of their own.
+
+Board 19 omits a label that would have read "Telephone" five times. That is not a
+different component.
+
+### The telephone is a link, not a 44px button
+
+Both boards draw the contact row's number as `500 14/22 --brand-200` tabular
+text. `ContactCard` was rendering `TapToCall` — §1.3's 44px bordered control,
+which the handoff uses in the escalation block — so every contact row was a
+button where the handoff draws a link, and the card grew its own row markup to
+fit it.
+
+The rows are `ContactPointRow` now, in one place, drawn as specified. The anchor
+takes `min-h-touch` below 640px and nothing above it, per §7: the type is exactly
+what §6.2 gives, and the hit area grows on touch like every other control. It
+also carries `aria-label="<label> — call <number>"`, because a link announced as
+seven digits gives a screen-reader user no idea what pressing it does. WCAG 2.5.3
+is satisfied — the accessible name contains the visible text.
+
+### "never `--critical-fill`/`--critical-text`" is a treatment, not a prohibition
+
+§6.3's state-tag line reads: "populated `--positive-fill`/`--positive`, TODO and
+not-populated `--caution-fill`/`--caution`, never `--critical-fill`/
+`--critical-text`." Read as a prohibition, the extension row has no tag colour at
+all.
+
+The export settles it: the extension row's tag is `rgba(217,86,75,0.12)` with
+`#E4736A` and reads **"Never"**. The sentence lists three treatments, and the
+third is named for the row it belongs to.
+
+### The row types that will never be populated are drawn now
+
+`08-blocked-and-forbidden.md` #7: "Draw the row types. None is populated." The
+component returned `null` for a valueless row — correct for a screen, and it
+meant the email, extension and web rows existed in a `Record` of glyph names and
+nowhere else. Three row types with no rendering are three row types nobody has
+looked at.
+
+`ContactPointCatalogue` draws all five with their state tags. It is not a screen
+component: nothing in the product renders an unpopulated row and the wire never
+sends one. It exists in the gallery and in the tests, which is what the blocked
+list asks for.
+
+The email glyph was `receipt` — the tariff calculator's mark. §6.3's table says
+**file**.
+
+### The status row, and a sentence that reads two ways
+
+§6.2: "`status: ""` is **always empty** on every location. Design the card so the
+absent status collapses cleanly — **there is no status row in the shipping markup
+at all**, and no code path that renders an empty one."
+
+The first clause forbids the row; the second forbids rendering an _empty_ one. The
+board's own annotation is the narrower: `status: "" — element not rendered`.
+
+Kept the narrow reading. It satisfies the wide one for the data that exists —
+`status` has never been non-empty, so nothing renders — while still saying
+something if a feed ever fills it, and it keeps a guard that already had a test.
+Deleting the path would have cost a regression test and bought nothing.
+
+### The transcript, and the difference between two facts
+
+§6.5: "**The UI reflects the response, not the request.** … The box shows what
+the server did. A tick that means 'we tried' is a lie."
+
+The form had no transcript control at all, and the receipt reported
+`transcript_included` as a `Conversation attached: Yes/No` detail row — which is
+neither of §6.5's two drawn renderings, and is not among §6.6's three rows
+(Department · Telephone · Sent).
+
+Now: the form offers §1.4's checkbox with its consequence line, **and only when
+this session has a conversation to attach** — a tick that would attach nothing is
+the same lie from the other end. The receipt draws §6.5's two states from
+`transcript_included`, and renders nothing at all when the transcript was never
+requested. There is no third rendering on the board, and "you did not ask for
+this" is not news.
+
+### The receipt's timestamp, for the third time
+
+`sentAt.toLocaleString()` renders `8/1/2026, 2:32:00 PM` on a US-configured
+browser — on a receipt whose entire purpose is to be quoted down a telephone.
+Same correction as F018's banner and F019's table cells: 24-hour, with the zone.
+
+The copy button was 36px at every width; §6.6 gives it 44px at ≤640px.
+
+### Both fields show their cap
+
+§6.5 caps the subject at 200 and the details at 4000, and §1.4 draws a counter on
+each. Subject had `maxLength` and no counter — a field that silently refuses the
+201st character and explains nothing — and Details had neither. `Textarea` now
+takes the same `counter` prop `Input` has, with the same at-limit treatment, so a
+form carrying both fields does not show the cap two ways.
+
+### What the wire publishes, and what the handoff draws
+
+Two data differences, recorded rather than papered over. Neither is a client
+defect: rendering the handoff's values instead of the feed's would be this client
+inventing SCASPA's published contact details.
+
+- **§6.2's five locations** are Deep Water Port, Port Zante, R. L. Bradshaw,
+  Vance W. Amory and Charlestown, with **five distinct telephone numbers**. The
+  feed sends five different names, all on the switchboard number, four with no
+  address. The count matches and the empty-address collapse is exercised by four
+  of them.
+- **§1.4's seven departments** are Marine Operations, Airport Operations, Cargo
+  and Warehousing, Finance and Billing, Security, Cruise and Port Zante, General
+  enquiries. The backend publishes seven different names. `department` is free
+  text on the wire, so sending the handoff's would be accepted — and would route
+  a ticket to a department nobody handles.
+
+---
+
+## F022 — Board 20, the panels that existed twice, and the screen that is not built
+
+### Two marine advisory panels, with two different empty states
+
+The one empty state in the product where a wrong sentence has physical
+consequences — a skipper reading it decides whether to sail — **shipped in two
+implementations with two different sentences**:
+
+| Where                                 | Empty state                                                                                                                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `console/SidePanels` (on the console) | "No notice has been published to this assistant. That is not a statement that conditions are safe — this assistant does not carry official marine warnings…" in a neutral panel |
+| `ops/AdvisoryPanel` (no caller)       | §6.9's copy, in `--caution-fill`, **missing the telephone number**                                                                                                              |
+
+§6.9 is explicit: "**No notice has been published to this assistant.** That is
+not confirmation that conditions are normal. Telephone Marine Operations on
+869 465 8121 before sailing", in the only empty state the product draws in
+caution rather than neutral.
+
+There is one panel now, it is the one the handoff draws, and it carries the
+number — "telephone Marine Operations" without one is advice a reader cannot act
+on from the screen they are looking at. The "Not an official notice to mariners"
+footnote is kept from the panel that was deleted: §6.9 does not draw it, and a
+populated list is exactly where a reader might mistake this for the official
+notice.
+
+The console's copies of the position map and the gate panel went the same way,
+and the components are **deleted** rather than left behind — a dead component
+with passing tests reads as covered, which is what got `VesselCard` deleted on
+board 17. Their tests were rewritten against the components that carry the rules
+now, not dropped.
+
+### The console printed a prediction and a record in one column
+
+Flagged on board 17 and owned by this one: `/ops/vessels` had a single
+**"Arrival"** column printing whichever of `ata` and `eta` existed, with
+`Actual` / `Estimated` captioned beneath the figure.
+
+Global rule 2: "**ETA and ATA are visually distinct.** … One is a prediction, one
+is a record; that distinction is the entire point of having two fields." A
+caption under a figure is read after the figure has been believed, and it is the
+first thing lost when a column is narrow. Two columns, drawn by `EstimatedTime`
+and `ActualTime` — the components that already existed for exactly this.
+
+### "Chunks" was showing a different quantity
+
+§6.12's index panel lists Documents · Chunks · Built · Version. `IndexStatus`
+carries `kb_rows` and `web_docs`, and **`web_docs` is not chunks** — it counts
+web documents, which under this label reads as a chunk count. The first build of
+the panel wired it anyway and the screen printed "Chunks 0", which is worse than
+nothing: §6.12's whole rule is "**Every field reads 'unknown', never 0**. Zero
+documents is a fact about an index that was built; this index has not reported at
+all."
+
+Chunks is blocked and reads `unknown`. Same class of error as board 17's
+`total_flights` under "Arrivals today", caught this time before it shipped.
+
+### Health: three states, and only one of them existed
+
+§6.11 draws ok, degraded-search and degraded-voice. `shells/HealthBanner` drew
+one — a dismissible bar over the chat when the index is missing — and no voice
+state at all, though `VITE_ENABLE_VOICE` is a client-side switch and needs no
+field from the server.
+
+`ops/HealthPanel` is the console's, with all three. The chat banner is left
+alone: it interrupts a conversation only when something is wrong, and a
+permanent green "all parts of the service are responding" bar over a chat is
+furniture. The `ok` state renders where "is everything up?" is the question the
+reader came with.
+
+### The operator profile card was two emoji and a legacy palette
+
+§6.10 draws a 32px circle with an anchor glyph, the name, the `DEMO ONLY` badge
+and a 2×2 legend of active × verified. The screen drew 👤 in a 48px circle, two
+sentence-long "sample" chips and four read-only fields the section does not have,
+all in the `ops-*` aliases. Board 00 already removed emoji from the speak button
+for the reason that applies here too: no icon rule can govern an emoji.
+
+`profile: null` returns **nothing** from the card — "the card is not rendered, no
+placeholder, no 'sign in' prompt, no silhouette avatar" — and that null case
+lives in the component rather than at the call site, because a caller that
+forgets is a caller that ships a silhouette.
+
+### §6.13's admin screen is NOT built, and here is why
+
+**This is a conflict between the handoff and this project's own standing rules,
+and it is recorded rather than resolved by preference.**
+
+§6.13 draws a secret gate ("Administrator key", a 38px field of mono dots, a
+Continue button), a models panel and a config summary. `GET /admin/stats` exists,
+takes `X-Admin-Secret`, and returns everything the panels need — including
+`tracked_clients`, which is _not_ blocked behind that header.
+
+Against it:
+
+- **`frontend/CLAUDE.md` rule 2**, first sentence: "**There is no auth and no
+  session token.**" Building the gate puts an operator credential into a browser
+  SPA and holds it in memory to authorise fetches. That is a security decision
+  about how SCASPA's operator secret is handled, not a UI gap.
+- **§2.8 makes not building it a designed, shipping-valid state.** Its three
+  states are A (present, authenticated), B (present, unauthenticated → the
+  ordinary 404) and **C (absent → the ordinary 404, and no entry point
+  anywhere)**. The product is in State C today, board 04 already ships the 404 it
+  requires, and `08-blocked-and-forbidden.md` requires `/admin/stats`
+  unauthenticated and `/adnim` to be byte-identical — which they are, because
+  neither exists in the client.
+
+**Recommendation, for whoever owns the security decision:** if the gate is
+wanted, the secret must never be persisted (rule 5 permits two storage keys and
+this is neither), the route must be reachable only by typing the address (no nav
+item, no link, no sidebar search result), and a wrong key must return the
+ordinary 404 rather than an error — all three of which §6.13 and §2.8 already
+specify. Until that decision is made, State C is not a gap; it is one of the
+three states the handoff draws.
+
+**§6.14's spend panels are blocked with it.** `SpendSummary` was verified against
+§6.14 on board 10 and has no caller, because the only source of spend figures is
+`/admin/stats` — behind the secret. It is left built and unreachable rather than
+fed invented figures.
+
+### The grid on the position plot is a pattern, not a gradient
+
+§6.7 draws the empty plot with two `linear-gradient`s at `32px 32px` — 1px grid
+lines. The product's rule is "no gradients inside the frame", and this is the
+same class of exception as the recorded-questions fade that ships as a mask:
+nothing shades. Every pixel is either `--surface-2` or the plot ground.
+
+The plot's ground is the one place the export and the prose disagree: §6.7 says
+`--canvas`, the export draws `#10121F` (`--surface-1`). One instance each, no
+tiebreaker, so README §4's rule applies — **the file wins** — and it is raised
+here. It is the opposite call from the currency label (§4.6), where _two_ doc
+sections agreed against one export instance.
+
+---
+
+## F023 — Board 21, and three emoji in the one control that has to work one-handed
+
+### The record button drew emoji, and none of its six states
+
+🎙, ■ and ✕, on a `rounded-md` box that turned **red** while recording. §6.15
+draws a 44px circle with six states, and the listening fill is `--brand-500`.
+
+No icon rule can govern an emoji — the platform renders it in its own font at
+its own colour — so "mic in `--text-2`" was not expressible, and the hover,
+permission-denied and voice-off treatments could not exist at all. Exactly the
+correction board 15 made to the speak button, on the control that matters most
+to the reader this product is for: a passenger with a phone in one hand and a
+bag in the other, or a driver at the cargo gate with the engine running.
+
+All six now: idle, hover, recording with `Recording 0:12`, the caution fill from
+45 seconds with the elapsed clock **inside the button** and `7 seconds left`
+beside it, the permission-denied treatment with §6.15's message, and voice off.
+
+The captions sit **beside** the button rather than beneath it. §6.15 draws them
+stacked because that is how a swatch grid is laid out; the composer's control row
+is horizontal, and §3.2 does not enumerate that row while recording.
+
+### The eight-state transcription panel had no caller
+
+`TranscriptionResult` was built to §6.16 — every state, every real limit — and
+**nothing rendered it**. The button showed two sentences of its own instead:
+"Nothing was heard" and "That could not be transcribed. Please type your question
+instead."
+
+So the screen never said what §6.16 exists to say. "That recording is 26.4 MB.
+The limit is 20 MB" tells someone what to do; "that could not be transcribed"
+tells them they failed. The fourth dead component this project has found, after
+`VesselCard`, `FlightCard` and the four on board 19.
+
+The measured figures are carried through rather than the status code alone: the
+blob's own size for the 413, and the recorder's cap for the duration 422. The
+API answers both "wrong container" and "too long" with a 422, so the two are told
+apart before a sentence is chosen.
+
+### Voice off is drawn; a browser that cannot record still renders nothing
+
+Two different causes, and only one of them is a state:
+
+- **`disabled`** — the deployment switched voice off. §6.15 draws it as a dashed
+  outline, inert. A control that vanishes is one the user has to remember
+  existed. Board 15 already made this call for the speak button.
+- **anything else** — `getUserMedia` undefined on plain HTTP, no recorder, no
+  supported format. Nothing is drawn: "a control that does nothing when tapped is
+  worse than an absent one; the user tries three times and concludes the product
+  is broken."
+
+The test asserting an empty container for _both_ was updated to assert the drawn
+state for the first. The second still pins the empty container.
+
+### Paused looked exactly like never-started
+
+`SpeechStatus` has had `paused` all along and `SpeakButton` mapped it to `idle`,
+so a paused answer drew the resting waveform while its own label read "Resume
+reading this answer". §6.17 draws Paused — `1px solid --brand-500`, play
+`--brand-200` — and that is what it draws now.
+
+A control that says one thing and draws another is the failure both §3.13 and
+§6.17 are arranged against.
+
+### §3.13 and §6.17 describe one control two ways
+
+|         | §3.13 (chat chapter)      | §6.17 (voice chapter)                            |
+| ------- | ------------------------- | ------------------------------------------------ |
+| Size    | 28–32px ghost icon button | 36px circle                                      |
+| At rest | waveform `--text-3`       | play `--text-2`                                  |
+| States  | 7, no paused, no finished | 9, incl. paused, finished and three cache states |
+
+**§3.13 governs the message-row control**: it is the chapter describing the
+control in its context, and §1.3's "ghost icon button (message actions)" is 28px
+with `speak` last in its row order — two sections agreeing against one. §6.17's
+**paused** is taken because it is a state, not a size, and the store already had
+it.
+
+**The three cache states are not placed.** The signal exists — the backend sends
+`X-TTS-Cache: hit|miss`, lists it in `EXPOSED_HEADERS`, and 304s on a matching
+ETag — so this is not a wire gap. But "Cached · instant" is a diagnostic caption,
+and the only surface for one is the operator screen §6.13 draws, which is not
+built (see the progress doc's §4.10). Recorded rather than pinned onto a control
+in a conversation.
+
+**Finished** is not built either: the speech store resets to idle when playback
+ends, and §3.13 — the section that governs this control — does not draw a
+finished state.
+
+### §6.18's speech preview is admin only
+
+`padding: 12px 14px; --surface-3`, a 28px `--brand-500` circle, "Preview the
+voice" and an `ADMIN ONLY` tag. It belongs to the operator screen, blocked with
+§6.13 for the reason recorded in §4.10 — not built, not approximated, and not
+placed somewhere it does not belong.
+
+---
+
+## F024 — Board 22, and three events that were being answered twice
+
+`07-feedback-and-states.md` is the only chapter that is entirely cross-cutting,
+and its first line is the whole board:
+
+> "One grid, so the same event never gets two treatments across screens. **Build
+> these as shared components and reference them everywhere; do not re-solve
+> 'empty table' per screen.**"
+
+So this was a verification pass, not a build. It found three events with two
+treatments each, and two states with none.
+
+### The advisory empty state was written twice, and the softer one was on a screen
+
+The one empty state in this product a reader can act on **to their harm**: a
+skipper who reads it decides whether to sail.
+
+| Where                         | What it said                                                                                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops/AdvisoryPanel` (console) | §6.9's: "No notice has been published to this assistant. That is not confirmation that conditions are normal. Telephone Marine Operations on 869-465-8121 before sailing", in `--caution-fill` |
+| `/profile`'s "System updates" | "No notices have been published to this assistant. That is not a statement that there is nothing to know — it means nothing has been sent here", in neutral                                    |
+
+The second is not wrong, exactly — it is softer, in a quieter colour, and it does
+not give the number. §7.4 marks this the **only** empty state drawn in caution
+rather than neutral, and §6.9 spends a paragraph on why. `/profile` renders the
+one panel now.
+
+### Every error was followed by a re-typed escalation block
+
+§7.1: "**Every error is followed by the escalation block**
+(`03-chat.md` §3.10)." `EscalationBlock`'s own docstring says the same thing from
+the other side: "one component used by every refusal and every error, rather than
+the same three lines re-typed in five places where they would drift."
+
+`ErrorState` re-typed them — its own panel, its own heading ("Reach SCASPA
+directly"), the three phone lines and the postal address inline. `NoAnswerCard`
+and `StepLimitCard` used the shared one. Three renderings of one dead end.
+
+### A table loading looked two different ways
+
+§7.5: "Skeleton table — **column headers stay so the shape is stable.** Rows keep
+their real height." That is `TableSkeleton`, and the vessels, flights and tariffs
+screens use it.
+
+The **console** screens drew three blank 96px cards with no headings instead —
+the treatment §7.5 exists to replace, because a table that dissolves entirely and
+reappears has moved every column twice and the reader re-finds the one they were
+reading each time. `OpsListState` takes the headings now and hands them to the
+one skeleton.
+
+### The error envelope had no status and no fills
+
+§7.1 gives the shell — "code at `600 12px/20px` tabular in the leading slot",
+`--caution-fill` for 4xx and `--critical-fill` for 5xx — and §3.11 gives the code
+its colour. **Two sections agreeing**, and §6.16's transcription rows have drawn
+their codes (`422`, `413`, `429`, `503`) since board 21. The chat's envelope drew
+every failure in one neutral panel with no code at all, so a 422 the reader could
+fix and a 500 that is ours read as the same event.
+
+This overturned a documented decision — `errorCopy.ts` opened "never an error
+code" — and the file says why it changed: a three-digit number beside a plain
+sentence is what a caller reads out to the switchboard, and `UPSTREAM_TIMEOUT` is
+what nobody can. The `request_id`, the stack and the internal code name are still
+dev-console only.
+
+### The copy toast did not exist
+
+§7.6 draws it and §7.3 does not list it, which is the tell that it is a
+confirmation rather than a notice: `padding 12px 16px`, a 20px `--positive-fill`
+tile with a 12px check, "Copied to the clipboard". The receipt's copy button
+announced itself to a screen reader and to nobody else — and a copy is the one
+action in this product with **no visible result**, because the clipboard is
+invisible. Without it the reader presses the button, sees the page do nothing,
+and presses it again.
+
+It appears with the originating button's `Copied` state, which §1.3 had already
+built and §7.6 requires to be simultaneous.
+
+### The one loading state with nothing to produce it
+
+§7.5's fifth is "**Progressive rows** — `12 of 25 loaded`". Nothing in this
+product loads rows progressively: every list is paged with `limit`/`offset` and
+arrives whole, and the chat's inline cards cap at three with §4.4's `Showing 3 of
+12`, which is a count row rather than a loading state.
+
+So it is **not built** — not blocked on a field, and not approximated. A
+component with no caller is what this project has deleted four times (`VesselCard`,
+`FlightCard`, the console's three panels, and the ones board 19 found), and the
+right time to build this one is when an endpoint streams.
+
+### What was already right
+
+§7.2's three copies were correct in all three places and share one module —
+"Send again in 0:42", "Record again in 0:26", "Refresh in 0:18" — and there is no
+remaining-quota figure anywhere, which §7.2 and `08` both forbid. §7.3's six
+mandatory notices each have exactly one home and `tests/matrix.test.tsx` already
+proved none can be dismissed. §7.7's announcer is checked by the a11y harness's
+two manual checks on every run.
+
+The board's own rule is now a **source scan** in `tests/matrix.test.tsx`: the
+advisory sentence, the escalation block and the skeleton each have to resolve to
+one file. It is a scan rather than a component test because the failure is
+invisible in any single component — each copy is correct on its own screen, and
+only reading two screens together shows the same event answered twice.

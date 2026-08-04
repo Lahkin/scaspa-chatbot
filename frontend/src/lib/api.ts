@@ -147,10 +147,15 @@ export async function normaliseError(response: Response): Promise<ApiError> {
    * falls back to a fixed guess and looks exactly like a working one — which is
    * why this warns rather than staying quiet.
    *
-   * Measured against the running backend: it exposes only `X-Request-ID`, so the
-   * real 45-second wait arrived as a 30-second guess. Filed as
-   * `docs/backend-issues.md` #5. Not worked around here: guessing better would
-   * hide the bug.
+   * THE BACKEND NOW EXPOSES IT. `app/main.py` names `Retry-After` in
+   * `EXPOSED_HEADERS` alongside `X-Request-ID` and `X-TTS-Cache`, so the real
+   * wait is readable and the rate-limit countdown shows a true number rather
+   * than a guess. `docs/backend-issues.md` #5 is closed.
+   *
+   * The warning stays. It is now a regression check rather than a known bug: if
+   * that header list is ever trimmed, the countdown silently degrades back into
+   * a plausible-looking fiction, and this line in the dev console is the only
+   * thing that would say so.
    */
   if (import.meta.env.DEV && (status === 429 || status === 503) && retryAfter === null) {
     console.warn(
@@ -211,6 +216,12 @@ export function parseRetryAfter(header: string | null): number | null {
 
 /** A last-resort mapping when the body did not tell us. */
 function statusToCode(status: number): ErrorCode {
+  /*
+   * 400 is not on `ErrorCode` — the backend does not send it — so it cannot be
+   * returned from here. `ApiError` carries the status alongside the code, and
+   * `kindOf` in features/chat maps a 400 to the client-side `BAD_REQUEST` kind
+   * so it gets §3.11's own copy rather than the generic INTERNAL apology.
+   */
   if (status === 404) return 'NOT_FOUND';
   if (status === 422) return 'VALIDATION_ERROR';
   // 429 is the client being limited; 503 is the model provider throttling the

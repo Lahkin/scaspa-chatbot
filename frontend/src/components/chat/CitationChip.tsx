@@ -39,7 +39,7 @@ export function CitationChip({ kbId }: { kbId: string }) {
       <span
         data-kb-id={kbId}
         aria-hidden="true"
-        className="mx-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-neutral-200 align-baseline text-caption text-ink-subtle"
+        className="mx-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-border align-baseline text-caption text-ink-muted"
       >
         {/* Deliberately not a number: numbering before reconciliation would be a
             number that might change or vanish. A neutral dot says "being
@@ -75,11 +75,29 @@ export function CitationChip({ kbId }: { kbId: string }) {
     >
       <span
         className={cn(
-          'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-caption font-semibold tabular',
+          /*
+           * §3.5, settled: `height: 18px; padding: 0 6px; border-radius: 5px;
+           * font: 600 11px/16px --brand-200; tabular`.
+           *
+           * It was a 20px circle at 12px. The difference is not decorative: a
+           * round chip at citation size reads as a status dot, and the whole of
+           * board 00c is arranged so that round means status and square-ish
+           * means something else.
+           */
+          'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-tiny px-1.5',
+          'text-micro font-semibold tabular',
           'transition-colors duration-fast ease-out-soft',
           highlighted
-            ? 'bg-blue-800 text-ink-inverse ring-2 ring-blue-400'
-            : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+            ? 'bg-brand-700 text-ink-inverse ring-2 ring-brand-400'
+            : // Board 14: the settled citation chip is a brand tint carrying
+              // brand-200 — 6.37:1. It used to carry brand-700, which on that
+              // tint is 1.02:1: two dark values that were a light ground and a
+              // dark ink before the theme moved under them.
+              // Hover DEEPENS the tint rather than brightening it: brand-200 on
+              // brand-500 is 4.18:1, and the chip keeps its ink through the
+              // state change. brand-700 gives 6.26:1 and reads as pressed-ward,
+              // which is the direction a chip about to be activated should go.
+              'bg-brand-tint text-brand-200 hover:bg-brand-700'
         )}
       >
         {index}

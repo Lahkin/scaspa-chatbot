@@ -114,9 +114,24 @@ describe('the composer during a cooldown', () => {
     setDraft('How much is a ferry ticket?');
     render(<Composer onSend={onSend} onStop={vi.fn()} busy={false} cooldownS={8} />);
 
-    // On the button, because that is what the user is reaching for.
-    const button = screen.getByRole('button', { name: 'Wait 8s' });
+    // On the button, because that is what the user is reaching for. A clock
+    // rather than a bare second count — board 22 keeps one format across the
+    // strip, the button and the 429 card.
+    /*
+     * §3.2 state 7 draws the send control as the same 34px circle it always is,
+     * showing the remaining seconds in place of the arrow — "send is blocked,
+     * never hidden". The accessible name still starts with "Send", so a screen
+     * reader is told which control this is before it is told to wait.
+     */
+    const button = screen.getByRole('button', { name: 'Send — wait 0:08' });
     expect(button).toBeDisabled();
+    expect(button.textContent).toBe('8');
+
+    // And the strip above names the published budget as well as the wait, so a
+    // user on a screen where they have also recorded and refreshed can tell
+    // which of the three is blocked — board 13 state 7, board 22.
+    expect(screen.getByText(/15 questions a minute is the limit/)).toBeInTheDocument();
+    expect(screen.getByText(/Send again in 0:08/)).toBeInTheDocument();
 
     await userEvent.setup().click(button);
     expect(onSend).not.toHaveBeenCalled();
@@ -127,8 +142,9 @@ describe('the composer during a cooldown', () => {
     const { container } = render(
       <Composer onSend={vi.fn()} onStop={vi.fn()} busy={false} cooldownS={8} />
     );
-    expect(screen.getByText(/The assistant is busy right now/)).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(/429|rate limit|UPSTREAM/i);
+    // The strip names the published budget and the action it blocks, in words.
+    expect(screen.getByText(/15 questions a minute is the limit/)).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/429|UPSTREAM/i);
   });
 
   it('keeps the box usable so a half-typed question is not lost', () => {

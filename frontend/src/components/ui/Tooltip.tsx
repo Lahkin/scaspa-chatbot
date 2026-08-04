@@ -53,7 +53,11 @@ export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
         hidden={!open}
         className={cn(
           'pointer-events-none absolute left-1/2 z-50 w-max max-w-56 -translate-x-1/2',
-          'rounded-sm bg-neutral-900 px-2 py-1 text-caption text-ink-inverse shadow-popover',
+          // A raised dark surface with a border, not a "darkest neutral" fill.
+          // On a dark theme there is no darker step to contrast against, so the
+          // tooltip separates by being LIGHTER than the page plus an edge —
+          // the same rule as every other floating layer here.
+          'rounded-sm border border-border bg-surface-muted px-2 py-1 text-caption text-ink shadow-popover',
           side === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
         )}
       >

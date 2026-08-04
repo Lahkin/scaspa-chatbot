@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import {
   getFlights,
   getGateMap,
@@ -126,6 +126,22 @@ export function useTariffs(params: TariffQuery = {}) {
     queryFn: ({ signal }) => getTariffs(params, { signal }),
     refetchOnWindowFocus: false,
     retry: shouldRetry,
+    /*
+     * Keep the rows on screen while the next set loads.
+     *
+     * §5.9 puts the search box and the category chips **inside** the table's
+     * card, so a filter change that drops to the loading state takes the control
+     * the user is operating away with it: the chips vanish on the click that
+     * selects one, and the search box unmounts between keystrokes. A new
+     * `queryKey` is a new query with no data, so this is not a refetch and
+     * `isPending` is genuinely true.
+     *
+     * The previous page stays until the new one arrives, which is also the
+     * honest picture — the rates on screen are rates, just not yet the filtered
+     * ones — and `isPlaceholderData` marks the difference for anything that
+     * needs it.
+     */
+    placeholderData: keepPreviousData,
   });
 }
 

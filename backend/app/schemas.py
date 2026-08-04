@@ -21,8 +21,30 @@ from app.agent.prompts import SCASPA_PHONE
 # --------------------------------------------------------------------- chat
 
 # The retrieval filter values the knowledge base actually uses. Mirrored in the
-# frontend's `Category` type; the contract lists these five and nothing else.
-CATEGORIES: tuple[str, ...] = ("ferry", "cargo", "cruise", "airport", "general")
+# frontend's `Category` type.
+#
+# These are read off the researchers' export, not chosen here. The list was five
+# while the index held a 12-row fixture; the delivered corpus
+# (scaspa_kb_2026-07-31.csv) uses ten, and the five that were missing —
+# `marine`, `payments`, `access`, `jobs`, `corporate` — cover 47 confirmed rows
+# between them. They were reachable by semantic search but no client could filter
+# to them and `classify_category` could never select one, so pilotage, tugs and
+# MARSEC questions were competing against the whole corpus unfiltered.
+#
+# Adding a category here is only half the job: `app/rag/rewrite.py` needs
+# decisive keywords for it, or the classifier still cannot choose it.
+CATEGORIES: tuple[str, ...] = (
+    "ferry",
+    "cargo",
+    "cruise",
+    "airport",
+    "general",
+    "marine",
+    "payments",
+    "access",
+    "jobs",
+    "corporate",
+)
 
 
 class Citation(BaseModel):
@@ -245,6 +267,32 @@ class ChatResponse(BaseModel):
     grounded: bool = Field(description="Every id and figure traces to a retrieved row")
     refusal: bool = Field(description="True when the assistant declined to answer")
     refusal_category: str | None = Field(default=None, description="Which refusal applied, if any")
+    question_sanitised: str | None = Field(
+        default=None,
+        description=(
+            "The question as it was actually sent to the model, when input safety changed "
+            "it — otherwise null. Instruction-like phrasing is replaced in place with the "
+            "marker '[instruction-like text removed]', so the position in the sentence is "
+            "preserved and a client can show the user exactly what went. The user's own "
+            "words changed on screen; that needs explaining where it happened"
+        ),
+    )
+    answer_replaced: bool = Field(
+        default=False,
+        description=(
+            "True when the drafted answer carried figures that could not be matched to a "
+            "retrieved row and was replaced. The client shows a correction notice; without "
+            "this flag it cannot tell a replaced figure from an original one"
+        ),
+    )
+    step_limit_reached: bool = Field(
+        default=False,
+        description=(
+            "True when the agent ran out of tool calls before it could finish. A distinct "
+            "signal from 'not in our data': one is answered by asking a simpler question, "
+            "the other never will be"
+        ),
+    )
     citations: list[Citation] = Field(default_factory=list, description="Verified sources")
     chart: ChartSpec | None = Field(default=None, description="A chart to render, or null")
     card: "AssistantCard | None" = Field(
@@ -695,6 +743,15 @@ class TariffQuote(BaseModel):
     """
 
     line_items: list[TariffLineItem] = Field(default_factory=list)
+    unpriced: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Codes that applied to this movement but have no published rate, so they are "
+            "in no line above and in no figure below. NON-EMPTY MEANS THE TOTAL IS SHORT "
+            "BY A WHOLE CHARGE — the client must say 'Total so far' and name the gap. The "
+            "standard 'confirmed on invoice' disclaimer does not cover a missing charge"
+        ),
+    )
     subtotal: float = Field(default=0.0)
     total: float = Field(default=0.0)
     currency: str = Field(default="XCD")

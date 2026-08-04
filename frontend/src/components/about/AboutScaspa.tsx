@@ -40,7 +40,11 @@ export function AboutScaspa({
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <LogoLockup size="lg" tagline="Ports and travel, St. Kitts and Nevis" />
+        {/* The lockup carries the seal and the product name and nothing else —
+            handoff §1.1. The strapline it used to take as a prop is a sentence
+            about SCASPA, so it belongs in this panel's own prose. */}
+        <LogoLockup />
+        <p className="text-caption text-ink-muted">Ports and travel, St. Kitts and Nevis</p>
         <Heading className="text-h3 font-semibold text-ink">{SCASPA_IDENTITY.fullName}</Heading>
         <p className="text-body text-ink-muted">
           {SCASPA_IDENTITY.shortName} is {SCASPA_IDENTITY.what}

@@ -413,12 +413,22 @@ export const handlers = [
       });
     }
 
-    const query = (new URL(request.url).searchParams.get('q') ?? '').toLowerCase();
-    const vessels = query
-      ? MOCK_VESSELS.filter(
-          (v) => v.name.toLowerCase().includes(query) || (v.imo ?? '').toLowerCase().includes(query)
-        )
-      : MOCK_VESSELS;
+    const params = new URL(request.url).searchParams;
+    const query = (params.get('q') ?? '').toLowerCase();
+    // `status` is a real parameter on `GET /api/vessels` — `filter_vessels`
+    // applies it and `total` is counted after it. The mock ignored it, which is
+    // what let the screen filter in the client without anything noticing.
+    const status = params.get('status');
+
+    let vessels = MOCK_VESSELS;
+    if (query) {
+      vessels = vessels.filter(
+        (v) => v.name.toLowerCase().includes(query) || (v.imo ?? '').toLowerCase().includes(query)
+      );
+    }
+    if (status) {
+      vessels = vessels.filter((v) => v.status === status);
+    }
 
     return HttpResponse.json({
       source: FIXTURE_SOURCE,

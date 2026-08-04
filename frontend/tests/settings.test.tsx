@@ -44,13 +44,7 @@ beforeEach(() => {
 function sidebarProps() {
   return {
     onAsk: vi.fn(),
-    onNewConversation: vi.fn(),
-    onOpenSources: vi.fn(),
-    onOpenAbout: vi.fn(),
-    sourceCount: 0,
-    knowledgeVerifiedAt: null,
-    busy: false,
-    hasConversation: true,
+    recordedQuestions: ['Is the Vega Sirius alongside?'],
   };
 }
 
@@ -167,29 +161,41 @@ describe('the language picker', () => {
 // ── 3. The chrome translates; the answers do not ─────────────────────────────
 
 describe('what a language choice does and does not reach', () => {
-  it('repaints the sidebar chrome', async () => {
+  it('repaints the translated chrome', async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <>
         <LanguagePicker />
-        <Sidebar {...sidebarProps()} />
+        <HistoryControls />
       </>
     );
 
-    expect(screen.getByRole('button', { name: /New conversation/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: en.settings.history.clearAction })
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: /Español/ }));
-    expect(screen.getByRole('button', { name: /Nueva conversación/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: es.settings.history.clearAction })
+    ).toBeInTheDocument();
   });
 
-  it('leaves the facility list in English, and says so in the markup', () => {
-    const { container } = renderWithProviders(<Sidebar {...sidebarProps()} />);
+  it('leaves the navigation in the handoff’s own words', () => {
     /*
-     * The starter questions are sent verbatim to an English-language retriever,
-     * so a translated question matches nothing and returns "I don't know" to a
-     * perfectly good question. The attribute is what keeps a Spanish screen
-     * reader from mispronouncing "Basseterre Ferry Terminal".
+     * The sidebar's labels are the handoff's shipping strings — "Vessels",
+     * "Tariffs", "Recorded questions" — and the handoff sets the product's
+     * voice in §10, down to the spelling: British and Caribbean, sentence case
+     * throughout. They are not routed through the dictionaries, so a language
+     * choice does not touch them.
+     *
+     * That is a real limitation and it is recorded rather than papered over:
+     * the chrome that IS translated is `/settings` and the history controls,
+     * and the assistant's answers stay English by rule (CLAUDE.md rule 10 —
+     * every figure must appear verbatim in the retrieved chunk, which no
+     * translation layer can promise).
      */
-    expect(container.querySelector('nav ul[lang="en"]')).not.toBeNull();
+    renderWithProviders(<Sidebar {...sidebarProps()} />);
+    expect(screen.getByRole('link', { name: 'Vessels' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recorded questions' })).toBeInTheDocument();
   });
 
   it('keeps the conversation column marked English in the shell', () => {
@@ -252,17 +258,11 @@ describe('what reaches localStorage', () => {
 // ── 5. Reaching settings from the sidebar ────────────────────────────────────
 
 describe('the sidebar way out', () => {
-  it('offers settings as a real link, not a button that navigates', () => {
+  it('offers every destination as a real link, not a button that navigates', () => {
     renderWithProviders(<Sidebar {...sidebarProps()} />);
-    // A link, so it is middle-clickable, copyable and openable in a new tab.
-    const link = screen.getByRole('link', { name: /Settings/ });
-    expect(link).toHaveAttribute('href', '/settings');
-  });
-
-  it('keeps it reachable on the collapsed rail', () => {
-    renderWithProviders(<Sidebar {...sidebarProps()} collapsed onToggleCollapsed={vi.fn()} />);
-    // The rail drops words, never destinations.
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    // Links, so they are middle-clickable, copyable and openable in a new tab.
+    expect(screen.getByRole('link', { name: 'Vessels' })).toHaveAttribute('href', '/vessels');
+    expect(screen.getByRole('link', { name: 'Support' })).toHaveAttribute('href', '/support');
   });
 
   it('dismisses the drawer on the way out', async () => {
@@ -270,7 +270,7 @@ describe('the sidebar way out', () => {
     const onNavigate = vi.fn();
     renderWithProviders(<Sidebar {...sidebarProps()} onNavigate={onNavigate} />);
 
-    await user.click(screen.getByRole('link', { name: /Settings/ }));
+    await user.click(screen.getByRole('link', { name: 'Tariffs' }));
     expect(onNavigate).toHaveBeenCalled();
   });
 

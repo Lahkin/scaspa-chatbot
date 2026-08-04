@@ -64,7 +64,9 @@ describe('FullPageShell', () => {
 
   it('offers a way to a person from the header, not buried in a footer', () => {
     render(<FullPageShell />);
-    const links = screen.getAllByRole('link', { name: /talk to a person/i });
+    // An icon button among the header's secondary actions — handoff §2.1 gives
+    // that row 32px icon buttons and no wide labelled links.
+    const links = screen.getAllByRole('link', { name: /telephone the authority/i });
     expect(links.length).toBeGreaterThan(0);
     for (const link of links) {
       // Full international form, so it dials from a foreign handset — which is
@@ -135,14 +137,60 @@ describe('WidgetShell', () => {
     post.mockRestore();
   });
 
-  it('has a compact header carrying close, sources and a way to a person', () => {
+  it('drops the secondary actions but keeps the one that has nothing behind it', () => {
+    /*
+     * §2.3 drops "secondary actions" from the widget header. The sources button
+     * and the phone link went with them and lost nothing: a citation chip
+     * already opens the source panel, and the escalation block on every refusal
+     * already carries the number.
+     *
+     * The close button stays, as a deliberate deviation. `public/embed.js` sets
+     * `launcher.style.display = 'none'` while the panel is open, so the host's
+     * own control is off screen; without this button a pointer user has no way
+     * out of the panel at all.
+     */
     render(<WidgetShell />);
     expect(screen.getByRole('button', { name: 'Close the assistant' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Show sources' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /talk to a person/i })).toHaveAttribute(
-      'href',
-      'tel:+18694658121'
-    );
+    expect(screen.queryByRole('button', { name: 'Show sources' })).toBeNull();
+    expect(screen.queryByRole('link', { name: /talk to a person/i })).toBeNull();
+  });
+
+  it('is the handoff’s frame: surface-1, a hairline and a 16px radius', () => {
+    const { container } = render(<WidgetShell />);
+    const root = container.firstElementChild!;
+    // surface-1 and not surface-2: inside a host page this panel is the main
+    // content column, and the provenance cards in it must stay a step lighter.
+    expect(root.className).toContain('bg-surface-1');
+    expect(root.className).toContain('border-border');
+    expect(root.className).toContain('rounded-panel');
+  });
+
+  it('shrinks the greeting and the chips, and keeps the stands-alone promise', async () => {
+    render(<WidgetShell />);
+    // 20/28 rather than 30/38, and the copy shortens with it — eight chips and
+    // a four-line greeting are most of a 480px panel.
+    expect(
+      await screen.findByRole('heading', { name: 'What do you need from the port?' })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Each answer stands alone/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Clearing cargo through customs/ })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /SCASPA's opening hours/ })).toBeNull();
+  });
+
+  it('keeps the source-kind badge in the header when the sidebar goes — board 00a', async () => {
+    /*
+     * Embedding drops the navigation and with it the data-source status card.
+     * The spec is explicit that the provenance badge moves rather than
+     * disappearing: "Embedding is not a reason to lose the one thing that says
+     * whether the figures are real."
+     *
+     * The fixture handler answers `unavailable`, which is also the production
+     * default — so this is the badge most users would actually see.
+     */
+    render(<WidgetShell />);
+    expect(await screen.findByText(/no feed|sample data|live feed/i)).toBeInTheDocument();
   });
 });
 

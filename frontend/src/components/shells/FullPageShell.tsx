@@ -2,9 +2,13 @@ import { useId, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { ChatCore } from '@/components/chat/ChatCore';
 import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
-import { IconButton, Sheet } from '@/components/ui';
+import { Icon, IconButton, Sheet } from '@/components/ui';
 import { AboutScaspa } from '@/components/about/AboutScaspa';
-import { useHealth } from '@/features/chat/queries';
+import {
+  useMarineAdvisories,
+  useOperatorProfile,
+  useVesselPositions,
+} from '@/features/ops/queries';
 import { SCASPA_PHONE_HREF, ScaspaMark } from './ScaspaMark';
 import { HealthBanner } from './HealthBanner';
 import { Sidebar } from './Sidebar';
@@ -67,15 +71,14 @@ export function FullPageShell() {
 function FullPageShellInner() {
   const {
     entries,
+    grounding,
     highlighted,
     setHighlighted,
     scrollTo,
     panelOpen,
     setPanelOpen,
     state,
-    busy,
     send,
-    startNewConversation,
   } = useChatSessionContext();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -96,35 +99,62 @@ function FullPageShellInner() {
   const [railCollapsed, setRailCollapsed] = useState(false);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
   const drawerId = useId();
-  const health = useHealth();
 
-  const hasConversation = state.messages.length > 0;
-
-  /**
-   * Unique citations across the whole conversation.
+  /*
+   * Where this session's operational figures come from — spec board 06.
    *
-   * `entries` from the context is the *latest answer's* sources, which is what
-   * the panel shows. The sidebar count is a different question — "how much has
-   * this conversation been sourced from" — so it is computed over every message
-   * and deduplicated by `kb_id`. Counting the latest answer's entries instead
-   * would make the number drop when a follow-up cites fewer rows, which reads
-   * as sources being lost.
+   * Read from `/api/ops/positions` because every `/api/ops/*` response carries
+   * the same `DataSource`, and positions is the cheapest of them: it returns
+   * the complete set, which in production is empty. One cached query answers
+   * the question for the whole shell rather than each panel asking separately.
+   *
+   * A failure leaves this null and the card simply absent. The alternative —
+   * assuming a kind when the request did not answer — would put a provenance
+   * claim on screen that nothing behind it supports, which is the one thing
+   * this card exists to prevent.
    */
-  const sourceCount = new Set(
-    state.messages.flatMap((message) => (message.citations ?? []).map((c) => c.kb_id))
-  ).size;
+  const { data: positions } = useVesselPositions();
+  const opsSource = positions?.source ?? null;
+
+  /** The demonstration profile. Null in production, and then no row at all. */
+  const { data: operator } = useOperatorProfile();
+
+  /*
+   * The advisory count, from the server.
+   *
+   * `total` and never `advisories.length`. A client-side recount drops to zero
+   * under a filter and lies, and on this particular figure a zero would read as
+   * an all-clear — the one thing §6.9 spends a whole panel refusing to say.
+   */
+  const { data: advisories } = useMarineAdvisories();
+  const advisoryCount = advisories?.total ?? 0;
+
+  /*
+   * The questions asked in this session, newest first — the sidebar's
+   * "Recorded questions" list.
+   *
+   * Read off the transcript rather than kept in a second place, and
+   * deduplicated: asking the same thing twice records one row, because the list
+   * is a record of what was asked and not a log of keystrokes. It never touches
+   * storage — `frontend/CLAUDE.md` rule 5 — so it ends with the tab, which is
+   * the same lifetime as the conversation it came from.
+   */
+  const recordedQuestions = [
+    ...new Set(
+      state.messages
+        .filter((message) => message.role === 'user')
+        .map((message) => message.text)
+        .reverse()
+    ),
+  ];
 
   const sidebar = (
     <Sidebar
       onAsk={(question) => void send(question)}
-      onNewConversation={startNewConversation}
-      onOpenSources={() => setPanelOpen(true)}
-      onOpenAbout={() => setAboutOpen(true)}
-      sourceCount={sourceCount}
-      knowledgeVerifiedAt={health?.index.kb_updated_at ?? null}
-      busy={busy}
-      hasConversation={hasConversation}
-      collapsed={railCollapsed}
+      recordedQuestions={recordedQuestions}
+      dataSource={opsSource}
+      profile={operator?.profile ?? null}
+      advisoryCount={advisoryCount}
       onToggleCollapsed={() => setRailCollapsed((value) => !value)}
     />
   );
@@ -163,67 +193,81 @@ function FullPageShellInner() {
         header is now the only thing separating the white column from the navy
         rail beside it, so its edge does real work instead of hinting.
       */}
-      <header className="shrink-0 border-b border-neutral-300 bg-surface">
-        <div className="flex items-center gap-2 px-4 py-2">
-          {/* The hamburger only exists where the sidebar is a drawer. */}
-          <span className="lg:hidden">
-            <IconButton
-              ref={hamburgerRef}
-              label="Open navigation"
-              variant="ghost"
-              aria-expanded={drawerOpen}
-              aria-controls={drawerId}
-              onClick={() => setDrawerOpen(true)}
-            >
-              <span aria-hidden="true">☰</span>
-            </IconButton>
-          </span>
+      {/*
+        The header row — handoff §2.1, "Main column".
 
-          {/* Redundant beside the sidebar's own lockup, so it stands down there. */}
-          <span className="lg:hidden">
-            <ScaspaMark />
-          </span>
-
-          <span className="flex-1" />
-
-          {state.messages.length > 0 && (
-            <button
-              type="button"
-              onClick={startNewConversation}
-              className="min-h-touch shrink-0 rounded-md px-2 text-caption font-medium text-ink-muted underline hover:text-ink lg:hidden"
-            >
-              Start again
-            </button>
-          )}
-
-          {/* Sources are reachable from the header below xl, where the panel is
-              an overlay. At xl it is docked and permanently visible — two ways
-              to reach the same panel is one too many. */}
-          <span className="xl:hidden">
-            <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
-              <span aria-hidden="true">⌸</span>
-            </IconButton>
-          </span>
-
-          {/*
-            "Talk to a person" is not a fallback tucked into a footer. Someone who
-            has decided the assistant cannot help them has already spent patience
-            they did not have, so the way out is on screen from the start.
-          */}
-          <a
-            href={SCASPA_PHONE_HREF}
-            className="hidden min-h-touch shrink-0 items-center rounded-md border border-border-strong px-3 text-small font-medium text-blue-700 hover:bg-blue-50 sm:inline-flex"
+        60px, `0 28px`, a bottom hairline. The screen title takes `flex: 1`;
+        the right-hand end carries the optional advisory pill and then 32px
+        icon buttons. It is flat: depth in this product is surface lightness,
+        and a header that shaded itself would be the only gradient inside the
+        frame.
+      */}
+      <header className="flex h-header shrink-0 items-center gap-4 border-b border-border px-4 lg:px-7">
+        {/* The hamburger only exists where the sidebar is a drawer. */}
+        <span className="lg:hidden">
+          <IconButton
+            ref={hamburgerRef}
+            label="Open navigation"
+            variant="ghost"
+            aria-expanded={drawerOpen}
+            aria-controls={drawerId}
+            onClick={() => setDrawerOpen(true)}
           >
-            Talk to a person
-          </a>
+            <Icon name="panel" size={18} />
+          </IconButton>
+        </span>
+
+        {/* The compact lockup stands in for the sidebar where there isn't one. */}
+        <span className="lg:hidden">
+          <ScaspaMark />
+        </span>
+
+        <h1 className="hidden min-w-0 flex-1 truncate text-h3 font-semibold text-ink lg:block">
+          New question
+        </h1>
+        <span className="flex-1 lg:hidden" />
+
+        {/*
+          The advisory pill. Present only when there is something published —
+          a pill reading "0 advisories" is furniture, and worse, it reads as an
+          all-clear, which §6.9 spends a whole panel refusing to say.
+        */}
+        {advisoryCount > 0 ? (
           <a
-            href={SCASPA_PHONE_HREF}
-            aria-label="Talk to a person — call SCASPA"
-            className="inline-flex size-touch-min shrink-0 items-center justify-center rounded-md text-blue-700 hover:bg-blue-50 sm:hidden"
+            href="/ops"
+            className={cn(
+              'inline-flex h-8 shrink-0 items-center gap-2 rounded-button px-3',
+              'border border-caution-edge bg-caution-tint',
+              'text-label font-medium text-caution'
+            )}
           >
-            <span aria-hidden="true">☎</span>
+            <Icon name="megaphone" size={16} />
+            <span className="tabular">{advisoryCount}</span>{' '}
+            {advisoryCount === 1 ? 'advisory' : 'advisories'}
           </a>
-        </div>
+        ) : null}
+
+        {/* Sources are reachable from the header below xl, where the panel is
+            an overlay. At xl it is docked and permanently visible — two ways
+            to reach the same panel is one too many. */}
+        <span className="xl:hidden">
+          <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
+            <Icon name="file" size={16} />
+          </IconButton>
+        </span>
+
+        {/*
+          "Talk to a person" is not a fallback tucked into a footer. Someone who
+          has decided the assistant cannot help them has already spent patience
+          they did not have, so the way out is on screen from the start.
+        */}
+        <a
+          href={SCASPA_PHONE_HREF}
+          aria-label="Telephone the Authority"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-button border border-border text-ink-muted hover:bg-surface-3 hover:text-ink"
+        >
+          <Icon name="phone" size={16} />
+        </a>
       </header>
 
       {/* `min-h-0` is load-bearing. Without it a flex child refuses to shrink
@@ -279,6 +323,7 @@ function FullPageShellInner() {
         >
           <SourcePanel
             entries={entries}
+            grounding={grounding}
             highlighted={highlighted}
             onHighlight={setHighlighted}
             scrollTo={scrollTo}
@@ -299,13 +344,10 @@ function FullPageShellInner() {
             panel. Docked, this prop is absent and nothing closes. */}
         <Sidebar
           onAsk={(question) => void send(question)}
-          onNewConversation={startNewConversation}
-          onOpenSources={() => setPanelOpen(true)}
-          onOpenAbout={() => setAboutOpen(true)}
-          sourceCount={sourceCount}
-          knowledgeVerifiedAt={health?.index.kb_updated_at ?? null}
-          busy={busy}
-          hasConversation={hasConversation}
+          recordedQuestions={recordedQuestions}
+          dataSource={opsSource}
+          profile={operator?.profile ?? null}
+          advisoryCount={advisoryCount}
           onNavigate={() => setDrawerOpen(false)}
         />
       </SidebarDrawer>
@@ -319,6 +361,7 @@ function FullPageShellInner() {
           <SourcePanel
             headed={false}
             entries={entries}
+            grounding={grounding}
             highlighted={highlighted}
             onHighlight={setHighlighted}
             scrollTo={scrollTo}

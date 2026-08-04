@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { OpsPage } from '@/components/ops/OpsPage';
 import { SourceNotice } from '@/components/ops/SourceNotice';
+import { OperatorProfileCard } from '@/components/ops/OperatorProfileCard';
+import { MarineAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
 import { useMarineAdvisories, useOperatorProfile } from '@/features/ops/queries';
 import { SCASPA_TEL_HREF, SCASPA_TEL_TEXT } from '@/features/chat/contact';
-import type { OperatorProfile } from '@/lib/types';
 
 /**
  * The design's `profile_settings` screen.
@@ -61,7 +62,14 @@ function ProfileRoute() {
     >
       {data?.source ? <SourceNotice source={data.source} /> : null}
 
-      {profile ? <IdentityCard profile={profile} /> : <NoIdentityCard pending={isPending} />}
+      {/*
+        §6.10's card, which returns nothing when `profile` is null — "**The card
+        is not rendered.** No placeholder, no 'sign in' prompt, no silhouette
+        avatar." `NoIdentityCard` is not that placeholder: it is this SCREEN
+        explaining why its subject is absent and where the useful page is, which
+        is the decision recorded at the top of this file.
+      */}
+      {profile ? <OperatorProfileCard profile={profile} /> : <NoIdentityCard pending={isPending} />}
 
       <section
         aria-labelledby="secure-heading"
@@ -96,33 +104,25 @@ function ProfileRoute() {
         </div>
       </section>
 
-      <section
-        aria-labelledby="updates-heading"
-        className="rounded-lg border border-ops-outline-variant bg-ops-surface p-4"
-      >
-        <h2
-          id="updates-heading"
-          className="text-caption font-semibold tracking-wide text-ops-ink-variant uppercase"
-        >
-          System updates
-        </h2>
+      {/*
+        ── ONE ADVISORY PANEL, NOT A SECOND ONE IN SOFTER WORDS ────────────────
+        This screen drew its own "System updates" panel whose empty state read
+        "No notices have been published to this assistant. That is not a
+        statement that there is nothing to know — it means nothing has been sent
+        here", in neutral.
 
-        {(marine.data?.advisories.length ?? 0) === 0 ? (
-          <p className="mt-2 text-small text-ops-ink-variant">
-            No notices have been published to this assistant. That is not a statement that there is
-            nothing to know — it means nothing has been sent here.
-          </p>
-        ) : (
-          <ul className="mt-2 space-y-2">
-            {marine.data?.advisories.map((advisory) => (
-              <li key={advisory.id} className="border-l-4 border-amber-board pl-3">
-                <p className="text-small font-medium text-ops-ink">{advisory.headline}</p>
-                <p className="text-caption text-ops-ink-variant">{advisory.port}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        §6.9 and §7.4 give that event **one** treatment, and it is the only
+        empty state in the product drawn in caution: "That is not confirmation
+        that conditions are normal. Telephone Marine Operations on
+        869 465 8121 before sailing." A quiet screen read as safety has physical
+        consequences, and two sentences of different weight for one fact is
+        precisely what §7's first line refuses: "One grid, so the same event
+        never gets two treatments across screens."
+      */}
+      <MarineAdvisoryPanel
+        advisories={marine.data?.advisories ?? []}
+        total={marine.data?.total ?? 0}
+      />
 
       <section
         aria-labelledby="prefs-heading"
@@ -152,105 +152,6 @@ function ProfileRoute() {
         .
       </p>
     </OpsPage>
-  );
-}
-
-/**
- * The identity card, with its notice above it rather than beneath it.
- *
- * Order matters here more than it usually does: a reader who scans the card and
- * moves on must have passed the words "DEMO ONLY" to get to it. Putting the
- * caveat underneath is how a screenshot of the top half becomes a fake ID.
- */
-function IdentityCard({ profile }: { profile: OperatorProfile }) {
-  return (
-    <section
-      aria-labelledby="identity-heading"
-      className="overflow-hidden rounded-lg border border-amber-text bg-ops-surface"
-    >
-      {/*
-        Amber on navy, the departure-board pairing — 5.38:1. Deliberately the
-        loudest thing on the page. It is `role="note"` rather than an alert:
-        there is no emergency, but it must not be skipped either.
-      */}
-      <p role="note" className="bg-navy px-4 py-2 text-small font-semibold text-amber-board">
-        {profile.notice}
-      </p>
-
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-ops-surface-high text-h2 leading-none"
-          >
-            &#128100;
-          </span>
-          <div className="min-w-0">
-            <h2 id="identity-heading" className="text-h3 font-semibold text-ops-ink">
-              {profile.display_name}
-            </h2>
-            <p className="text-small text-ops-ink-variant">{profile.division}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {/*
-                Both chips say "sample" in their own text. A bare "Verified"
-                next to a name is a claim, and the notice at the top of the card
-                is the only thing contradicting it — one line of defence is not
-                enough for the word "verified" beside a person's name.
-              */}
-              {profile.active ? <DemoChip>Sample status — not a real account</DemoChip> : null}
-              {profile.verified ? <DemoChip>Sample flag — nobody is verified here</DemoChip> : null}
-            </div>
-          </div>
-        </div>
-
-        <dl className="mt-4 grid gap-x-4 gap-y-3 sm:grid-cols-2">
-          <ReadOnlyField label="Agent ID number" value={profile.agent_id} />
-          <ReadOnlyField label="Port jurisdiction" value={profile.jurisdiction} />
-          <ReadOnlyField label="Assigned role" value={profile.role} />
-          <ReadOnlyField
-            label="Last sync"
-            value={profile.last_sync}
-            render={(value) => <time dateTime={value}>{value}</time>}
-          />
-        </dl>
-      </div>
-    </section>
-  );
-}
-
-function DemoChip({ children }: { children: string }) {
-  return (
-    <span className="rounded-sm bg-ops-alert-fill px-2 py-0.5 text-caption font-medium text-ops-alert-ink">
-      {children}
-    </span>
-  );
-}
-
-/**
- * One read-only row.
- *
- * A `<dl>` pair rather than a disabled `<input>`, which is what the mockup
- * draws. A disabled text field says "this is editable by someone" and puts a
- * control in the tab order that does nothing; these values are not a form.
- */
-function ReadOnlyField({
-  label,
-  value,
-  render,
-}: {
-  label: string;
-  value: string | null;
-  render?: (value: string) => React.ReactNode;
-}) {
-  return (
-    <div>
-      <dt className="text-caption text-ops-ink-variant">{label}</dt>
-      <dd className="text-small font-medium text-ops-ink tabular">
-        {/* An em dash, never a blank. A field with nothing after it reads as a
-            rendering bug rather than as an absent value. */}
-        {value ? (render ? render(value) : value) : '—'}
-      </dd>
-    </div>
   );
 }
 

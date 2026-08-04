@@ -737,6 +737,13 @@ def _done_payload(result: AnswerResult, settings: Settings) -> dict:
     copy the non-streaming endpoint allows. Without it a boundary refusal ("I
     cannot look up your container") and a plain no-answer arrive
     indistinguishable, and the client has to frame both as the latter.
+
+    `answer_replaced` and `step_limit_reached` are here for the same reason and
+    were the same omission. Both are computed on every turn and both were
+    dropped at the wire boundary, so a client could see that *an* answer came
+    back but not that it had been rewritten, nor that it stopped early. The
+    stream carries exactly what `POST /api/chat` carries, so a surface does not
+    lose a distinction by choosing to stream.
     """
     from app.rag.ingest import read_index_meta
 
@@ -746,6 +753,8 @@ def _done_payload(result: AnswerResult, settings: Settings) -> dict:
         "grounded": result.grounded,
         "refusal": result.refusal,
         "refusal_category": result.refusal_category,
+        "answer_replaced": result.answer_replaced,
+        "step_limit_reached": result.hit_tool_limit,
         "kb_version": meta.kb_version if meta else None,
     }
 

@@ -1,118 +1,110 @@
-import { Card } from '@/components/ui';
-import { SCASPA_EMAIL, SCASPA_PHONE_LINES, SCASPA_POSTAL_ADDRESS } from '@/features/chat/contact';
+import { Icon, type IconName } from '@/components/ui/Icon';
+import { cn } from '@/lib/cn';
 import type { RefusalCategory } from '@/lib/types';
+import { EscalationBlock } from './EscalationBlock';
 
 /**
- * The handoff.
+ * A boundary refusal — spec board 15, cards 1 and 2.
  *
- * Rendered instead of a normal bubble when `refusal: true`. **It must not look
- * like an error**, because it is not one: the contract is explicit that a refusal
- * is a successful 200, and the assistant declining to guess about someone's
- * container is the system working exactly as designed.
+ * ## Five refusals that must not look alike
  *
- * So: no red, no warning triangle, no apology. Navy and calm, the way a
- * well-designed "here is who can actually help you" panel looks. The visual
- * message is *handed over*, not *failed*.
+ * The board's whole premise. All five arrive as `refusal: true`, and a single
+ * treatment for all of them tells a user that the assistant broke — when in
+ * fact one of them is a designed boundary, one is a gap in coverage, one is a
+ * step limit they can work around, and one is a correction that already
+ * happened.
  *
- * This is the moment worth showing in a demo, and most teams never build it —
- * they treat a refusal as an error path and style it accordingly, which teaches
- * a judge that the system breaks when pushed. Making it deliberate says the
- * opposite: the boundary was designed, not discovered.
+ * Each gets its own glyph and its own heading. Only the safety refusal gets a
+ * coloured edge, because it is the only one where acting on a wrong answer has
+ * physical consequences.
+ *
+ * ## The boundary was designed, not discovered
+ *
+ * These refusals are not errors and are deliberately not styled as ones. A
+ * demo that renders "I cannot advise on berthing" in a red error panel teaches
+ * the room that the system breaks when pushed; rendering it calmly says the
+ * opposite.
  */
 
-const EXPLANATIONS: Record<string, string> = {
-  personal_record:
-    'I cannot look up anything tied to a specific person or shipment — a container, ' +
-    'a booking, a payment or a customs case. SCASPA staff can see those records; I ' +
-    'have no access to them at all.',
-  vessel_or_aircraft_operations:
-    'I cannot advise on vessel, aircraft or vehicle operations. Those decisions are ' +
-    'made by the people on duty with live information, and a stale answer from me ' +
-    'could be worse than no answer.',
+interface Treatment {
+  icon: IconName;
+  iconClass: string;
+  /** Only the safety refusal carries a coloured edge. */
+  border: string;
+  heading: string;
+  body: string;
+}
+
+const TREATMENTS: Record<NonNullable<RefusalCategory>, Treatment> = {
+  vessel_or_aircraft_operations: {
+    icon: 'shield',
+    iconClass: 'text-critical-text',
+    border: 'border-critical/35',
+    heading: 'This assistant cannot advise on operations',
+    body:
+      'Berthing, pilotage, manoeuvring and aircraft handling are decided by duty officers ' +
+      'with live information this assistant does not have. Telephone Marine Operations.',
+  },
+  personal_record: {
+    icon: 'user',
+    iconClass: 'text-brand-300',
+    border: 'border-border',
+    heading: 'We do not hold records about people',
+    body:
+      'This assistant holds published information only — schedules, tariffs and departmental ' +
+      'contacts. It cannot look up a person, a consignment owner or a staff member.',
+  },
 };
 
-const DEFAULT_EXPLANATION =
-  'That is outside what I can help with. Questions about customs, immigration, tax ' +
-  'or legal matters, about a specific shipment, booking or payment, or about vessel ' +
-  'and aircraft operations need to go to SCASPA staff directly.';
+const FALLBACK: Treatment = {
+  icon: 'shield',
+  iconClass: 'text-brand-300',
+  border: 'border-border',
+  heading: 'That is outside what this assistant can help with',
+  body:
+    'Questions about customs, immigration, tax or legal matters, about a specific shipment, ' +
+    'booking or payment, or about vessel and aircraft operations need to go to SCASPA staff ' +
+    'directly — they can see the details of your case.',
+};
 
 export function EscalationCard({
   category,
-  /** The backend's own refusal text. Shown when there is no category-specific line. */
+  /** The backend's own refusal text, used when no category arrived. */
   answer,
 }: {
   category?: RefusalCategory | undefined;
   answer?: string | undefined;
 }) {
-  const explanation =
-    (category ? EXPLANATIONS[category] : undefined) ??
-    // Falling back to the backend's text rather than only to our own: it is the
-    // approved copy, and the phone number is already inside it.
-    answer?.split('\n\n')[0] ??
-    DEFAULT_EXPLANATION;
+  const treatment = (category ? TREATMENTS[category] : undefined) ?? FALLBACK;
+
+  /*
+   * The backend's first paragraph wins over our fallback prose when there is no
+   * category, because it is the approved copy for whatever gate actually fired.
+   * With a category, the specific line above is better than the generic one the
+   * backend sends for all of them.
+   */
+  const body = category ? treatment.body : (answer?.split('\n\n')[0] ?? treatment.body);
 
   return (
-    <Card tone="outlined" className="border-navy">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-caption font-semibold tracking-wide text-navy uppercase">
-            Talk to SCASPA directly
-          </p>
-          <p className="text-body text-ink">{explanation}</p>
-        </div>
-
-        <div className="space-y-3 rounded-md bg-surface-muted p-3">
-          <div>
-            <p className="text-small font-semibold text-ink">Telephone</p>
-            <ul className="mt-1 space-y-1">
-              {SCASPA_PHONE_LINES.map((line) => (
-                <li key={line.href}>
-                  {/* Each line is its own tel: link. "8121 / 2 / 3" as one link
-                      dials nothing; as three, the next one is a single tap. */}
-                  <a
-                    href={line.href}
-                    className="inline-flex min-h-touch items-center text-body font-medium text-blue-700 underline underline-offset-2 tabular"
-                  >
-                    {line.text}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="text-small font-semibold text-ink">Post</p>
-            <address className="mt-1 text-small text-ink-muted not-italic">
-              {SCASPA_POSTAL_ADDRESS.map((line) => (
-                <span key={line} className="block">
-                  {line}
-                </span>
-              ))}
-            </address>
-          </div>
-
-          <div>
-            <p className="text-small font-semibold text-ink">Email</p>
-            {SCASPA_EMAIL ? (
-              <a
-                href={`mailto:${SCASPA_EMAIL}`}
-                className="inline-flex min-h-touch items-center text-body text-blue-700 underline"
-              >
-                {SCASPA_EMAIL}
-              </a>
-            ) : (
-              // Visible and marked, not omitted. An omitted field is invisible to
-              // whoever has to chase it; this one is a standing question on screen.
-              <p className="mt-1 text-small text-ink-subtle">
-                <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 font-medium">
-                  Pending from SCASPA
-                </span>{' '}
-                — the website obfuscates the address, so it has not been guessed.
-              </p>
-            )}
-          </div>
-        </div>
+    <section
+      aria-labelledby="refusal-heading"
+      data-refusal-category={category ?? 'unspecified'}
+      className={cn('flex flex-col gap-4 rounded-panel border bg-surface p-5', treatment.border)}
+    >
+      <div className="flex flex-col gap-3">
+        <h3
+          id="refusal-heading"
+          className="flex items-center gap-2.5 text-section font-semibold text-ink"
+        >
+          <Icon name={treatment.icon} size={16} className={treatment.iconClass} />
+          {treatment.heading}
+        </h3>
+        <p className="text-body text-ink-muted">{body}</p>
       </div>
-    </Card>
+
+      {/* Identical wherever it appears. A refusal that ends without a way
+          forward is a dead end. */}
+      <EscalationBlock />
+    </section>
   );
 }

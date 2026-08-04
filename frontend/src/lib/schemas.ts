@@ -334,6 +334,18 @@ export const tariffLineItemSchema = z.object({
  */
 export const tariffQuoteSchema = z.object({
   line_items: z.array(tariffLineItemSchema),
+  /*
+   * Codes that applied and had no published rate.
+   *
+   * Defaulted to empty rather than required, so an older backend still parses —
+   * but note which way the default points. Empty means "nothing is missing",
+   * and on a build that cannot report a gap that is a claim the client cannot
+   * actually check. It is the only tolerable default (assuming a charge is
+   * missing on every quote would be worse), and it is the reason
+   * `QuoteResult` reads this field rather than inferring completeness from
+   * the presence of line items.
+   */
+  unpriced: z.array(z.string()).default([]).catch([]),
   subtotal: z.number(),
   total: z.number(),
   currency: z.string(),
@@ -409,6 +421,22 @@ export const chatResponseSchema = z.object({
   refusal: z.boolean(),
   // Optional: the contract's own no-answer sample omits the key. See lib/types.ts.
   refusal_category: refusalCategorySchema,
+  /** Non-null only when input safety changed the question — board 14. */
+  question_sanitised: z.string().nullish().catch(null),
+  /*
+   * Both default to `false` rather than being required, and the default is the
+   * safe direction in each case.
+   *
+   * `answer_replaced: false` shows no correction notice, which is right for a
+   * backend too old to send the field — the alternative, defaulting to true,
+   * would put "two figures were replaced" on every answer from that build.
+   *
+   * `step_limit_reached: false` falls back to the generic no-answer copy, which
+   * is what the client showed before the field existed. Defaulting it to true
+   * would tell people to simplify questions we simply do not cover.
+   */
+  answer_replaced: z.boolean().default(false).catch(false),
+  step_limit_reached: z.boolean().default(false).catch(false),
   citations: z.array(citationSchema),
   chart: chartSpecSchema.nullable(),
   /*
@@ -446,7 +474,15 @@ export const errorEnvelopeSchema = z.object({ error: apiErrorSchema });
 // ── Stream event payloads ────────────────────────────────────────────────────
 
 export const streamPayloadSchemas = {
-  meta: z.object({ conversation_id: z.string() }),
+  meta: z.object({
+    conversation_id: z.string(),
+    /*
+     * Nullish and caught: a backend predating board 14 omits the key, and
+     * `meta` is the FIRST event — a client that rejects it never attaches a
+     * conversation id and the whole answer is lost over a missing notice.
+     */
+    question_sanitised: z.string().nullish().catch(null),
+  }),
   token: z.object({ text: z.string() }),
   tool_start: z.object({ name: anyToolNameSchema, summary: z.string() }),
   tool_end: z.object({ name: anyToolNameSchema, summary: z.string(), ms: z.number() }),
@@ -466,6 +502,13 @@ export const streamPayloadSchemas = {
      * its schema would leave the answer stuck mid-stream forever.
      */
     refusal_category: refusalCategorySchema,
+    /*
+     * Same two flags the JSON endpoint carries, defaulted the same way and for
+     * the same reason. `done` is the last event, so a client that rejects it has
+     * no later event to recover on — every field here is tolerant by design.
+     */
+    answer_replaced: z.boolean().default(false).catch(false),
+    step_limit_reached: z.boolean().default(false).catch(false),
     kb_version: z.string().nullable(),
   }),
   error: apiErrorSchema,

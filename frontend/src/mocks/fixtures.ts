@@ -210,6 +210,9 @@ export const CHAT_RESPONSE: ChatResponse = {
   grounded: true,
   refusal: false,
   refusal_category: null,
+  // The ordinary answer: written once, from figures that verified, in one pass.
+  answer_replaced: false,
+  step_limit_reached: false,
   citations: CITATIONS,
   chart: null,
   card: null,
@@ -233,6 +236,11 @@ export const REFUSAL_RESPONSE: ChatResponse = {
   grounded: false,
   refusal: true,
   refusal_category: 'personal_record',
+  // A boundary refusal never reaches generation, so there was no draft to
+  // replace and no tool budget to exhaust. Both are false for a different
+  // reason than on a normal answer, and neither is a step-limit failure.
+  answer_replaced: false,
+  step_limit_reached: false,
   citations: [],
   chart: null,
   card: null,
@@ -351,6 +359,11 @@ export const NO_ANSWER_RESPONSE: ChatResponse = {
   refusal: true,
   // Absent, which is what distinguishes a no-answer from a boundary refusal.
   refusal_category: null,
+  // And false, which is what distinguishes it from a step-limit failure. All
+  // three arrive as `refusal: true` and they take three different messages —
+  // this fixture is the one that must not be told to ask something simpler.
+  answer_replaced: false,
+  step_limit_reached: false,
   citations: [],
   chart: null,
   card: null,

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@/components/ui';
 import { SourceAge, SourceNotice } from './SourceNotice';
+import { TableSkeleton } from './TableStates';
 import type { ApiError } from '@/lib/api';
 import type { DataSource } from '@/lib/types';
 
@@ -88,6 +89,7 @@ export function OpsListState({
   emptyTitle,
   emptyHint,
   onRetry,
+  columns,
 }: {
   isLoading: boolean;
   error: ApiError | null;
@@ -95,9 +97,29 @@ export function OpsListState({
   emptyTitle: string;
   emptyHint?: string | undefined;
   onRetry?: (() => void) | undefined;
+  /**
+   * The table's column headings, so the loading state is §7.5's skeleton —
+   * the one the rest of the product uses — rather than a second treatment of
+   * the same event. Without them this falls back to the card placeholders.
+   */
+  columns?: readonly string[] | undefined;
 }) {
   if (isLoading) {
-    return (
+    /*
+     * ── ONE SKELETON, NOT TWO ───────────────────────────────────────────────
+     *
+     * This drew three blank 96px cards with no column headings, while the rest
+     * of the product used `TableSkeleton`. §7.5 gives the event one treatment
+     * and says what it is: "**Column headers stay so the shape is stable.** Rows
+     * keep their real height." A table that dissolves entirely and reappears has
+     * moved every column twice, and the reader re-finds the one they were
+     * reading each time.
+     *
+     * §7's own first line: "do not re-solve 'empty table' per screen."
+     */
+    return columns ? (
+      <TableSkeleton columns={columns} rows={3} />
+    ) : (
       <ul className="space-y-3" aria-busy="true" aria-label="Loading">
         {[0, 1, 2].map((row) => (
           <li

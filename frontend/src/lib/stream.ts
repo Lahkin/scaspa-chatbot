@@ -37,7 +37,7 @@ import type {
  */
 export interface StreamHandlers {
   /** Always first, before any token. Adopt `conversation_id` immediately. */
-  onMeta?: (data: { conversation_id: string }) => void;
+  onMeta?: (data: { conversation_id: string; question_sanitised?: string | null }) => void;
   onToken?: (data: { text: string }) => void;
   onToolStart?: (data: { name: ToolName; summary: string }) => void;
   onToolEnd?: (data: { name: ToolName; summary: string; ms: number }) => void;
@@ -63,6 +63,14 @@ export interface StreamHandlers {
     refusal: boolean;
     /** Absent on a plain no-answer; present when a specific refusal gate fired. */
     refusal_category?: RefusalCategory;
+    /**
+     * The draft was discarded as ungrounded and rewritten from published
+     * figures. Defaulted to `false` by the schema, so a backend that predates
+     * the field behaves as it did before it existed.
+     */
+    answer_replaced: boolean;
+    /** The agent ran out of tool calls. Not the same as "not in our data". */
+    step_limit_reached: boolean;
     kb_version: string | null;
   }) => void;
   /** Once headers are sent the status is fixed at 200, so a failure arrives here. */
@@ -276,7 +284,9 @@ function dispatch(
     case 'meta':
       // Adopted immediately, before any token, so the conversation is correct
       // even if the user navigates away mid-answer.
-      handlers.onMeta?.(parsed.data as { conversation_id: string });
+      handlers.onMeta?.(
+        parsed.data as { conversation_id: string; question_sanitised?: string | null }
+      );
       return false;
     case 'token':
       handlers.onToken?.(parsed.data as { text: string });
@@ -307,6 +317,8 @@ function dispatch(
           grounded: boolean;
           refusal: boolean;
           refusal_category?: RefusalCategory;
+          answer_replaced: boolean;
+          step_limit_reached: boolean;
           kb_version: string | null;
         }
       );

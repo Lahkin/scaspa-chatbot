@@ -52,7 +52,7 @@ function Landing() {
         The hero band. Full-bleed because it is structure — the top of the page
         is navy from edge to edge, and the content column resumes below it.
       */}
-      <section className="bg-grad-hero">
+      <section className="bg-surface-sunken">
         <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-10">
           <h1 className="text-display font-semibold text-balance text-on-navy-primary">
             Will you make the last ferry?
@@ -88,7 +88,7 @@ function Landing() {
         Decorative, so it is hidden from assistive technology — the heading
         structure already says where the sections divide.
       */}
-      <div aria-hidden="true" className="h-px w-full bg-hairline-horizon" />
+      <div aria-hidden="true" className="h-px w-full bg-border" />
 
       {/* Everything below the horizon is flat. The example answer in particular:
           it is the one thing here a visitor reads word for word. */}
@@ -106,7 +106,7 @@ function Landing() {
           </div>
 
           <ul className="flex flex-wrap gap-2">
-            {SUGGESTED_QUESTIONS.map((question) => (
+            {SUGGESTED_QUESTIONS.map(({ label: question }) => (
               <li key={question}>
                 <button
                   type="button"
@@ -228,9 +228,9 @@ function ExampleAnswer() {
       <p className="mt-2 text-small font-medium text-ink">
         \u201cWhat time is the last ferry back from Nevis?\u201d
       </p>
-      <p className="mt-2 text-small text-navy-deep">
+      <p className="mt-2 text-small text-ink-muted">
         The last placeholder sailing back from Nevis on a weekday is 18:00
-        <span className="mx-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 align-baseline text-caption font-semibold text-blue-800 tabular">
+        <span className="mx-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-tint px-1 align-baseline text-caption font-semibold text-brand-200 tabular">
           1
         </span>
         . Please confirm with SCASPA before you travel.

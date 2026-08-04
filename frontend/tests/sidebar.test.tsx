@@ -22,34 +22,46 @@ import { Sidebar } from '@/components/shells/Sidebar';
 import { SidebarDrawer } from '@/components/shells/SidebarDrawer';
 import { LogoLockup } from '@/components/brand/LogoLockup';
 import { AboutScaspa } from '@/components/about/AboutScaspa';
-import { FACILITY_NAV } from '@/features/chat/facilities';
 import { SCASPA_EMAIL, SCASPA_FACILITIES } from '@/lib/scaspa-facts';
 import { renderWithProviders } from './helpers';
 
 function noop() {}
 
+const RECORDED = [
+  'Is the Vega Sirius alongside?',
+  'Wharfage on a 40ft container',
+  'Arrivals into RLB after 14:00',
+] as const;
+
+/** The demo object, whose `is_demo` is a required literal `true`. */
+const DEMO_PROFILE = {
+  is_demo: true,
+  display_name: 'Basseterre operator',
+  division: 'Marine Operations',
+  agent_id: 'demo-1',
+  jurisdiction: 'St Kitts',
+  role: 'Operator',
+  last_sync: null,
+  active: true,
+  verified: true,
+  notice: 'A fixed demonstration object. It is not a sign-in and never becomes one.',
+} as const;
+
 async function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
     onAsk: vi.fn(),
-    onNewConversation: vi.fn(),
-    onOpenSources: vi.fn(),
-    onOpenAbout: vi.fn(),
-    sourceCount: 0,
-    knowledgeVerifiedAt: null,
-    busy: false,
-    hasConversation: true,
+    recordedQuestions: RECORDED,
     ...overrides,
   };
-  // The footer's `<Link to="/privacy">` reads the router from context and
-  // throws without one, so this needs the router harness rather than the
-  // provider-only one.
+  // The data-source card reads nothing from the network, but the sidebar sits
+  // inside the same provider stack everywhere else, so it renders that way here.
   //
-  // Async because `RouterProvider` paints on a microtask after mount: a sync
-  // query straight after `render` runs against an empty tree and fails with a
-  // confusing "unable to find role". Awaiting the landmark the sidebar always
-  // has means every caller gets a painted tree.
+  // Async because the tree paints on a microtask after mount: a sync query
+  // straight after `render` fails with a confusing "unable to find role".
+  // Awaiting the landmark the sidebar always has means every caller gets a
+  // painted tree.
   const result = renderWithProviders(<Sidebar {...props} />);
-  await screen.findByRole('navigation', { name: 'SCASPA facilities' });
+  await screen.findByRole('navigation', { name: 'Sections' });
   return { props, ...result };
 }
 
@@ -184,120 +196,145 @@ describe('the sidebar drawer', () => {
   });
 });
 
-// ── 3. Starter questions send, and dismiss the drawer ────────────────────────
+// ── 3. The destinations ──────────────────────────────────────────────────────
 
-describe('facility starter questions', () => {
-  it('sends through the normal path and fires onNavigate', async () => {
+describe('the navigation', () => {
+  it('lists the handoff’s groups and destinations, in order', async () => {
+    await renderSidebar();
+    const nav = screen.getByRole('navigation', { name: 'Sections' });
+
+    for (const label of ['Assistant', 'Operations', 'Conditional']) {
+      expect(within(nav).getByRole('heading', { name: label })).toBeInTheDocument();
+    }
+    const links = within(nav)
+      .getAllByRole('link')
+      .map((link) => link.textContent?.trim());
+    expect(links).toEqual(['Chat', 'Vessels', 'Flights', 'Tariffs', 'Support', 'Console']);
+  });
+
+  it('has no Admin entry at all — not a disabled row, not a lock', async () => {
+    /*
+     * "When a route is not built, no entry appears." The dashed
+     * "Admin — absent unless built" row on the board is documentation of that
+     * absence, not a shipping state, and §2.8 turns it into a rule: any
+     * difference between a route that exists and one that does not confirms
+     * the address exists.
+     */
+    await renderSidebar();
+    expect(screen.queryByText(/admin/i)).toBeNull();
+    expect(screen.queryByRole('link', { name: /admin/i })).toBeNull();
+  });
+
+  it('returns nothing for an unbuilt address through the search either', async () => {
+    const user = userEvent.setup();
+    await renderSidebar();
+
+    await user.type(screen.getByRole('searchbox'), 'admin');
+    const nav = screen.getByRole('navigation', { name: 'Sections' });
+    expect(within(nav).queryAllByRole('link')).toHaveLength(0);
+  });
+
+  it('filters the destinations it does hold', async () => {
+    const user = userEvent.setup();
+    await renderSidebar();
+
+    await user.type(screen.getByRole('searchbox'), 'ves');
+    const nav = screen.getByRole('navigation', { name: 'Sections' });
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((l) => l.textContent?.trim())
+    ).toEqual(['Vessels']);
+  });
+
+  it('marks the current destination and nothing else', async () => {
+    await renderSidebar({ currentPath: '/tariffs' });
+    const current = screen.getByRole('link', { name: 'Tariffs' });
+    expect(current).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Vessels' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('shows the advisory count only when the server reports one', async () => {
+    const { unmount } = await renderSidebar({ advisoryCount: 0 });
+    expect(within(screen.getByRole('link', { name: /Console/ })).queryByText('0')).toBeNull();
+    unmount();
+
+    await renderSidebar({ advisoryCount: 2 });
+    expect(
+      within(screen.getByRole('link', { name: /Console/ })).getByText('2')
+    ).toBeInTheDocument();
+  });
+});
+
+// ── 4. Recorded questions re-ask; they do not restore anything ───────────────
+
+describe('recorded questions', () => {
+  it('re-asks through the normal path and fires onNavigate', async () => {
     const user = userEvent.setup();
     const onAsk = vi.fn();
     const onNavigate = vi.fn();
     await renderSidebar({ onAsk, onNavigate });
 
-    await user.click(screen.getByRole('button', { name: /Port Zante/ }));
-    const question = FACILITY_NAV[1]!.questions[0];
-    await user.click(screen.getByRole('button', { name: question }));
+    await user.click(screen.getByRole('button', { name: RECORDED[1] }));
 
-    expect(onAsk).toHaveBeenCalledWith(question);
+    expect(onAsk).toHaveBeenCalledWith(RECORDED[1]);
     // On a drawer viewport this is what closes it. Docked, the prop is absent.
     expect(onNavigate).toHaveBeenCalled();
   });
 
-  it('disables every question while a request is in flight', async () => {
-    const user = userEvent.setup();
-    await renderSidebar({ busy: true });
-
-    await user.click(screen.getByRole('button', { name: /Deep Water Harbour/ }));
-    for (const question of FACILITY_NAV[0]!.questions) {
-      expect(screen.getByRole('button', { name: question })).toBeDisabled();
+  it('implies no thread — no count, no timestamp, no "continue"', async () => {
+    /*
+     * "Clicking a recorded question re-asks it. It does not restore a
+     * conversation." History is recorded and never fed back into the prompt, so
+     * a follow-up will not resolve pronouns, and
+     * `08-blocked-and-forbidden.md` lists any UI promising conversational
+     * memory among the things that must not be built.
+     */
+    await renderSidebar();
+    for (const pattern of [
+      /continue/i,
+      /resume/i,
+      /where we left off/i,
+      /\d+ messages?/i,
+      /conversation history/i,
+    ]) {
+      expect(screen.queryByText(pattern)).toBeNull();
     }
   });
 
-  it('asks questions and never states answers', () => {
-    // A starter question carrying its own answer would be the chrome becoming a
-    // second source of truth — the thing scaspa-facts.ts exists to prevent.
-    for (const facility of FACILITY_NAV) {
-      for (const question of facility.questions) {
-        expect(question).toMatch(/\?$/);
-        expect(question).not.toMatch(/(XCD|EC\$|\$)\s?\d/);
-        expect(question).not.toMatch(/\b\d{1,2}:\d{2}\b/);
-      }
-    }
+  it('filters with the search, so one box covers both lists', async () => {
+    const user = userEvent.setup();
+    await renderSidebar();
+
+    await user.type(screen.getByRole('searchbox'), 'wharfage');
+    expect(screen.getByRole('button', { name: RECORDED[1] })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: RECORDED[0] })).toBeNull();
   });
 });
 
-// ── 4. A real disclosure ─────────────────────────────────────────────────────
+// ── 5. The bottom row is not a user row ─────────────────────────────────────
 
-describe('facility disclosures', () => {
-  it('starts collapsed with aria-expanded false', async () => {
-    await renderSidebar();
-    for (const facility of FACILITY_NAV) {
-      expect(screen.getByRole('button', { name: new RegExp(facility.name) })).toHaveAttribute(
-        'aria-expanded',
-        'false'
-      );
+describe('the demonstration profile row', () => {
+  it('is not rendered at all when the profile is null', async () => {
+    /*
+     * **The production state.** No placeholder, no silhouette, no "sign in" —
+     * the backend has no accounts and never knows who is asking, and an empty
+     * identity slot is an invitation to fill it.
+     */
+    await renderSidebar({ profile: null });
+    expect(screen.queryByText('Demonstration profile')).toBeNull();
+    expect(screen.queryByText(/Basseterre operator/)).toBeNull();
+  });
+
+  it('says twice that it is a demonstration, and offers no account affordance', async () => {
+    await renderSidebar({ profile: DEMO_PROFILE });
+    expect(screen.getByText('Basseterre operator')).toBeInTheDocument();
+    expect(screen.getByText('Demonstration profile')).toBeInTheDocument();
+    expect(screen.getByText('Demo')).toBeInTheDocument();
+
+    for (const pattern of [/sign out/i, /log out/i, /account/i, /profile settings/i]) {
+      expect(screen.queryByText(pattern)).toBeNull();
     }
-  });
-
-  it('expands, and the panel it controls actually exists', async () => {
-    const user = userEvent.setup();
-    await renderSidebar();
-
-    const trigger = screen.getByRole('button', { name: /Basseterre Ferry Terminal/ });
-    await user.click(trigger);
-
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    const panelId = trigger.getAttribute('aria-controls');
-    expect(panelId).toBeTruthy();
-    expect(document.getElementById(panelId!)).not.toBeNull();
-  });
-
-  it('unmounts the questions when collapsed rather than hiding them', async () => {
-    const user = userEvent.setup();
-    await renderSidebar();
-    const question = FACILITY_NAV[2]!.questions[0];
-
-    expect(screen.queryByRole('button', { name: question })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /Basseterre Ferry Terminal/ }));
-    expect(screen.getByRole('button', { name: question })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Basseterre Ferry Terminal/ }));
-    // Gone from the tree, so it is gone from the tab order too. A `hidden` div
-    // still focusable is the classic way this pattern is got wrong.
-    expect(screen.queryByRole('button', { name: question })).toBeNull();
-  });
-
-  it('is a labelled navigation landmark', async () => {
-    await renderSidebar();
-    expect(screen.getByRole('navigation', { name: 'SCASPA facilities' })).toBeInTheDocument();
-  });
-});
-
-// ── 5. The rest of the sidebar ───────────────────────────────────────────────
-
-describe('sidebar chrome', () => {
-  it('omits the verified-as-of line when health is unavailable', async () => {
-    await renderSidebar({ knowledgeVerifiedAt: null });
-    expect(screen.queryByText(/Information verified as of/)).toBeNull();
-  });
-
-  it('shows it when health supplies a date', async () => {
-    await renderSidebar({ knowledgeVerifiedAt: '2026-06-01' });
-    expect(screen.getByText(/Information verified as of/)).toBeInTheDocument();
-  });
-
-  it('disables new conversation when there is nothing to clear', async () => {
-    await renderSidebar({ hasConversation: false });
-    expect(screen.getByRole('button', { name: /New conversation/ })).toBeDisabled();
-  });
-
-  it('disables the source count at zero and enables it once there are sources', async () => {
-    const { unmount } = await renderSidebar({ sourceCount: 0 });
-    expect(screen.getByRole('button', { name: /Sources in this conversation/ })).toBeDisabled();
-    unmount();
-
-    await renderSidebar({ sourceCount: 3 });
-    const button = screen.getByRole('button', { name: /Sources in this conversation/ });
-    expect(button).toBeEnabled();
-    expect(within(button).getByText('3')).toBeInTheDocument();
   });
 
   it('carries no conversation history, by design', async () => {
@@ -305,7 +342,6 @@ describe('sidebar chrome', () => {
     // endpoint to list them, and the privacy page says message content is never
     // written to the device. A history list needs all three reversed.
     await renderSidebar();
-    expect(screen.queryByText(/history/i)).toBeNull();
     expect(screen.queryByText(/recent conversations/i)).toBeNull();
   });
 });
@@ -314,7 +350,7 @@ describe('sidebar chrome', () => {
 
 describe('LogoLockup', () => {
   it('announces the product once, not twice', () => {
-    const { container } = render(<LogoLockup size="lg" />);
+    const { container } = render(<LogoLockup />);
     const img = container.querySelector('img');
     // Decorative: the visible name beside it already says it.
     expect(img).toHaveAttribute('alt', '');
@@ -323,31 +359,69 @@ describe('LogoLockup', () => {
   });
 
   it('lets the mark carry the name when the name is hidden', () => {
-    const { container } = render(<LogoLockup size="lg" nameHidden />);
+    const { container } = render(<LogoLockup nameHidden />);
     expect(container.querySelector('img')).toHaveAttribute('alt', 'SCASPA Assistant');
     expect(screen.getByAltText('SCASPA Assistant')).toBeInTheDocument();
   });
 
-  it('falls back to a wordmark below 32px rather than an illegible badge', () => {
-    // The real mark is a circular seal with internal detail. At 24px the
-    // aircraft and the ship are two grey smudges.
-    const { container } = render(<LogoLockup size="sm" />);
-    expect(container.querySelector('img')).toBeNull();
-    expect(screen.getByText('SCASPA Assistant')).toBeInTheDocument();
-  });
-
   it('never distorts the aspect ratio', () => {
-    const { container } = render(<LogoLockup size="md" />);
+    const { container } = render(<LogoLockup />);
     const img = container.querySelector('img')!;
     expect(img.getAttribute('width')).toBe(img.getAttribute('height'));
   });
 
-  it('draws no badge in the reversed variant while its asset is outstanding', () => {
-    // Recolouring the navy mark would break "never recolour"; drawing it on navy
-    // would break "never on a mid-tone ground". The wordmark alone is the only
-    // honest option until the reversed file arrives.
-    const { container } = render(<LogoLockup size="lg" variant="reversed" />);
-    expect(container.querySelector('img')).toBeNull();
+  it('plates the seal at every size, including the small one', () => {
+    /*
+     * This used to assert the opposite twice over: no badge at all on a dark
+     * ground, and no badge below 32px because the seal turns to mud there.
+     *
+     * The handoff overrules both. "The seal is dark blue line art on
+     * transparency. It always sits on a white circular plate. Never
+     * recoloured, outlined, cropped or knocked out to white. Never use it
+     * without the plate at any size." The product is dark on every surface, so
+     * the old rule hid the Authority's own mark everywhere it appears — and
+     * the smallest pairing the handoff draws IS the compact one.
+     */
+    for (const size of ['lockup', 'compact'] as const) {
+      const { container, unmount } = render(<LogoLockup size={size} />);
+      const seal = container.querySelector('img');
+      expect(seal).not.toBeNull();
+
+      const plate = seal!.parentElement!;
+      expect(plate.className).toContain('rounded-full');
+      // Literally white, not a theme alias: a plate that darkened with the
+      // surface would swallow dark blue line art, which is the whole point of
+      // specifying a plate rather than a background.
+      expect(plate.className).toContain('bg-white');
+      unmount();
+    }
+  });
+
+  it('draws the two pairings the handoff names, and no third', () => {
+    // 32 inside 40 in the sidebar; 24 inside 32 in the widget, the 404 header
+    // and the mobile header. A numeric size prop would let a caller invent a
+    // pairing that is not drawn anywhere, so the two are an enum.
+    const expected = { lockup: [40, 32], compact: [32, 24] } as const;
+
+    for (const [size, [platePx, sealPx]] of Object.entries(expected)) {
+      const { container, unmount } = render(<LogoLockup size={size as 'lockup' | 'compact'} />);
+      const seal = container.querySelector('img')!;
+      const plate = seal.parentElement!;
+      expect(Number.parseInt(plate.style.width, 10)).toBe(platePx);
+      expect(Number.parseInt(plate.style.height, 10)).toBe(platePx);
+      expect(Number.parseInt(seal.style.width, 10)).toBe(sealPx);
+      unmount();
+    }
+  });
+
+  it('sets the wordmark nowrap rather than truncating the product name', () => {
+    // `600 15px/20px, white-space: nowrap` — an ellipsis in the Authority's own
+    // name is a layout bug shipped as a design.
+    render(<LogoLockup />);
+    const name = screen.getByText('SCASPA Assistant');
+    expect(name.className).toContain('whitespace-nowrap');
+    expect(name.className).not.toContain('truncate');
+    expect(name.className).toContain('text-wordmark');
   });
 });
 
@@ -399,19 +473,19 @@ describe('AboutScaspa', () => {
   });
 });
 
-// ── The collapsible rail ─────────────────────────────────────────────────────
+// ── The panel-collapse control ──────────────────────────────────────────────
 
-describe('the sidebar collapses without losing anything', () => {
-  it('offers a toggle that describes what it will do, not what it is', async () => {
+describe('the panel-collapse control', () => {
+  it('describes what it will do, not what it is', async () => {
     const onToggleCollapsed = vi.fn();
     const user = userEvent.setup();
     await renderSidebar({ onToggleCollapsed });
 
-    // "Collapse navigation" — an imperative. A label naming the current state
-    // reads as an instruction to about half the people who meet it.
-    const toggle = screen.getByRole('button', { name: 'Collapse navigation' });
+    // "Collapse the navigation" — an imperative. A label naming the current
+    // state reads as an instruction to about half the people who meet it.
+    const toggle = screen.getByRole('button', { name: 'Collapse the navigation' });
     // The state is on the control, so a screen reader is told it rather than
-    // being left to infer it from an arrow glyph.
+    // being left to infer it from a glyph.
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(toggle).toHaveAttribute('aria-controls');
 
@@ -419,68 +493,11 @@ describe('the sidebar collapses without losing anything', () => {
     expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
   });
 
-  it('renders no toggle at all when it cannot collapse', async () => {
+  it('renders no control at all when it cannot collapse', async () => {
     // The drawer passes no handler. An inert control is worse than none: it is
     // still a tab stop and still looks like it does something.
     await renderSidebar();
-    expect(screen.queryByRole('button', { name: /collapse navigation/i })).toBeNull();
-  });
-
-  it('keeps every destination reachable when collapsed', async () => {
-    await renderSidebar({ collapsed: true, onToggleCollapsed: vi.fn(), sourceCount: 3 });
-
-    // Glyphs are not labels. Every one of these is found by its real name,
-    // which is exactly what a screen reader gets at either width.
-    for (const facility of FACILITY_NAV) {
-      expect(screen.getByRole('button', { name: facility.name })).toBeInTheDocument();
-    }
-    expect(screen.getByRole('button', { name: 'New conversation' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Talk to a person' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /Sources in this conversation: 3/ })
-    ).toBeInTheDocument();
-  });
-
-  it('keeps the same landmark and label at both widths', async () => {
-    // Someone navigating by landmark should not be able to tell the rail was
-    // collapsed. Same role, same accessible name.
-    const { unmount } = await renderSidebar();
-    expect(screen.getByRole('navigation', { name: 'SCASPA facilities' })).toBeInTheDocument();
-    unmount();
-
-    await renderSidebar({ collapsed: true, onToggleCollapsed: vi.fn() });
-    expect(screen.getByRole('navigation', { name: 'SCASPA facilities' })).toBeInTheDocument();
-  });
-
-  it('a collapsed facility both expands the rail and opens that group', async () => {
-    /*
-     * The click means "show me this one".
-     *
-     * Expanding without opening answers with the list of four names the user
-     * just picked from; opening without expanding answers with three questions
-     * in a 64px column. The test drives the real state by re-rendering with the
-     * collapsed prop the handler would have flipped.
-     */
-    const onToggleCollapsed = vi.fn();
-    const user = userEvent.setup();
-    const { rerender, props } = await renderSidebar({ collapsed: true, onToggleCollapsed });
-
-    const facility = FACILITY_NAV[0]!;
-    await user.click(screen.getByRole('button', { name: facility.name }));
-    expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
-
-    rerender(<Sidebar {...props} collapsed={false} onToggleCollapsed={onToggleCollapsed} />);
-
-    const group = await screen.findByRole('button', { name: new RegExp(facility.name) });
-    expect(group).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('button', { name: facility.questions[0] })).toBeInTheDocument();
-  });
-
-  it('the expand control announces the collapsed state', async () => {
-    await renderSidebar({ collapsed: true, onToggleCollapsed: vi.fn() });
-    const toggle = screen.getByRole('button', { name: 'Expand navigation' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(toggle).toHaveAttribute('aria-controls');
+    expect(screen.queryByRole('button', { name: /collapse the navigation/i })).toBeNull();
   });
 
   it('does not persist the collapsed state anywhere', () => {
