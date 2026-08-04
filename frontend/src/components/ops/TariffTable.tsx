@@ -271,7 +271,15 @@ function EmptyBody({ filtered }: { filtered: boolean }) {
   );
 }
 
-/** `maritime` → `Maritime`. The wire's own value, never a renaming. */
+/**
+ * `cargo` → `Cargo`, `vessel_dues` → `Vessel dues`.
+ *
+ * The wire's own value, **never a renaming** — which is why the backend enum
+ * carries §5.9's words rather than this function translating into them. An
+ * underscore becomes a space and nothing else changes; a chip whose label this
+ * file invented would drift from the value the filter sends.
+ */
 function categoryLabel(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  const spaced = value.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }

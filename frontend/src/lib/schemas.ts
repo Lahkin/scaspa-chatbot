@@ -322,7 +322,7 @@ export const tariffRowSchema = z.object({
   basis: z.string(),
   amount: z.number(),
   currency: z.string(),
-  category: z.enum(['maritime', 'aviation', 'cargo', 'passenger']),
+  category: z.enum(['cargo', 'vessel_dues', 'storage', 'passenger', 'security', 'aviation']),
   facility: facilitySchema,
   kb_id: z.string().nullable(),
   as_of: z.string(),
@@ -417,7 +417,7 @@ export const assistantCardSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('tariff_calculator'),
     title: z.string(),
-    category: z.enum(['maritime', 'aviation', 'cargo', 'passenger']),
+    category: z.enum(['cargo', 'vessel_dues', 'storage', 'passenger', 'security', 'aviation']),
     href: z.string(),
   }),
   z.object({

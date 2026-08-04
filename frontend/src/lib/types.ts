@@ -697,7 +697,21 @@ export interface OperatorProfileResponse {
   request_id: string;
 }
 
-export type TariffCategory = 'maritime' | 'aviation' | 'cargo' | 'passenger';
+/**
+ * The category chips over the published schedule — §5.9's five, plus `aviation`.
+ *
+ * `vessel_dues` was `maritime`. The rename is toward accuracy: that calculator
+ * prices dockage, pilotage and harbour dues, which is what vessel dues are, and
+ * the chip has always been labelled that way in the design. `categoryLabel`
+ * renders the wire value and never renames it, so a chip reading "Vessel dues"
+ * requires the wire to say `vessel_dues`.
+ *
+ * `aviation` is the sixth and is not in §5.9, whose five are seaport
+ * categories. Dropping it to match exactly would leave R. L. Bradshaw with no
+ * fees in the table at all.
+ */
+export type TariffCategory =
+  'cargo' | 'vessel_dues' | 'storage' | 'passenger' | 'security' | 'aviation';
 
 export interface TariffRow {
   code: string;

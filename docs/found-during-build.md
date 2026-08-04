@@ -4,8 +4,66 @@ Things noticed while implementing a milestone that are **out of that milestone's
 scope**. Recorded rather than fixed, so the next session inherits the evidence
 instead of the surprise.
 
-Every entry carries `file:line` or a reproducible command. Nothing here has been
-acted on.
+Every entry carries `file:line` or a reproducible command.
+
+---
+
+## Day-of talking points
+
+Answers to have ready, so a scoping decision is not mistaken for a gap.
+
+### "What about Nevis? Vance W. Amory, Charlestown?"
+
+> We scoped the demonstration to the four St. Kitts facilities — Deep Water
+> Harbour, Port Zante, the Basseterre Ferry Terminal and R. L. Bradshaw. Vance
+> W. Amory and Charlestown Port extend the `Facility` enum in one line and the
+> filters need no change; we left them out to keep the demo's data set to sites
+> we could populate properly.
+
+**Deliberate, not an oversight.** Both appear in the design's own §6.2 location
+list, and both are absent from `backend/app/schemas.py`'s `Facility`. Adding
+them is a one-line enum change plus fixture rows — the filters, the query
+parameters and the client types all key off the enum and follow automatically.
+
+### "Is the data real?"
+
+No, and it is built so it cannot be mistaken for real — see `docs/decisions.md`
+0032. Berths, gates, times and statuses are realistic because the screens have
+to behave correctly; **every vessel name, IMO, carrier code and money amount is
+synthetic**, the source notice is enforced by the schema rather than by
+convention, and the service refuses to boot with this data when `ENV=prod`.
+
+---
+
+## From M4b
+
+### 18. Audit correction — F-23 checked the chips' wiring and never their values
+
+`docs/data-audit.md` F-23 classified the tariff category chips **`WIRED-EMPTY`**:
+*"Computed server-side from the whole table; empty under `none`."* That is true
+and it is beside the point.
+
+**The enum never matched the design.** `TariffCategory` was
+`maritime, aviation, cargo, passenger` — four values — while
+`05-operations.md` §5.9 names five chips: *Cargo · Vessel dues · Storage ·
+Passenger · Security*. Only `cargo` and `passenger` overlapped. And there was no
+bridge: `TariffTable.tsx`'s `categoryLabel` title-cases the wire value and its
+own comment says *"the wire's own value, never a renaming"*, so the chips could
+only ever display what the enum held.
+
+Nothing in the audit would have found this, because **every question it asked
+about the chips was about the chain rather than the contents** — does the client
+re-derive them, does the server compute them from the whole table, are they
+empty when the feed is. All four answers were correct. The values were wrong.
+
+**The lesson for the rest of the audit:** `WIRED-EMPTY` means "the chain works
+and there is nothing in it". It does not mean "what will flow through it is
+right". Any finding carrying that label is a candidate for the same miss —
+`F-23` was caught only because a milestone tried to populate it.
+
+Resolved in M4b by extending the enum to six: §5.9's five plus `aviation`, which
+§5.9 omits because its five are seaport categories and dropping it would leave
+R. L. Bradshaw with no fees in the table.
 
 ---
 

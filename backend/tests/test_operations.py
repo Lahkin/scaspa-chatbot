@@ -243,7 +243,7 @@ def test_tariff_category_chips_survive_filtering(fixture_api: TestClient) -> Non
     """
     body = fixture_api.get("/api/tariffs", params={"category": "cargo"}).json()
     assert {row["category"] for row in body["tariffs"]} == {"cargo"}
-    assert set(body["categories"]) >= {"maritime", "cargo", "aviation", "passenger"}
+    assert set(body["categories"]) >= {"vessel_dues", "cargo", "aviation", "passenger"}
 
 
 def test_tariff_search_matches_code_and_service() -> None:
@@ -502,7 +502,7 @@ def test_the_printed_lines_add_up_to_the_printed_total(fixture_api: TestClient) 
 
 def test_a_total_always_carries_its_warning(fixture_api: TestClient) -> None:
     """The one thing that must never be droppable."""
-    body = fixture_api.post("/api/tariffs/quote", json={"category": "maritime"}).json()
+    body = fixture_api.post("/api/tariffs/quote", json={"category": "vessel_dues"}).json()
 
     assert body["derived"] is True
     disclaimer = body["disclaimer"]
@@ -540,7 +540,7 @@ def test_currency_conversion_is_refused(fixture_api: TestClient) -> None:
 
 
 def test_an_empty_request_produces_no_invented_lines(fixture_api: TestClient) -> None:
-    """Nothing entered, nothing charged for — except the per-call maritime dues."""
+    """Nothing entered, nothing charged for — except the per-call vessel dues."""
     body = fixture_api.post("/api/tariffs/quote", json={"category": "cargo"}).json()
     assert body["line_items"] == []
     assert body["total"] == 0.0

@@ -51,7 +51,10 @@ export function MaritimeCalculator({
       title="Maritime charges"
       onSubmit={() =>
         onSubmit({
-          category: 'maritime',
+          // `vessel_dues` on the wire — the discriminator `build_quote`
+          // branches on. `tone` above is a *styling* value for §5.10's two
+          // surfaces and is deliberately not the same thing.
+          category: 'vessel_dues',
           length_ft: toNumber(length),
           stay_days: toNumber(stay),
         })

@@ -201,7 +201,7 @@ export const MOCK_TARIFFS: TariffRow[] = [
     basis: 'per ft per 24h',
     amount: 1.11,
     currency: 'XCD',
-    category: 'maritime',
+    category: 'vessel_dues',
     facility: null,
     kb_id: null,
     as_of: '2026-01-01',

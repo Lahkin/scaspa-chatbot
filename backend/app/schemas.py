@@ -700,7 +700,37 @@ class OperatorProfileResponse(BaseModel):
     request_id: str = Field(default="")
 
 
-TariffCategory = Literal["maritime", "aviation", "cargo", "passenger"]
+# The category chips over the published schedule — `05-operations.md` §5.9 names
+# five: Cargo · Vessel dues · Storage · Passenger · Security.
+#
+# ## Why `maritime` became `vessel_dues`
+#
+# A rename toward accuracy. The maritime calculator prices dockage, pilotage and
+# harbour dues, which is what vessel dues *are*; the design's label was the
+# better name for what the value already meant. The client renders the wire
+# value title-cased and never renames it (`TariffTable.tsx`), so a chip reading
+# "Vessel dues" requires the wire to say so.
+#
+# ## Why `aviation` stays, making six rather than §5.9's five
+#
+# §5.9's five are seaport categories. Dropping `aviation` to match it exactly
+# would leave R. L. Bradshaw — one of the four facilities this product is about —
+# with no fees in the table at all.
+#
+# ## This value does two jobs
+#
+# On `TariffRow` it is a chip. On `TariffQuoteRequest` it is the discriminator
+# `build_quote` branches on to decide which calculator ran. They share a type
+# because the sets happen to coincide; if they ever diverge, split them rather
+# than widening this.
+TariffCategory = Literal[
+    "cargo",
+    "vessel_dues",
+    "storage",
+    "passenger",
+    "security",
+    "aviation",
+]
 
 
 class TariffRow(BaseModel):
@@ -745,7 +775,10 @@ class TariffQuoteRequest(BaseModel):
     are priced, and the response says which rates were applied.
     """
 
-    category: TariffCategory = Field(default="maritime")
+    # The discriminator `build_quote` branches on: which of §5.10's two forms the
+    # user filled in. `vessel_dues` is the maritime calculator — dockage,
+    # pilotage and harbour dues.
+    category: TariffCategory = Field(default="vessel_dues")
     vessel_type: str | None = Field(default=None)
     length_ft: float | None = Field(default=None, ge=0, le=2000)
     stay_days: int | None = Field(default=None, ge=0, le=365)

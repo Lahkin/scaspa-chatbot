@@ -100,7 +100,10 @@ def build_quote(
         return row
 
     # ── Maritime: charges that follow the vessel ─────────────────────────────
-    if request.category == "maritime":
+    # `vessel_dues`, formerly `maritime`. The rename is toward accuracy: this
+    # branch prices dockage, pilotage and harbour dues, which is what vessel
+    # dues are, and §5.9's chip has always been labelled that way.
+    if request.category == "vessel_dues":
         length = request.length_ft or 0
         days = request.stay_days or 0
         if length > 0 and days > 0 and (row := rate(DOCKAGE_CODE)):

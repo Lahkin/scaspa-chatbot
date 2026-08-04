@@ -537,7 +537,7 @@ def sample_tariffs() -> list[TariffRow]:
             service="Sample dockage — commercial",
             basis="per ft per 24h",
             amount=1.11,
-            category="maritime",
+            category="vessel_dues",
             as_of="2026-01-01",
         ),
         TariffRow(
@@ -545,7 +545,7 @@ def sample_tariffs() -> list[TariffRow]:
             service="Sample pilotage — entry",
             basis="per entry",
             amount=111.11,
-            category="maritime",
+            category="vessel_dues",
             as_of="2026-01-01",
         ),
         TariffRow(
@@ -553,7 +553,7 @@ def sample_tariffs() -> list[TariffRow]:
             service="Sample harbour dues",
             basis="per call",
             amount=44.44,
-            category="maritime",
+            category="vessel_dues",
             as_of="2026-01-01",
         ),
         TariffRow(

@@ -561,7 +561,7 @@ export const handlers = [
       tariffs,
       // From the whole table, not the filtered slice — otherwise selecting a
       // category removes every other chip and there is no way back.
-      categories: ['cargo', 'maritime'],
+      categories: ['cargo', 'vessel_dues'],
       total: tariffs.length,
       request_id: 'mock-tariffs',
     });

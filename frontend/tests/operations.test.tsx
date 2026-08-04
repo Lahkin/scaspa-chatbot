@@ -357,7 +357,7 @@ describe('the published tariff table', () => {
         source={FIXTURE_SOURCE}
         rows={MOCK_TARIFFS.slice(0, 1)}
         total={1}
-        categories={['cargo', 'maritime']}
+        categories={['cargo', 'vessel_dues']}
         category={null}
         onCategoryChange={() => {}}
         search=""
@@ -1160,8 +1160,10 @@ describe('the tariffs screen', () => {
 
     await user.click(cargo);
     await waitFor(() => expect(cargo).toHaveAttribute('aria-pressed', 'true'));
-    // The other chip is still there, and it is the way back.
-    expect(screen.getByRole('button', { name: 'Maritime' })).toBeInTheDocument();
+    // The other chip is still there, and it is the way back. "Vessel dues"
+    // rather than "Maritime": the label is the wire value with its underscore
+    // spaced, never a name this client invented.
+    expect(screen.getByRole('button', { name: 'Vessel dues' })).toBeInTheDocument();
   });
 
   it('draws two calculators that do not look like each other', async () => {

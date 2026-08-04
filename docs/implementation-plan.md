@@ -428,6 +428,15 @@ Planned, not scheduled. Ordered by the audit's visibility × effort × contract-
 - A chunk count on `IndexStatus` (F-37); a tool-cap discriminator (F-48); `tracked_clients` outside the admin secret (F-47).
 
 **Backend**
+- **`extra="forbid"` on the Pydantic models.** Only `KBRow` sets it
+  (`app/rag/models.py:51`). Everywhere else a mistyped or unknown keyword is
+  **accepted and discarded** — which is what let twelve `Flight` constructors
+  carry `facility="rlb_airport"` that nothing read, through ruff, pytest and the
+  typechecker, until the distribution was counted. Post-demo, and worth doing
+  repo-wide rather than case by case.
+- **The `Facility` enum covers four sites; SCASPA publishes five.** Vance W.
+  Amory and Charlestown are out of scope for the demo by decision — see the
+  day-of talking point in `docs/found-during-build.md`.
 - **T-22** Ticket delivery or persistence (F-30). IT staff will ask; have the answer ready.
 - The third `OpsSource` implementation, when a feed exists. The interface is ready.
 - Web-corpus ingestion — `scaspa_web` holds 0 embeddings and 14 scraped PDFs are unindexed.
