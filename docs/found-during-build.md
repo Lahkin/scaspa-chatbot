@@ -27,8 +27,7 @@ parameters and the client types all key off the enum and follow automatically.
 
 ### "Is the data real?"
 
-No, and it is built so it cannot be mistaken for real — see `docs/decisions.md`
-0032. Berths, gates, times and statuses are realistic because the screens have
+No, and it is built so it cannot be mistaken for real — see `docs/decisions.md` 0032. Berths, gates, times and statuses are realistic because the screens have
 to behave correctly; **every vessel name, IMO, carrier code and money amount is
 synthetic**, the source notice is enforced by the schema rather than by
 convention, and the service refuses to boot with this data when `ENV=prod`.
@@ -62,7 +61,7 @@ kb_csv_filename: sample_kb.csv    kb_rows: 10    kb_version: 2026-06-01
 `data/knowledge/scaspa_kb_2026-07-31.csv` and the file exists — the blank
 `KB_CSV_PATH=` in `.env` falls through to M1's default as intended. What was
 stale was the **persisted Chroma index** in `data/chroma`, built from the sample
-corpus in an earlier session and *loaded* rather than rebuilt. Health reports the
+corpus in an earlier session and _loaded_ rather than rebuilt. Health reports the
 metadata stored with the index, so it described the stale build accurately and
 still said `ok`.
 
@@ -77,6 +76,45 @@ presenting.
 Worth considering post-demo: health could compare the indexed filename against
 `settings.kb_csv_path.name` and degrade when they disagree. The information to
 catch this is already in the response; nothing compares the two.
+
+**It happened again, later in the same session, and the cause was not found.**
+The index was rebuilt to 115 rows at 12:03 and verified; by 12:52 `index_meta.json`
+had been rewritten from `sample_kb.csv` again, with a fresh Chroma collection at
+the same minute. What was ruled out, empirically rather than by reading:
+
+```
+build_index.py  → 115 rows        # rebuilt, confirmed
+uv run pytest   → still 115 rows  # conftest.py:82 isolates CHROMA_DIR to tmp_path
+```
+
+Twelve test modules call `build_kb_index`, which made the suite the obvious
+suspect, and it is not the culprit. Nothing else in the session touched the
+backend between those times. **Recorded as unreproduced rather than explained** —
+the same discipline as the playwright disappearance, and for the same reason: a
+guessed cause is worse than a known gap, because it stops the next person
+looking.
+
+What follows from that is not a fix but a habit: the check is now the **first
+line** of `scripts/preflight-frontend.md` and the first thing in `demo-day.md`
+§8, and the corpus filename is on screen at `/ops/vessels`. A defect that cannot
+be prevented can at least be made impossible to miss.
+
+### 27. Wiring the facility filter surfaced a dead end in every filtered table
+
+Adding the control (M5) made an existing hazard reachable. **The toolbar lives
+inside `OpsTable`**, so when no row matches, `FilteredOutState` replaces the
+table and takes every control with it — and its `onClear` reset only the search
+box. A facility matching no row therefore stranded the reader on an empty screen
+whose only remedy was a page reload.
+
+`/flights` reaches it in two clicks: every flight is at R. L. Bradshaw, so any
+other facility empties the table.
+
+Fixed on both routes — the panel now lists the facility as a removable filter and
+`onClear` resets it. Worth noting the shape for future filters: **any control
+that can empty the table must appear in that panel**, because the panel is the
+only thing on screen once it does. `/vessels` already did this for status, which
+is why the gap was invisible until a second filter arrived.
 
 ### 25. There is no facility filter in the interface
 
@@ -109,26 +147,26 @@ before the screen is shown.
 
 ### 23. Telephone format — **POST-DEMO**, and it is a different task than it looked
 
-`design/README.md:303`: *"Telephone numbers render `869 465 8121` in UI and
-`+1 869 465 8121` in contact cards."* The product renders `869-465-8121` in most
+`design/README.md:303`: _"Telephone numbers render `869 465 8121` in UI and
+`+1 869 465 8121` in contact cards."_ The product renders `869-465-8121` in most
 places and the spaced form in five files, so it is written two ways today.
 
 Scoped as 43 frontend call sites. **It is 78, and it crosses into the backend:**
 
-| | sites |
-| --- | --- |
-| Frontend `src/` display strings (excluding `tel:+1869` hrefs, which are correct) | 29 |
-| Frontend tests | 19 |
-| Backend `app/` | 10 |
-| Backend `tests/` | 20 |
+|                                                                                  | sites |
+| -------------------------------------------------------------------------------- | ----- |
+| Frontend `src/` display strings (excluding `tel:+1869` hrefs, which are correct) | 29    |
+| Frontend tests                                                                   | 19    |
+| Backend `app/`                                                                   | 10    |
+| Backend `tests/`                                                                 | 20    |
 
 **A frontend-only sweep makes it worse, not better.** `app/agent/prompts.py:20`
 `SCASPA_PHONE`, `app/routers/support.py:56` and `app/ops/fixtures.py:673` are
 assistant and API copy that the client only renders. Change one half and the
 number appears on one screen in two formats.
-`design/IMPLEMENTATION_PROGRESS.md:716` called this in advance — *"a product-wide
+`design/IMPLEMENTATION_PROGRESS.md:716` called this in advance — _"a product-wide
 decision, not a board-17 edit, and fixing it on this board alone would leave the
-number written two ways."*
+number written two ways."_
 
 Two things checked that make the eventual sweep safer than it looks:
 
@@ -151,11 +189,11 @@ everybody would notice.
 Fixed in T-18; the question of how it got there is not answered, and that is the
 part worth an hour.
 
-`routes/index.tsx` rendered *"the last placeholder sailing back from Nevis on a
-weekday is 18:00"* under a source line reading *"Ferry — schedule · Official
-SCASPA website · Verified on 2026-04-01"*. **That row does not exist.** The
+`routes/index.tsx` rendered _"the last placeholder sailing back from Nevis on a
+weekday is 18:00"_ under a source line reading _"Ferry — schedule · Official
+SCASPA website · Verified on 2026-04-01"_. **That row does not exist.** The
 corpus holds no ferry departure time at all, and `kb-192` — the row that does
-answer the question — is annotated *"ROUTING ROW … Never state a sailing time."*
+answer the question — is annotated _"ROUTING ROW … Never state a sailing time."_
 
 That is **CLAUDE.md absolute rule 4** — never a citation the backend has not
 verified against a retrieved row — broken on the first screen a visitor sees. It
@@ -165,7 +203,7 @@ real SCASPA fact.
 Two questions to answer, neither of which the fix answers:
 
 1. **How did it get there?** The likeliest account is that it predates the real
-   232-row corpus: `kb-008` and `2026-04-01` are the *sample* knowledge base's
+   232-row corpus: `kb-008` and `2026-04-01` are the _sample_ knowledge base's
    ids and dates, still used throughout `src/mocks/` and `src/dev/`. The landing
    page appears to have been written against those fixtures and never rechecked
    when the real KB landed in M1. If that is right, **the reindex invalidated
@@ -204,8 +242,8 @@ would write, and it is already cited.
 
 **Which currencies.** One: USD. XCD is the currency of all eight ECCU members, so
 there is nothing to convert for the rest of the Eastern Caribbean. Everything
-else splits into *real peg, uncitable* (BBD, BSD, BZD, KYD, AWG — no KB row) and
-*floating, needs an FX feed we do not have* (TTD, JMD, DOP, GYD, HTG). We show
+else splits into _real peg, uncitable_ (BBD, BSD, BZD, KYD, AWG — no KB row) and
+_floating, needs an FX feed we do not have_ (TTD, JMD, DOP, GYD, HTG). We show
 none of them, and say so.
 
 **Why it is not a frontend constant.** `src/lib/scaspa-facts.ts:10-14` forbids
@@ -215,22 +253,22 @@ has to arrive over the wire carrying its `kb_id` and `as_of`, like every other
 figure in the product. That is what makes this a contract change rather than a
 display tweak, and it is what took the estimate from one session to roughly two:
 
-| | sessions |
-| --- | --- |
-| `FxRate` model + field on `TariffTableResponse` (and `TariffQuote` if the total converts) | 0.2 |
-| Backend constant sourced to `kb-010`, **plus a test asserting it still matches the KB row** — otherwise the peg silently drifts from its own citation | 0.3 |
-| TS types, zod, MSW mirror | 0.2 |
-| The control, plus converted display across 30 rows | 0.4 |
-| Quote total | 0.2 |
-| Provenance line + `kb-010`'s caveat | 0.2 |
-| Decision record for the deviation below | 0.2 |
-| Tests: primary never converted, control never changes the request, caveat always present | 0.4 |
+|                                                                                                                                                       | sessions |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `FxRate` model + field on `TariffTableResponse` (and `TariffQuote` if the total converts)                                                             | 0.2      |
+| Backend constant sourced to `kb-010`, **plus a test asserting it still matches the KB row** — otherwise the peg silently drifts from its own citation | 0.3      |
+| TS types, zod, MSW mirror                                                                                                                             | 0.2      |
+| The control, plus converted display across 30 rows                                                                                                    | 0.4      |
+| Quote total                                                                                                                                           | 0.2      |
+| Provenance line + `kb-010`'s caveat                                                                                                                   | 0.2      |
+| Decision record for the deviation below                                                                                                               | 0.2      |
+| Tests: primary never converted, control never changes the request, caveat always present                                                              | 0.4      |
 
 **≈ 2.1 sessions**; table-only, leaving the quote in XCD, gets it to ~1.5.
 
 **The deviation that needs a decision record.** `design/` §5.10 is explicit —
-*"Currency is a fixed label, **not a select** — the schedule is published in XCD
-only"* — and `TariffCalculators.tsx:366-380` implements exactly that, with the
+_"Currency is a fixed label, **not a select** — the schedule is published in XCD
+only"_ — and `TariffCalculators.tsx:366-380` implements exactly that, with the
 reasoning in a comment. A subordinate `≈ USD` line is arguably outside that rule.
 **A labelled XCD/USD control is visually the thing §5.10 forbids**, on the screen
 showing SCASPA's fee schedule. That is the finding that decided this: it is
@@ -245,8 +283,8 @@ offering to change it"), and `backend/app/schemas.py:790` `_only_xcd`.
 ### 21. `/dev/rehearsal` does not exist in a production build — the documented fallback
 
 `scripts/preflight-frontend.md` step 7 and its failure table both send the
-presenter to `/dev/rehearsal` as the last resort: *"Anything unrecoverable →
-`/dev/rehearsal`, and the sentence from step 7."*
+presenter to `/dev/rehearsal` as the last resort: _"Anything unrecoverable →
+`/dev/rehearsal`, and the sentence from step 7."_
 
 It is dev-only, twice over:
 
@@ -283,9 +321,9 @@ regex, or the `XCD` label §5.10 requires.
 Twice now, uncommitted edits to `CLAUDE.md` have disappeared from the working
 tree between sessions:
 
-| When | What was lost | Recovered from |
-| --- | --- | --- |
-| Before M1 | Absolute rule 3 (pay.scaspa.com) | Restored by the owner |
+| When       | What was lost                                                                                                                     | Recovered from                   |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Before M1  | Absolute rule 3 (pay.scaspa.com)                                                                                                  | Restored by the owner            |
 | Before M4c | **All four changes in `86ae726`** — rule 5's 0032 deferral, rule 9's logging rule, the commit-scope wording, rule 11's formatting | `git checkout HEAD -- CLAUDE.md` |
 
 The second is the instructive one. `86ae726` **did land** — `git show 86ae726 --
@@ -316,15 +354,15 @@ restoring a third time without knowing what would be treating the symptom.
 ### 18. Audit correction — F-23 checked the chips' wiring and never their values
 
 `docs/data-audit.md` F-23 classified the tariff category chips **`WIRED-EMPTY`**:
-*"Computed server-side from the whole table; empty under `none`."* That is true
+_"Computed server-side from the whole table; empty under `none`."_ That is true
 and it is beside the point.
 
 **The enum never matched the design.** `TariffCategory` was
 `maritime, aviation, cargo, passenger` — four values — while
-`05-operations.md` §5.9 names five chips: *Cargo · Vessel dues · Storage ·
-Passenger · Security*. Only `cargo` and `passenger` overlapped. And there was no
+`05-operations.md` §5.9 names five chips: _Cargo · Vessel dues · Storage ·
+Passenger · Security_. Only `cargo` and `passenger` overlapped. And there was no
 bridge: `TariffTable.tsx`'s `categoryLabel` title-cases the wire value and its
-own comment says *"the wire's own value, never a renaming"*, so the chips could
+own comment says _"the wire's own value, never a renaming"_, so the chips could
 only ever display what the enum held.
 
 Nothing in the audit would have found this, because **every question it asked
@@ -488,9 +526,9 @@ Not this week's fix.
 
 </details>
 
-*It became this week's fix. The "save the dependencies and accept the CI cost"
+_It became this week's fix. The "save the dependencies and accept the CI cost"
 option above is the one taken — and the cost turned out to be 26MB rather than
-the 300MB everyone had been avoiding.*
+the 300MB everyone had been avoiding._
 
 ---
 
@@ -498,7 +536,7 @@ the 300MB everyone had been avoiding.*
 
 ### 12. Query rewrite drops the ellipsis follow-up — the one false refuse
 
-Eval case 6, *"what about the other one?"* with history
+Eval case 6, _"what about the other one?"_ with history
 `How much is airport parking?|Is there a cheaper option?`, retrieves at **0.436**
 — comfortably above `RETRIEVAL_MIN_SCORE` (0.30) — and then does **not** answer.
 
@@ -553,7 +591,7 @@ uncommitted.
 
 Two `evaluate.py` runs over an identical corpus and an identical question set:
 retrieval was **bit-identical** (hit@1 73%, hit@3/5 82%, MRR 0.773 both times),
-while case 8 *"What time does the port open?"* went PASS → FAIL on
+while case 8 _"What time does the port open?"_ went PASS → FAIL on
 `expected_facts` alone, having retrieved `kb-016` at rank 1 both times.
 
 `CHAT_TEMPERATURE` defaults to `0.0` (`backend/app/config.py:137`), so this is
@@ -567,7 +605,7 @@ noisy** at this sample size — 15 rows against 115 indexed.
 
 ### 1. SCASPA publishes no fixed ferry timetable — client conversation item
 
-`kb-192` is `confirmed` and answers *"What time does the ferry to Nevis leave?"*
+`kb-192` is `confirmed` and answers _"What time does the ferry to Nevis leave?"_
 with:
 
 > Ferry departure times vary by operator and by day, so SCASPA publishes them
@@ -581,15 +619,15 @@ The assistant's honest answer to the single most likely demo question is "that i
 not published, ask the operator". Worth raising with them directly — it is the
 kind of gap only they can close.
 
-The landing page headline is *"Will you make the last ferry?"*
+The landing page headline is _"Will you make the last ferry?"_
 (`frontend/src/routes/index.tsx:58`), which now sits above an assistant that
 cannot say. **Folding the re-caption into T-18 at M5**, which already touches
 that file — per the decision at the M1 kick-off.
 
 ### 2. `kb-143` makes eval case 15 a refusal-policy question
 
-`evals/stress_test_sample.csv` case 15 — *"What is the radio frequency for
-berthing at the Deep Water Harbour?"* — expects `escalate` with a blank
+`evals/stress_test_sample.csv` case 15 — _"What is the radio frequency for
+berthing at the Deep Water Harbour?"_ — expects `escalate` with a blank
 `expected_kb_id`. That was right when the corpus was a 12-row fixture.
 
 The delivered corpus has **`kb-143` "What VHF channels does the port use?",
@@ -634,13 +672,13 @@ whitespace churn would have buried the M1 diff.
 
 ### 6. The payment portal survives in prose on two rows
 
-T-01b removes the *link* — `source_url` is blanked on all five portal rows, and a
+T-01b removes the _link_ — `source_url` is blanked on all five portal rows, and a
 live request for "Can I pay SCASPA fees online?" now returns `kb-225` with
 `source_url: ""`. Verified end to end.
 
 **`kb-075` and `kb-225` still mention `pay.scaspa.com` in their answer text.**
 Bare hostnames with no scheme and no `www.`, so `remark-gfm` will not autolink
-them and nothing renders as an anchor — but the assistant will still *say* the
+them and nothing renders as an anchor — but the assistant will still _say_ the
 host aloud when asked about paying.
 
 Left deliberately, per the M1 decision: whether the assistant should route
@@ -689,7 +727,7 @@ this case should expect a no-answer.
 ### 10. Eval false-accept: one live-operations question is answered, not escalated
 
 `REFUSALS false accept 20%` in the M1 baseline is a single case — number 13,
-*"Is the ferry to Nevis running right now?"* It expects `escalate`; the pipeline
+_"Is the ferry to Nevis running right now?"_ It expects `escalate`; the pipeline
 retrieved `kb-192` at rank 1 and answered from it.
 
 `app/agent/prompts.py` rule 10 is explicit that the assistant "cannot see live

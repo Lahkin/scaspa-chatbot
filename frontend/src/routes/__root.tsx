@@ -89,20 +89,38 @@ function isSelfChromed(pathname: string): boolean {
 }
 
 /**
- * Dev-only mock controls.
+ * Dev-only mock controls, behind an explicit opt-in.
  *
  * `import.meta.env.DEV` is a build-time literal, so in a production build this
  * whole expression folds to `null` and Rollup never follows the dynamic import —
  * keeping `@/mocks/*`, its fixtures and MSW itself out of the shipped bundle.
  * A static import would pull all of it in regardless of the condition.
+ *
+ * ## Why DEV alone is not the gate
+ *
+ * The client demonstration runs on `npm run dev`, deliberately — that is what
+ * keeps `/dev/rehearsal` reachable as the last-resort fallback (`docs/demo-day.md`
+ * §0). Gated on DEV alone, this panel therefore sits on screen throughout the
+ * demonstration: a floating pill reading **"Mock: Normal cited answer"**, which
+ * in the T-23 rehearsal was also **overlapping the source panel's footer text**.
+ *
+ * On a product whose entire argument is that it is honest about which data is
+ * real, a control captioned "Mock" is the worst thing that could be visible, and
+ * no automated gate can see it — in dev it is behaving exactly as designed.
+ *
+ * So DEV is necessary and no longer sufficient. `VITE_SHOW_MOCK_CONTROLS=true`
+ * turns it back on for the people who actually want it, and it stays off for a
+ * plain `npm run dev`. Both conditions are build-time literals, so the
+ * production fold is unchanged.
  */
-const MockControls = import.meta.env.DEV
-  ? lazy(() =>
-      import('@/components/dev/MockControls').then((module) => ({
-        default: module.MockControls,
-      }))
-    )
-  : null;
+const MockControls =
+  import.meta.env.DEV && import.meta.env.VITE_SHOW_MOCK_CONTROLS === 'true'
+    ? lazy(() =>
+        import('@/components/dev/MockControls').then((module) => ({
+          default: module.MockControls,
+        }))
+      )
+    : null;
 
 function DevMockControls() {
   if (!MockControls) return null;

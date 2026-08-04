@@ -38,6 +38,7 @@ import type {
   Category,
   ChatResponse,
   ErrorCode,
+  Facility,
   FlightSchedulesResponse,
   GateMapResponse,
   HealthResponse,
@@ -484,6 +485,14 @@ export interface VesselQuery {
   vessel_type?: string | undefined;
   berth?: string | undefined;
   status?: string | undefined;
+  /**
+   * The API has filtered on this since M4a; nothing sent it until M5.
+   *
+   * It was reachable by curl and by no other means — not wired empty, which the
+   * audit has a category for, but not wired at all, which it does not. See
+   * `docs/found-during-build.md` entry 25.
+   */
+  facility?: Facility | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
 }
@@ -505,6 +514,8 @@ export interface FlightQuery {
   airline?: string | undefined;
   status?: string | undefined;
   direction?: string | undefined;
+  /** As `VesselQuery.facility` — filtered by the API since M4a, sent since M5. */
+  facility?: Facility | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
 }

@@ -1,34 +1,28 @@
 /**
  * "No fee, fare, rate, schedule or opening hour is hardcoded in the client."
  *
- * `src/lib/scaspa-facts.ts` has said for months that this file enforces it:
+ * `src/lib/scaspa-facts.ts` names this file as the one that enforces it. **The
+ * file did not exist** — but the enforcement did, in `tests/sidebar.test.tsx`,
+ * where it had lived since before M1. Only the filename in the docstring was
+ * wrong, and this file is now that filename: the block below is that test,
+ * moved unchanged, so the module's own claim about itself is finally true.
  *
- * > `tests/scaspa-facts.test.ts` enforces this — it fails on a currency symbol,
- * > a clock time or a bare figure appearing anywhere in this module.
+ * Reported initially as "documented and unenforced", which was wrong and is
+ * corrected here rather than quietly. The distinction matters to anyone reading
+ * back: nothing was ever unguarded, and the guard was never weak — its statistic
+ * allowlist is stricter than anything written to replace it would have been.
  *
- * **It did not exist.** The rule was documented and unenforced, which is the
- * worst of both worlds: a reader trusts the sentence and stops checking. Found
- * during the M5 pre-flight pass and written here.
- *
- * ## What it actually enforces, which is narrower than the sentence claimed
- *
- * "Fails on a bare figure" cannot be true and should not be. `formedYear: 1993`,
- * `P.O. Box 963` and the three telephone numbers are all bare figures, and all
- * four are explicitly *permitted* by the same docstring — they are what the
- * organisation is, not what it charges. A test that failed on them would be
- * deleted within a week, and rightly.
- *
- * So the real rule, and the one below: **no money, no clock, no rate.** A figure
- * is allowed when it identifies the Authority and forbidden when a reader could
- * act on it — the same line `docs/decisions.md` 0032 draws through the fixtures.
- *
- * ## Why the whole of `src/` and not just the one module
+ * ## What is genuinely new: the repo-wide scan
  *
  * The module is where such a constant would *belong*, which makes it the last
  * place someone would put one by accident. The second block widens the scan to
  * every production source file, excluding the two directories whose job is to
  * hold placeholder values (`src/mocks/`, `src/dev/`) and where 0032's
  * repeated-digit convention already governs.
+ *
+ * One assertion is also added to the moved block — no rate. The XCD/USD peg is
+ * why: it is a rate, so it cannot be a client constant, which is what made the
+ * currency toggle a contract change rather than a display tweak.
  */
 
 import { globSync, readFileSync } from 'node:fs';
@@ -64,36 +58,68 @@ const CLOCK = /\b\d{1,2}:\d{2}\b/;
  */
 const RATE = /\d\s*(per\s+\w+|\/\s*(container|tonne|ton|day|hour|ft|foot|metre|m)\b)/i;
 
-describe('scaspa-facts holds no figure a reader could act on', () => {
-  const code = codeOf(FACTS);
+describe('scaspa-facts.ts holds only low-volatility facts', () => {
+  // Moved here unchanged from `tests/sidebar.test.tsx`, where it had lived
+  // since before M1. Its line filter is stricter than `codeOf` — it drops
+  // continuation lines of a block comment too — so it is kept rather than
+  // replaced with the shared helper.
+  const source = readFileSync(resolve(PROJECT_ROOT, FACTS), 'utf8');
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'))
+    .join('\n');
 
-  it('states no money amount', () => {
-    expect(code).not.toMatch(MONEY);
+  it('contains no currency amount', () => {
+    // XCD 44.44, EC$100, $12, US$5 — any of them would be a fee that drifts.
+    expect(code).not.toMatch(/(XCD|EC\$|US\$|USD|\$)\s?\d/i);
   });
 
-  it('states no clock time', () => {
-    expect(code).not.toMatch(CLOCK);
+  it('contains no clock time', () => {
+    // A sailing time or an opening hour. 1993 is a year, not a time.
+    expect(code).not.toMatch(/\b\d{1,2}:\d{2}\b/);
+    expect(code).not.toMatch(/\b\d{1,2}\s?(a\.?m\.?|p\.?m\.?)\b/i);
   });
 
-  it('states no rate', () => {
+  it('does not talk about opening hours, fees or schedules', () => {
+    for (const word of [
+      'opening hour',
+      'open at',
+      'closes at',
+      'fee',
+      'fare',
+      'tariff',
+      'charge',
+      'schedule',
+      'timetable',
+    ]) {
+      expect(code.toLowerCase(), `"${word}" must come from the assistant`).not.toContain(word);
+    }
+  });
+
+  it('contains no statistic', () => {
+    // The only bare numbers permitted are the formation year and the phone
+    // digits. Anything else — passenger counts, tonnage, berth totals — is a
+    // figure that goes stale with nothing to say that it has.
+    const numbers = code.match(/\b\d[\d,.]*\b/g) ?? [];
+    const allowed = /^(1993|869|465|8121|8122|8123|963|18694658121|18694658122|18694658123|2|3)$/;
+    const unexpected = numbers.filter((n) => !allowed.test(n.replace(/[,.]/g, '')));
+    expect(unexpected).toEqual([]);
+  });
+
+  it('never links the payment portal', () => {
+    // The header comment names it in order to say it is never linked, so the
+    // scan runs over code. A test that failed on its own documentation would
+    // teach people to delete the documentation.
+    expect(code).not.toContain('pay.scaspa.com');
+  });
+
+  it('states no rate — the FX peg is why this line exists', () => {
+    // The one assertion added rather than moved. A rate is a number with a
+    // denominator, and the XCD/USD peg is the live example: it is a rate, so it
+    // cannot be a client constant, which is what put the currency toggle
+    // post-demo. See `docs/found-during-build.md` entry 20.
     expect(code).not.toMatch(RATE);
-  });
-
-  it('names no fee, fare, tariff or opening hour, even in a key', () => {
-    // A key called `ferryFare` is the same defect as the number beside it, and
-    // it is the shape a well-meaning addition takes: the value looks harmless
-    // until you read what it is called.
-    expect(code).not.toMatch(/\b(fare|tariff|fee|charge|rate|price|cost)s?\b/i);
-    expect(code).not.toMatch(/\b(opening|closing)\s+(hour|time)s?\b/i);
-  });
-
-  it('still permits the figures that identify the Authority', () => {
-    // The counterweight. If this ever fails, the rules above have been
-    // tightened past the point the module can do its job, and the fix is here
-    // rather than in the source.
-    expect(code).toContain('1993');
-    expect(code).toContain('P.O. Box 963');
-    expect(code).toMatch(/8121/);
   });
 });
 

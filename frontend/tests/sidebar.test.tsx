@@ -16,7 +16,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Sidebar } from '@/components/shells/Sidebar';
 import { SidebarDrawer } from '@/components/shells/SidebarDrawer';
@@ -65,63 +65,14 @@ async function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> =
   return { props, ...result };
 }
 
-// ── 1. The hard rule on hardcoded facts ──────────────────────────────────────
-
-describe('scaspa-facts.ts holds only low-volatility facts', () => {
-  const source = readFileSync(resolve(process.cwd(), 'src/lib/scaspa-facts.ts'), 'utf8');
-
-  // Comments explain the rule and legitimately contain the forbidden words, so
-  // the scan runs over code only.
-  const code = source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n')
-    .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'))
-    .join('\n');
-
-  it('contains no currency amount', () => {
-    // XCD 44.44, EC$100, $12, US$5 — any of them would be a fee that drifts.
-    expect(code).not.toMatch(/(XCD|EC\$|US\$|USD|\$)\s?\d/i);
-  });
-
-  it('contains no clock time', () => {
-    // A sailing time or an opening hour. 1993 is a year, not a time.
-    expect(code).not.toMatch(/\b\d{1,2}:\d{2}\b/);
-    expect(code).not.toMatch(/\b\d{1,2}\s?(a\.?m\.?|p\.?m\.?)\b/i);
-  });
-
-  it('does not talk about opening hours, fees or schedules', () => {
-    for (const word of [
-      'opening hour',
-      'open at',
-      'closes at',
-      'fee',
-      'fare',
-      'tariff',
-      'charge',
-      'schedule',
-      'timetable',
-    ]) {
-      expect(code.toLowerCase(), `"${word}" must come from the assistant`).not.toContain(word);
-    }
-  });
-
-  it('contains no statistic', () => {
-    // The only bare numbers permitted are the formation year and the phone
-    // digits. Anything else — passenger counts, tonnage, berth totals — is a
-    // figure that goes stale with nothing to say that it has.
-    const numbers = code.match(/\b\d[\d,.]*\b/g) ?? [];
-    const allowed = /^(1993|869|465|8121|8122|8123|963|18694658121|18694658122|18694658123|2|3)$/;
-    const unexpected = numbers.filter((n) => !allowed.test(n.replace(/[,.]/g, '')));
-    expect(unexpected).toEqual([]);
-  });
-
-  it('never links the payment portal', () => {
-    // The header comment names it in order to say it is never linked, so the
-    // scan runs over code. A test that failed on its own documentation would
-    // teach people to delete the documentation.
-    expect(code).not.toContain('pay.scaspa.com');
-  });
-});
+/*
+ * The hard rule on hardcoded facts used to be enforced from here.
+ *
+ * It now lives in `tests/scaspa-facts.test.ts`, which is the file
+ * `src/lib/scaspa-facts.ts` has always claimed enforces it — the module named
+ * for the module, where someone looking for it would look. Moved unchanged in
+ * M5, along with a repo-wide scan for the same defect outside that one file.
+ */
 
 // ── 2. The drawer's focus contract ───────────────────────────────────────────
 
@@ -269,6 +220,24 @@ describe('the navigation', () => {
 // ── 4. Recorded questions re-ask; they do not restore anything ───────────────
 
 describe('recorded questions', () => {
+  it('shows no heading until there is something under it', async () => {
+    /*
+     * A labelled section with nothing beneath it reads as something that failed
+     * to load, and on a fresh load — before anyone has asked anything — it was
+     * the first thing an eye landed on in the T-23 rehearsal.
+     *
+     * There is deliberately no empty state to assert instead. The list explains
+     * itself the moment it has a row and has nothing worth saying while it does
+     * not, so the heading arrives with the first question.
+     */
+    await renderSidebar({ recordedQuestions: [] });
+    expect(screen.queryByRole('heading', { name: /recorded questions/i })).toBeNull();
+
+    cleanup();
+    await renderSidebar({ recordedQuestions: RECORDED });
+    expect(screen.getByRole('heading', { name: /recorded questions/i })).toBeInTheDocument();
+  });
+
   it('re-asks through the normal path and fires onNavigate', async () => {
     const user = userEvent.setup();
     const onAsk = vi.fn();

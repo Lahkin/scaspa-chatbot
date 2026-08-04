@@ -945,6 +945,99 @@ describe('the vessels screen', () => {
     await waitFor(() => expect(seen).toContain('at_berth'));
   });
 
+  it('sends the facility filter, and sends nothing at all for "all"', async () => {
+    /*
+     * The API has filtered on `facility` since M4a. Nothing sent it until M5 —
+     * `features/ops/queries.ts` did not mention the field, so the parameter was
+     * reachable by curl and by no other means.
+     *
+     * Two assertions, and the second is the one worth having: `all` must send
+     * NOTHING rather than `facility=all`. The API treats an absent facility as
+     * unfiltered, and no row's facility is the string "all", so sending it
+     * literally would empty the table on the option named "All facilities" —
+     * a filter that looks broken precisely when it is set to not filter.
+     */
+    const seen: (string | null)[] = [];
+    server.use(
+      http.get(`${config.apiBaseUrl}/api/vessels`, ({ request }) => {
+        seen.push(new URL(request.url).searchParams.get('facility'));
+        return HttpResponse.json({
+          source: { kind: 'fixture', label: 'Sample feed', as_of: null, notice: 'Sample data.' },
+          vessels: MOCK_VESSELS,
+          metrics: {
+            vessels_at_berth: null,
+            berth_capacity: null,
+            arrivals_next_24h: null,
+            daily_cargo_teu: null,
+            arrivals_today: null,
+          },
+          total: MOCK_VESSELS.length,
+          request_id: 'test',
+        });
+      })
+    );
+
+    const user = userEvent.setup();
+    renderRoute('/vessels');
+    await waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0], 'the first load must not filter').toBeNull();
+
+    await user.selectOptions(screen.getByLabelText('Filter by facility'), 'port_zante');
+    await waitFor(() => expect(seen).toContain('port_zante'));
+
+    await user.selectOptions(screen.getByLabelText('Filter by facility'), 'all');
+    await waitFor(() => expect(seen.filter((v) => v === null)).toHaveLength(2));
+    expect(seen, 'literal "all" would match no row').not.toContain('all');
+  });
+
+  it('offers a way back when the facility filter empties the table', async () => {
+    /*
+     * **The toolbar lives inside `OpsTable`.** When no row matches, the table is
+     * replaced by `FilteredOutState` and every control goes with it — so a
+     * filter that panel does not list is a filter with no way back, and the
+     * reader is stranded on an empty screen whose only remedy is a reload.
+     *
+     * Facility was exactly that when it was first wired: it could empty the
+     * table while "Clear filters" reset only the search box, so clearing
+     * appeared to do nothing. Caught by driving it rather than by a gate — the
+     * select is simply not in the document to click a second time.
+     */
+    server.use(
+      http.get(`${config.apiBaseUrl}/api/vessels`, ({ request }) => {
+        const wanted = new URL(request.url).searchParams.get('facility');
+        const vessels = wanted ? [] : MOCK_VESSELS;
+        return HttpResponse.json({
+          source: { kind: 'fixture', label: 'Sample feed', as_of: null, notice: 'Sample data.' },
+          vessels,
+          metrics: {
+            vessels_at_berth: null,
+            berth_capacity: null,
+            arrivals_next_24h: null,
+            daily_cargo_teu: null,
+            arrivals_today: null,
+          },
+          total: vessels.length,
+          request_id: 'test',
+        });
+      })
+    );
+
+    const user = userEvent.setup();
+    renderRoute('/vessels');
+    await screen.findByLabelText('Filter by facility');
+
+    await user.selectOptions(screen.getByLabelText('Filter by facility'), 'port_zante');
+    await screen.findByText(/No .* match these filters/i);
+
+    // The select is gone with the table, so the panel must name the filter.
+    expect(screen.queryByLabelText('Filter by facility')).toBeNull();
+    expect(screen.getByText('Port Zante')).toBeInTheDocument();
+
+    // And clearing must actually restore the rows.
+    await user.click(screen.getByRole('button', { name: /clear/i }));
+    await waitFor(() => expect(screen.getByLabelText('Filter by facility')).toBeInTheDocument());
+  });
+
   it('tells a rate limit apart from an empty result', async () => {
     // The screen used to render "No movements match these filters" for a 429:
     // an offer to clear filters the reader may never have set, over data that

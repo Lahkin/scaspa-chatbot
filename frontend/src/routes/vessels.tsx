@@ -15,8 +15,9 @@ import { Pagination } from '@/components/ops/console/Pagination';
 import { VesselStatusChip } from '@/components/ops/StatusChip';
 import { ActualTime, EstimatedTime } from '@/components/ops/TimeCell';
 import { useVessels } from '@/features/ops/queries';
+import { FACILITY_FILTERS, facilityParam } from '@/features/ops/facilities';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
-import type { VesselStatus } from '@/lib/types';
+import type { Facility, VesselStatus } from '@/lib/types';
 
 /**
  * Vessels — §5.4, and the primitives of §5.1.
@@ -60,6 +61,7 @@ const STATUS_FILTERS: readonly { value: VesselStatus | 'all'; label: string }[] 
 function VesselsRoute() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<VesselStatus | 'all'>('all');
+  const [facility, setFacility] = useState<Facility | 'all'>('all');
   const [density, setDensity] = useState<Density>('comfortable');
   const [offset, setOffset] = useState(0);
 
@@ -86,11 +88,14 @@ function VesselsRoute() {
    */
   const q = useDebouncedValue(search.trim());
 
+  const facilityFilter = facilityParam(facility);
+
   const query = useVessels({
     limit: PAGE_SIZE,
     offset,
     ...(q ? { q } : {}),
     ...(status === 'all' ? {} : { status }),
+    ...(facilityFilter ? { facility: facilityFilter } : {}),
   });
 
   const data = query.data;
@@ -107,6 +112,12 @@ function VesselsRoute() {
     setOffset(0);
   };
 
+  /*
+   * Every filter that can empty the table must be listed here. The toolbar
+   * lives inside `OpsTable`, so when `FilteredOutState` replaces the table the
+   * controls go with it — a filter this array omits is a filter with no way
+   * back, leaving the reader on an empty screen whose only remedy is a reload.
+   */
   const filters = [
     ...(search.trim() ? [{ label: `“${search.trim()}”`, onRemove: clearSearch }] : []),
     ...(status === 'all'
@@ -115,6 +126,17 @@ function VesselsRoute() {
           {
             label: STATUS_FILTERS.find((f) => f.value === status)?.label ?? status,
             onRemove: clearStatus,
+          },
+        ]),
+    ...(facility === 'all'
+      ? []
+      : [
+          {
+            label: FACILITY_FILTERS.find((f) => f.value === facility)?.label ?? facility,
+            onRemove: () => {
+              setFacility('all');
+              setOffset(0);
+            },
           },
         ]),
   ];
@@ -141,6 +163,25 @@ function VesselsRoute() {
           className="h-full w-full bg-transparent text-label text-ink outline-none placeholder:text-ink-disabled"
         />
       </div>
+
+      <label htmlFor="vessel-facility" className="sr-only">
+        Filter by facility
+      </label>
+      <select
+        id="vessel-facility"
+        value={facility}
+        onChange={(event) => {
+          setFacility(event.target.value as Facility | 'all');
+          setOffset(0);
+        }}
+        className="h-11 rounded-input border border-border bg-surface-muted px-3 text-label text-ink sm:h-9"
+      >
+        {FACILITY_FILTERS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
 
       <label htmlFor="vessel-status" className="sr-only">
         Filter by status
@@ -250,6 +291,7 @@ function VesselsRoute() {
           onClear={() => {
             setSearch('');
             setStatus('all');
+            setFacility('all');
             setOffset(0);
           }}
         />

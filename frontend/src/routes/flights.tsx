@@ -17,8 +17,9 @@ import { Pagination } from '@/components/ops/console/Pagination';
 import { FlightStatusChip } from '@/components/ops/StatusChip';
 import { FlightTime, GateCell } from '@/components/ops/TimeCell';
 import { useFlights } from '@/features/ops/queries';
+import { FACILITY_FILTERS, facilityParam } from '@/features/ops/facilities';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
-import type { FlightDirection } from '@/lib/types';
+import type { Facility, FlightDirection } from '@/lib/types';
 
 /**
  * Flights — §5.5, on the primitives of §5.1.
@@ -70,17 +71,21 @@ const PAGE_SIZE = 25;
 function FlightsRoute() {
   const [search, setSearch] = useState('');
   const [direction, setDirection] = useState<FlightDirection>('arrival');
+  const [facility, setFacility] = useState<Facility | 'all'>('all');
   const [density, setDensity] = useState<Density>('comfortable');
   const [offset, setOffset] = useState(0);
 
   // Settles 300ms after typing stops — see the note in `routes/vessels.tsx`.
   const q = useDebouncedValue(search.trim());
 
+  const facilityFilter = facilityParam(facility);
+
   const query = useFlights({
     limit: PAGE_SIZE,
     offset,
     direction,
     ...(q ? { q } : {}),
+    ...(facilityFilter ? { facility: facilityFilter } : {}),
   });
 
   const data = query.data;
@@ -122,6 +127,25 @@ function FlightsRoute() {
           { value: 'departure', label: 'Departures' },
         ]}
       />
+
+      <label htmlFor="flight-facility" className="sr-only">
+        Filter by facility
+      </label>
+      <select
+        id="flight-facility"
+        value={facility}
+        onChange={(event) => {
+          setFacility(event.target.value as Facility | 'all');
+          setOffset(0);
+        }}
+        className="h-11 rounded-input border border-border bg-surface-muted px-3 text-label text-ink sm:h-9"
+      >
+        {FACILITY_FILTERS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
 
       <span className="flex-1" />
 
@@ -182,10 +206,22 @@ function FlightsRoute() {
         <NoFeedState noun="flight" department="Airport Operations" />
       ) : flights.length === 0 ? (
         // A statement about the QUERY. Different remedy, different panel.
+        /*
+         * Every filter that can empty the table has to appear here, and this is
+         * not a nicety: **the toolbar lives inside `OpsTable`**, so when the
+         * table is replaced by this panel the controls go with it. A filter the
+         * panel does not list is a filter with no way back — the reader is left
+         * on an empty screen whose only remedy is a reload.
+         *
+         * Facility was exactly that until M5. It could empty the table (Port
+         * Zante matches no flight — every one of them is at the airport) while
+         * "Clear filters" reset only the search box, so clearing appeared to do
+         * nothing at all.
+         */
         <FilteredOutState
           noun="flights"
-          filters={
-            search.trim()
+          filters={[
+            ...(search.trim()
               ? [
                   {
                     label: `“${search.trim()}”`,
@@ -195,10 +231,24 @@ function FlightsRoute() {
                     },
                   },
                 ]
-              : []
-          }
+              : []),
+            ...(facility === 'all'
+              ? []
+              : [
+                  {
+                    label:
+                      FACILITY_FILTERS.find((option) => option.value === facility)?.label ??
+                      facility,
+                    onRemove: () => {
+                      setFacility('all');
+                      setOffset(0);
+                    },
+                  },
+                ]),
+          ]}
           onClear={() => {
             setSearch('');
+            setFacility('all');
             setOffset(0);
           }}
         />

@@ -261,9 +261,19 @@ export function Sidebar({
 
       {/* 4 ── recorded questions ────────────────────────────────────────────── */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <h2 className="shrink-0 px-2 pt-5 pb-2 text-micro font-semibold tracking-eyebrow text-ink-muted uppercase">
-          Recorded questions
-        </h2>
+        {/*
+          The heading appears with the first question, not before it. A labelled
+          section with nothing under it reads as something that failed to load —
+          and on a fresh load, before anyone has asked anything, it was the first
+          thing an eye landed on in the T-23 rehearsal. There is no empty state
+          to write here: the list explains itself the moment it has a row, and
+          says nothing worth saying while it does not.
+        */}
+        {questions.length > 0 ? (
+          <h2 className="shrink-0 px-2 pt-5 pb-2 text-micro font-semibold tracking-eyebrow text-ink-muted uppercase">
+            Recorded questions
+          </h2>
+        ) : null}
         {/*
           The list runs under a fade to the sidebar's own colour rather than
           being clipped flat, so it reads as "more below" instead of as a list

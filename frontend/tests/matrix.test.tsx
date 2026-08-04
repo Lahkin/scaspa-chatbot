@@ -422,6 +422,29 @@ describe('one event, one treatment — board 22', () => {
     expect(filesRendering(/Aviation advisory/)).toEqual(['src/components/ops/AdvisoryPanel.tsx']);
   });
 
+  it('the mock controls need an explicit flag, not just DEV', () => {
+    /*
+     * The demonstration runs on `npm run dev`, deliberately — that is what keeps
+     * `/dev/rehearsal` reachable as the last-resort fallback. Gated on DEV
+     * alone, the mock panel therefore sat on screen throughout it: a floating
+     * pill reading "Mock: Normal cited answer", overlapping the source panel's
+     * footer text in the T-23 screenshots.
+     *
+     * On a product whose argument is that it is honest about which data is real,
+     * a control captioned "Mock" is the worst thing that could be visible — and
+     * no automated gate could see it, because in dev it was behaving exactly as
+     * designed. So the gate is asserted here instead.
+     *
+     * Both conditions are build-time literals, so the production fold that keeps
+     * MSW out of the bundle is unchanged.
+     */
+    const root = SOURCE.find((entry) => entry.file === 'src/routes/__root.tsx');
+    expect(root, 'src/routes/__root.tsx is missing from the scan').toBeDefined();
+    expect(root?.code).toMatch(/VITE_SHOW_MOCK_CONTROLS/);
+    // DEV must still be part of it, or the mocks would follow into the bundle.
+    expect(root?.code).toMatch(/import\.meta\.env\.DEV\s*&&/);
+  });
+
   it('the landing page quotes a real source rather than inventing one — T-18', () => {
     /*
      * The example answer in the hero used to read "the last placeholder sailing

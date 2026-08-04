@@ -46,6 +46,23 @@ export function IndexStatusPanel({ index }: { index: IndexStatus }) {
       </div>
 
       <dl className="flex flex-col">
+        {/*
+         * The corpus this index was built from, by filename.
+         *
+         * Added in M5 because it is the field that would have caught the defect
+         * that opened the T-23 rehearsal: the service was answering from a
+         * 10-row `sample_kb.csv` via a Chroma index persisted in an earlier
+         * session, while `/api/health` reported `status: ok` and `ready: true`
+         * over it. Every other field on this panel described that stale build
+         * accurately — `ready` was true, the count was a real count, the build
+         * time was a real time — and none of them looked wrong.
+         *
+         * A filename does. `sample_kb.csv` on a screen expecting
+         * `scaspa_kb_2026-07-31.csv` is legible to anyone, including someone in
+         * the room who has never seen this system before, which is the point of
+         * putting it on a panel that exists to argue the thing is auditable.
+         */}
+        <Row label="Source" value={index.kb_csv_filename} />
         {/* Knowledge-base rows indexed. A row is this system's document. */}
         <Row label="Documents" value={count(index.kb_rows)} />
         {/*

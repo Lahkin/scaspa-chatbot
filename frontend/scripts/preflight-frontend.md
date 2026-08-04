@@ -1,7 +1,32 @@
 # Frontend preflight
 
-Run this **in the venue, on the venue network, on the presenting machine**, about
-twenty minutes before presenting. It takes five minutes.
+## Do this first. It has already gone wrong once.
+
+```bash
+curl -s localhost:8000/api/health | grep -E 'kb_csv_filename|kb_rows|ready'
+```
+
+**It must say `scaspa_kb_2026-07-31.csv` and `115`.** If it says `sample_kb.csv`
+and `10`, the assistant is answering every question from a ten-row sample corpus
+and **nothing else on this list will tell you.** `status` is `ok` and `ready` is
+`true` over a stale index — every field describes the stale build accurately.
+
+The cause is a Chroma index persisted from an earlier session and loaded rather
+than rebuilt; the configuration is usually correct and misleads you. The fix:
+
+```bash
+cd backend && uv run python scripts/build_index.py     # 115 indexed, 4 rejected
+lsof -ti:8000 | xargs kill 2>/dev/null                 # then restart the backend
+```
+
+The same figures are on screen at `/settings` — the index panel's **Source** row
+names the corpus by filename, which is the one field that makes this legible at
+a glance.
+
+---
+
+Run the rest **in the venue, on the venue network, on the presenting machine**,
+about twenty minutes before presenting. It takes five minutes.
 
 The point is not to discover that everything works. It is to discover the one
 thing that does not, while there is still time.

@@ -74,8 +74,9 @@ Tap a citation chip. The panel opens at that source with its `as_of` date.
 > "This is the operations side. Eleven vessels, every status the schema allows —
 > alongside, expected, departed, and the ones we have no report for."
 
-**Filter by status** — the control is "Filter by status", _not_ by facility; see
-§5. Rehearsed: All 11 → Expected 2 → En route 3 → Alongside 4.
+**This is the screen to demonstrate the facility filter on** (§5). Pick Port
+Zante: 11 → 3. Then "Filter by status": All 11 → Expected 2 → En route 3 →
+Alongside 4.
 
 Show that **"not reported" is an em dash, never a zero** — §5.3 calls that the
 single most dangerous default to get wrong, and it is worth saying out loud to
@@ -85,8 +86,12 @@ the operational staff.
 
 > "Same shape, different facility. Seven arrivals, five departures."
 
-**Toggle Direction** — Arrivals 7, Departures 5. That is the filter to
-demonstrate here; there is no facility control on this screen either (§5).
+**Toggle Direction** — Arrivals 7, Departures 5.
+
+The facility filter is here too, but **do not demonstrate it on this screen**:
+every flight is at R. L. Bradshaw, so selecting it changes nothing and selecting
+anything else empties the table. That is correct — there is one airport — and it
+makes a poor thing to show. Vessels is where the filter has something to say.
 
 ### `/tariffs` — the schedule and the calculator
 
@@ -122,14 +127,26 @@ plausible ones failed this check and were removed (§8).
 - [ ] **What are SCASPA's opening hours?** — `kb-016`, `kb-005`
 - [ ] **What time is the last ferry back from Nevis?** — `kb-192`
 
-The fourth is the strongest of the four and worth saving for last. It is the
-question on the landing page, and the assistant answers it by **declining to
-invent a timetable** — _"I do not have a fixed last-departure time. Ferry times
-vary by operator and day; SCASPA directs travellers to its ferry schedule."_ Then
-it cites the row that says so.
+**Save the fourth for last. It is the best answer in the set**, and it should be
+presented as the design working rather than as something the system cannot do.
 
-> "That is the whole product in one answer. It could easily have given you a
-> time. It does not have one from SCASPA, so it does not offer one."
+It is the question on the landing page. The assistant answers it — with a
+citation, from a confirmed row — and the answer is that **SCASPA publishes no
+fixed timetable**: _"I do not have a fixed last-departure time. Ferry times vary
+by operator and day; SCASPA directs travellers to its ferry schedule."_ `kb-192`,
+verified 2026-07-31.
+
+> "This is the one I'd point at. It is a question with an obvious wrong answer
+> available — any system could have produced a plausible sailing time, and most
+> would have. This one went to the Authority's own record, found that SCASPA
+> publishes times through a live schedule rather than a timetable, and told you
+> that instead, with the source. **It is not that it failed to find a time. It
+> declined to invent one**, and it can show you why."
+
+That is the product's entire argument, and it lands better as one worked example
+than as a paragraph about verification. **Do not apologise for this answer or
+introduce it as a limitation** — the citation underneath is what makes it a
+demonstration rather than a shrug.
 
 If one is slow, lead with a different one.
 
@@ -156,6 +173,16 @@ anywhere in the product that did not come from a cited row.
 
 ## 5. Filters, both viewports
 
+- **Filter by facility — on both screens.** Pick **Port Zante** on `/vessels`;
+  pick **R. L. Bradshaw** on `/flights`. This is the one that demonstrates the
+  per-facility work directly, and it is worth naming as you do it:
+
+  > "Every vessel, flight, gate and tariff row carries the facility it belongs
+  > to, so the same screen serves the cargo port, the cruise terminal, the ferry
+  > terminal and the airport. That is one field on the record and one parameter
+  > on the API — which is what makes adding Nevis a small job rather than a
+  > second product."
+
 - **`/vessels` — "Filter by status".** All 11 → Expected 2 → En route 3 →
   Alongside 4. The count drops and the source notice stays.
 - **`/flights` — the Direction toggle.** Arrivals 7, Departures 5.
@@ -163,13 +190,6 @@ anywhere in the product that did not come from a cited row.
   `SAMPLE` on `/flights` narrows to 2. The field keeps focus while you type.
 - **Both viewports.** Narrow the window, or present the phone. The tables become
   cards; nothing is cut off and no horizontal scroll appears.
-
-> **There is no facility filter in the interface.** The API supports
-> `?facility=`, and nothing in the frontend sends it — `features/ops/queries.ts`
-> does not mention the field. Do not promise to filter by facility on stage. If
-> asked, it is an honest answer: _"the API filters by facility today; we have not
-> put a control on it yet, because the four St. Kitts facilities fit on one
-> screen."_ Filed in `found-during-build.md` entry 25.
 
 ---
 
@@ -261,13 +281,29 @@ The asks, phrased as asks. Full table: `docs/implementation-plan.md` §3.
 Run 2026-08-04 against the live backend (`OPS_DATA_SOURCE=fixture`) and the dev
 server, driven through the real interface rather than asserted in tests.
 
-**Before anything else, one thing had to be fixed:** the backend was serving the
-**10-row `sample_kb.csv`**, not the real corpus — a persisted Chroma index built
-earlier and loaded rather than rebuilt. Health reported `status: ok`,
-`ready: true` over it. Rebuilt to **115 rows indexed, 4 rejected**,
-`kb_version 2026-07-31`. **Check `kb_csv_filename` on `/api/health` before
-presenting** (§2 of the preflight) — an index this stale answers every question
-from ten rows and nothing announces it.
+> ### ⚠ The index went stale **twice** during this one session
+>
+> Both times the backend answered from the **10-row `sample_kb.csv`** while
+> `/api/health` reported `status: ok` and `ready: true`. Every other field
+> described the stale build accurately — the count was a real count, the build
+> time a real time — so nothing looked wrong.
+>
+> The first cause was a Chroma index persisted from an earlier session and
+> loaded rather than rebuilt. **The second recurrence, mid-session, could not be
+> reproduced** — the backend test suite was ruled out empirically (it isolates
+> to a temp directory) and no other cause was found. It is not understood, so
+> treat it as something that can happen again.
+>
+> **This is why the check is now the first line of the preflight.** Run it, and
+> run it again after anything that touches the backend:
+>
+> ```bash
+> curl -s localhost:8000/api/health | grep -E 'kb_csv_filename|kb_rows'
+> ```
+>
+> It must say `scaspa_kb_2026-07-31.csv` and `115`. The same two figures are on
+> screen at `/ops/vessels` — the index panel's **Source** row, added in M5
+> precisely for this.
 
 **Chat questions** — all four returned a cited answer with a real `as_of`:
 
@@ -306,6 +342,18 @@ pilotage 111.11 and harbour dues 44.44 on both.
 **Filters and search** — `/vessels` status All 11 → Expected 2 → En route 3 →
 Alongside 4; `/flights` Arrivals 7, Departures 5; search `CARRIER` → 1 row and
 `SAMPLE` → 2 rows, **field still focused, full term intact**.
+
+**Facility filter** — wired into the interface in M5, having existed only on the
+API since M4a. Rehearsed on both screens and matching the fixture distribution
+exactly: `/vessels` Deep Water Harbour 5, Port Zante 3, Basseterre Ferry Terminal
+2, All 11; `/flights` R. L. Bradshaw 7, Port Zante 0.
+
+Wiring it surfaced a dead end and closed it. The toolbar lives **inside**
+`OpsTable`, so an empty result replaces the table and takes every control with
+it — and "Clear filters" reset only the search box. A facility that matched no
+row therefore stranded the reader on an empty screen with no way back but a
+reload. The empty panel now names the facility and clearing restores it:
+verified live, Port Zante → 0 rows → **Clear filters → 7 rows, control back**.
 
 **Five screens × two viewports** (1280×900 and 390×800): every screen rendered,
 **0 console errors**, sample hatch present on all four fixture screens and
