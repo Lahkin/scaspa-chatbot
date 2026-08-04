@@ -123,6 +123,20 @@ export const dataSourceSchema = z.object({
   notice: z.string().nullable(),
 });
 
+/**
+ * The four facilities.
+ *
+ * `.nullish().catch(null)` rather than a hard failure, and the fallback is
+ * deliberately `null` — "the feed did not say". A fifth facility appearing on
+ * the wire must degrade to an unattributed record, never to a wrong one: this
+ * value decides which berth a reader thinks a ship is at.
+ */
+export const facilitySchema = z
+  .enum(['deep_water_harbour', 'port_zante', 'basseterre_ferry_terminal', 'rlb_airport'])
+  .nullish()
+  .catch(null)
+  .transform((v) => v ?? null);
+
 export const vesselArrivalSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -130,6 +144,7 @@ export const vesselArrivalSchema = z.object({
   vessel_type: z.string(),
   agent: z.string(),
   berth: z.string(),
+  facility: facilitySchema,
   // `.catch` rather than a hard failure: a feed that adds a sixth status should
   // render one row oddly, not lose the whole arrivals board.
   status: z.enum(['at_berth', 'en_route', 'scheduled', 'departed', 'unknown']).catch('unknown'),
@@ -142,6 +157,10 @@ export const vesselMetricsSchema = z.object({
   berth_capacity: z.number().nullable(),
   arrivals_next_24h: z.number().nullable(),
   daily_cargo_teu: z.number().nullable(),
+  // Strictly `.nullable()`, not `.nullish()`: the backend always sends the key,
+  // and a mock that omits it should fail here rather than let the two halves
+  // drift. Same reasoning as `mocks/opsFixtures.ts`' mirror rule.
+  arrivals_today: z.number().nullable(),
 });
 
 export const vesselArrivalsResponseSchema = z.object({
@@ -173,6 +192,12 @@ export const flightMetricsSchema = z.object({
   on_time_percent: z.number().nullable(),
   gates_active: z.number().nullable(),
   gates_total: z.number().nullable(),
+  // §5.3's three tiles. Nullable, and null until a feed fills them — an
+  // em dash under the right label beats a figure that answers a different
+  // question.
+  arrivals_today: z.number().nullable(),
+  departures_today: z.number().nullable(),
+  delayed: z.number().nullable(),
 });
 
 export const operationalAdvisorySchema = z.object({
@@ -226,6 +251,7 @@ export const gateAssignmentSchema = z.object({
   flight_number: z.string().nullable(),
   airline: z.string(),
   scheduled_at: z.string().nullable(),
+  facility: facilitySchema,
 });
 
 export const gateMapResponseSchema = z.object({
@@ -296,6 +322,7 @@ export const tariffRowSchema = z.object({
   amount: z.number(),
   currency: z.string(),
   category: z.enum(['maritime', 'aviation', 'cargo', 'passenger']),
+  facility: facilitySchema,
   kb_id: z.string().nullable(),
   as_of: z.string(),
 });

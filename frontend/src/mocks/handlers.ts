@@ -407,6 +407,7 @@ export const handlers = [
           berth_capacity: null,
           arrivals_next_24h: null,
           daily_cargo_teu: null,
+          arrivals_today: null,
         },
         total: 0,
         request_id: 'mock-vessels',
@@ -438,6 +439,10 @@ export const handlers = [
         berth_capacity: 4,
         arrivals_next_24h: 1,
         daily_cargo_teu: 1111,
+        // Null, mirroring the backend fixture: the field landed in M2, the
+        // value lands in M4. An em dash under "Expected today" is correct
+        // until then.
+        arrivals_today: null,
       },
       total: vessels.length,
       request_id: 'mock-vessels',
@@ -469,6 +474,10 @@ export const handlers = [
         on_time_percent: 75,
         gates_active: 3,
         gates_total: 4,
+        // §5.3's three, null until M4 — see the vessels handler above.
+        arrivals_today: null,
+        departures_today: null,
+        delayed: null,
       },
       advisory: {
         headline: 'Sample conditions',

@@ -836,9 +836,30 @@ total describes a result set that does not exist.
 
 | Endpoint | Filters | Paging |
 | --- | --- | --- |
-| `GET /api/vessels` | `q` (name or IMO, substring, case-insensitive) · `vessel_type` · `berth` · `status` | `limit` 1–100, default 25 · `offset` |
+| `GET /api/vessels` | `q` (name or IMO, substring, case-insensitive) · `vessel_type` · `berth` · `status` · `facility` | `limit` 1–100, default 25 · `offset` |
 | `GET /api/flights` | `q` (flight number or port) · `airline` · `status` · `direction` (`arrival` / `departure`) | `limit` 1–100, default 25 · `offset` |
-| `GET /api/tariffs` | `q` (code or description) · `category` | `limit` 1–100, default 100 · `offset` |
+| `GET /api/tariffs` | `q` (code or description) · `category` · `facility` | `limit` 1–100, default 100 · `offset` |
+
+### `facility` — the four sites, on the record and as a filter
+
+`VesselArrival`, `GateAssignment` and `TariffRow` each carry
+`facility: "deep_water_harbour" | "port_zante" | "basseterre_ferry_terminal" | "rlb_airport" | null`.
+
+**`null` means the feed did not say**, and it is never inferred. Before this
+field existed, a vessel carried `berth` and nothing else, so Deep Water Harbour
+and Port Zante were distinguishable only by whether the sample data happened to
+say `"Berth 1"` or `"Pier 1"` — on a product whose entire subject is four
+facilities.
+
+The two filters behave **differently on purpose**:
+
+| Endpoint | `?facility=port_zante` returns |
+| --- | --- |
+| `GET /api/vessels` | Only records attributed to that facility. An unattributed record is **excluded** — being handed movements that might be anywhere is the failure the field exists to prevent. |
+| `GET /api/tariffs` | Facility-specific rates **and** rates with `facility: null`. A charge published for the whole port applies at the facility being asked about, and dropping it would understate what a caller owes. |
+
+`GET /api/ops/gates` carries the field but takes **no** `facility` parameter: it
+returns the complete set with a total, like positions and advisories.
 
 `metrics` on `/api/vessels` and `/api/flights` describes **the feed, not the
 query**: it is unaffected by every parameter above, including `direction`. So
@@ -846,6 +867,15 @@ query**: it is unaffected by every parameter above, including `direction`. So
 `direction` was asked for, and it is not a count of either one. A client that
 labels it "Arrivals today" is publishing a wrong figure under a right-looking
 label.
+
+**The tiles have their own fields now.** `FlightMetrics` carries
+`arrivals_today`, `departures_today` and `delayed`, and `VesselMetrics` carries
+`arrivals_today` — a **calendar day**, which `arrivals_next_24h` is not. The two
+agree at midday and diverge every evening, so they answer different questions
+and a tile labelled "today" reads the calendar-day field. All four are `int |
+null` and are **null until a feed supplies them**; null renders as the em dash,
+never as `0`. A screen that wants a figure under one of these labels waits for
+the field rather than substituting the nearest available number.
 
 **Positions, gates and advisories take no parameters at all** — they return the
 complete set with a total. Do not send `limit` or `offset` to them.

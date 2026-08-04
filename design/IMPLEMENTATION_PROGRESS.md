@@ -1131,3 +1131,98 @@ nothing on that path.
   refusal-policy question opened by `kb-143`, and the fact that **SCASPA
   publishes no fixed ferry timetable** — which is a gap in their information
   rather than a defect in ours, and the one most worth raising with them.
+
+---
+
+## 11. Milestone M2 — schema and the integrity contract, before any fixture
+
+Plan of record: `docs/implementation-plan.md` §5, milestone M2. Tasks T-06,
+T-07, T-08. **Schema and a decision record only — no fixture generation**, which
+is the entire point of the milestone: the contract and the field shapes are
+settled so M4 writes every record exactly once.
+
+Same standard as §10: nothing here is claimed without a `file:line` or a command
+whose output was read.
+
+### 11.1 What changed
+
+| Task | Change | Evidence |
+| --- | --- | --- |
+| **T-06** | `facility` on `VesselArrival`, `GateAssignment` and `TariffRow`, as a four-value enum, **nullable on all three**. Null means the feed did not say; nothing infers a facility from a berth name. Before this, Deep Water Harbour and Port Zante were distinguishable only by whether the sample data said `"Berth 1"` or `"Pier 1"` | `backend/app/schemas.py:381-405, 419-425, 545-551, 664-670` |
+| **T-06** | The two filters differ **on purpose**. Vessels: an unattributed record is *excluded* — being handed movements that might be anywhere is the failure the field exists to prevent. Tariffs: rows with `facility: null` are *kept* — a port-wide charge applies at the facility asked about, and dropping it would understate what a caller owes | `backend/app/ops/source.py:171-200, 222-248` |
+| **T-06** | `?facility=` on `GET /api/vessels` and `GET /api/tariffs`. **Not** on `/api/ops/gates`, which returns the complete set like positions and advisories (§6.8) | `backend/app/routers/operations.py:61-71, 78, 255-272` |
+| **T-07** | `arrivals_today` on `VesselMetrics` — a **calendar day**, which `arrivals_next_24h` is not. The two agree at midday and diverge every evening | `backend/app/schemas.py:429-440` |
+| **T-07** | `arrivals_today`, `departures_today`, `delayed` on `FlightMetrics` — §5.3's three tiles. None of the four fields already there is one of them | `backend/app/schemas.py:477-492` |
+| **T-07** | Both screens now read their own fields. `/vessels` "Expected today" read `arrivals_next_24h`; `/flights` had three literal `value={null}` with a BLOCKED note. All four render the em dash until a feed fills them, which is §5.3's treatment for a null rather than a placeholder | `frontend/src/routes/vessels.tsx:190-197`; `flights.tsx:45-62, 150-158` |
+| **T-08** | **Decision record 0032 — the fixture-integrity contract.** Four layers: schema (already in place), the `ENV=prod` boot guard (already in place, and now load-bearing rather than belt-and-braces), the value rule, and a render treatment built in M4 | `docs/decisions.md` §0032 |
+
+**T-08's value rule, because it is the part that does the work:** *realistic in
+every field that shapes the layout; synthetic in every field that could be
+written down and acted on.* Berths, gates, tariff codes, times, statuses and
+quantities are realistic; vessel names, IMO numbers, airline codes, flight
+numbers and **every money amount** are not. The result behaves exactly like the
+real thing and contains no figure a reader could act on. Layer 4 is a recorded
+**deviation from the design specification**, which draws the notice but no
+watermark.
+
+### 11.2 Gates — actual output
+
+```
+backend    ruff check .            All checks passed!
+           ruff format --check .   81 files already formatted
+           pytest                  574 passed  (569 at M1; +5 for T-06/T-07)
+
+frontend   build                   ✓ built in 2.80s
+           lint                    clean
+           format:check            All matched files use Prettier code style!
+           typecheck               clean
+           test                    824 passed (25 files)
+           check:budget            Performance budget met. Initial JS 133.7 kB gzipped
+```
+
+`format:check` and `check:budget` were added to this milestone's gate list after
+M1 shipped with `format:check` failing unnoticed until the end. Both are in CI.
+
+Milestone-specific, against a running server:
+
+```
+openapi   PASS  facility on VesselArrival · arrivals_today on FlightMetrics
+                facility also on GateAssignment, TariffRow
+                arrivals_today, departures_today, delayed on FlightMetrics
+grep      PASS  'fixture-integrity' present in docs/decisions.md
+```
+
+**The facility filter is proven by `pytest`, not by the live calls.** With
+`OPS_DATA_SOURCE` unset the feed is empty, so filtered and unfiltered both
+return zero and the request does not discriminate. Four backend tests exercise
+the mechanism directly against the fixture source, including the asymmetry
+between the two filters — `backend/tests/test_operations.py:191-260`.
+
+### 11.3 Nothing is newly demoable, and that is the milestone working
+
+No screen changes. Four metric tiles moved from a hardcoded `null` to a real
+field that is currently `null`, which looks identical and is not the same thing:
+the em dash is now the feed's answer rather than the component's.
+
+What *is* newly answerable is the question a technical audience asks — the feed
+contract is now the shape a real integration targets, and `?facility=` exists to
+be demonstrated against `curl`.
+
+### 11.4 Verified unchanged
+
+All seven operations endpoints still answer `200` with
+`source.kind=unavailable`, and the five walkthrough surfaces (`/api/health`,
+`/api/vessels`, `/api/flights`, `/api/tariffs`, `/api/support/directory`) all
+answer `200`. M2 touched no screen on the walkthrough and no regression was
+found on screens it did not touch.
+
+### 11.5 T-15 go/no-go
+
+`docs/implementation-plan.md` §4 sets the rule: *"if M1 and M2 have not both
+closed green by end of day 2, drop T-15 to the backlog."*
+
+**Both closed green, first pass, with no rework between them.** On that
+criterion T-15 is a **GO** and M3 proceeds as planned. The caveat worth stating:
+this session measured milestone completion, not wall-clock — if more than two
+days have actually elapsed, the elapsed-time half of the rule is the owner's
+call, not something this record can settle.

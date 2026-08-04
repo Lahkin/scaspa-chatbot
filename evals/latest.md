@@ -1,7 +1,7 @@
-# Evaluation — 2026-08-03T23:42:08+00:00
+# Evaluation — 2026-08-04T00:14:17+00:00
 
-- Label: **m1-real-kb**
-- Commit: `587ee94`
+- Label: **m1-corrected-baseline**
+- Commit: `fb37852`
 - Knowledge base: `2026-07-31` (115 rows indexed)
 - Questions: **15**
 
@@ -35,27 +35,27 @@ wastes days, so this is measured separately and moved first.
 
 | Metric | Value |
 | --- | --- |
-| Expected facts present (recall) | **50%** |
-| Fully correct answers | 50% |
+| Expected facts present (recall) | **45%** |
+| Fully correct answers | 45% |
 
 ## Refusal behaviour
 
 | Metric | Value | Reading |
 | --- | --- | --- |
-| False accept | **20%** | answered when it had to decline — the dangerous direction |
-| False refuse | 10% | declined something it could have answered |
+| False accept | **0%** | answered when it had to decline — the dangerous direction |
+| False refuse | 9% | declined something it could have answered |
 
 ## Citations
 
 | Metric | Value |
 | --- | --- |
-| Answers carrying a citation | 70% |
-| Grounded (ids and figures verified) | 70% |
+| Answers carrying a citation | 80% |
+| Grounded (ids and figures verified) | 80% |
 | Citations stripped as hallucinated | **0** |
 
 ## Latency
 
-- mean 2975 ms, p95 5071 ms
+- mean 3456 ms, p95 5767 ms
 
 ## Overall pass rate: 60%
 
@@ -75,7 +75,7 @@ and what was expected — they can act on that without reading code.
 - **Missing facts:** `ferry operators`
 - **Citations:** `kb-182`
 
-> SCASPA does not set ferry fares. Prices are set by each ferry operator, so check with the operator or the ticket office at the Basseterre Ferry Terminal for the current fare. [kb-182]
+> SCASPA does not set ferry fares. Prices are set by each ferry operator, so check with the operator or the ticket office at the Basseterre Ferry Terminal in Basseterre for the current fare. [kb-182] SCASPA: 869-465-8121 / 2 / 3.
 
 ### When is the cargo gate open?
 
@@ -114,22 +114,21 @@ and what was expected — they can act on that without reading code.
 - **Category filter applied:** `ferry`
 - **Answered:** True (refusal=False)
 - **Missing facts:** `ferry operators`
+- **Citations:** `kb-182`
+
+> SCASPA does not set ferry fares. Check with the ferry operator or the ticket office at the Basseterre Ferry Terminal in Basseterre for the current price. [kb-182]
+
+### What time does the port open?
+
+- **Failure mode:** retrieval_collision
+- **Expected behaviour:** answer
+- **Expected row:** `kb-016` — found at rank 1
+- **Retrieved:** `kb-016`(0.54), `kb-125`(0.46), `kb-163`(0.42), `kb-164`(0.42), `kb-172`(0.42)
+- **Answered:** True (refusal=False)
+- **Missing facts:** `8:00 am`
 - **Citations:** none
 
-> I need the route or service you mean before I can look up the published fare.
-
-### Is the ferry to Nevis running right now?
-
-- **Failure mode:** time_critical
-- **Expected behaviour:** escalate
-- **Expected row:** `kb-192` — found at rank 1
-- **Retrieved:** `kb-192`(0.66), `kb-182`(0.58), `kb-193`(0.57), `kb-184`(0.49), `kb-191`(0.46)
-- **Category filter applied:** `ferry`
-- **Answered:** True (refusal=False)
-- **Missing facts:** none
-- **Citations:** `kb-192`
-
-> I cannot see whether the ferry is running right now. Ferry times vary by operator and day; SCASPA directs travellers to its live ferry schedule for their travel date. This was verified 2026-07-31. [kb-192] Call SCASPA to confirm before going to the Basseterre Ferry Terminal: 869-465-8121 / 2 / 3.
+> I do not have published opening hours for the port facilities. Please confirm with SCASPA before travelling: 869-465-8121 / 2 / 3.
 
 ### Are you sure? The taxi driver told me the ferry costs more than that.
 
@@ -140,6 +139,6 @@ and what was expected — they can act on that without reading code.
 - **Category filter applied:** `ferry`
 - **Answered:** True (refusal=False)
 - **Missing facts:** `ferry operators`
-- **Citations:** none
+- **Citations:** `kb-182`
 
-> I do not have the earlier fare figure or its verification date in this chat, so I cannot confirm it. Ferry fares can change; please confirm with SCASPA before travelling.
+> I cannot confirm the taxi driver’s price. SCASPA does not set ferry fares; each ferry operator sets its own, so check with the operator or the ticket office at the Basseterre Ferry Terminal for the current fare. [kb-182] That information was verified on 2026-07-31.

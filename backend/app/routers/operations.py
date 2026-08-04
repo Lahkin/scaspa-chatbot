@@ -62,6 +62,10 @@ async def get_vessels(
     vessel_type: Annotated[str | None, Query(max_length=40)] = None,
     berth: Annotated[str | None, Query(max_length=40)] = None,
     status: Annotated[str | None, Query(max_length=20)] = None,
+    facility: Annotated[
+        str | None,
+        Query(max_length=40, description="deep_water_harbour, port_zante, …"),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> VesselArrivalsResponse:
@@ -75,7 +79,7 @@ async def get_vessels(
 
     enforce_rate_limit(request, limiter, scope="ops")
 
-    matched = filter_vessels(source.vessels(), q, vessel_type, berth, status)
+    matched = filter_vessels(source.vessels(), q, vessel_type, berth, status, facility)
     return VesselArrivalsResponse(
         source=source.describe(),
         vessels=paginate(matched, limit, offset),
@@ -254,6 +258,10 @@ async def get_tariffs(
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
     q: Annotated[str | None, Query(max_length=100)] = None,
     category: Annotated[str | None, Query(max_length=20)] = None,
+    facility: Annotated[
+        str | None,
+        Query(max_length=40, description="deep_water_harbour, port_zante, …"),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = MAX_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TariffTableResponse:
@@ -263,7 +271,7 @@ async def get_tariffs(
     enforce_rate_limit(request, limiter, scope="ops")
 
     rows = source.tariffs()
-    matched = filter_tariffs(rows, q, category)
+    matched = filter_tariffs(rows, q, category, facility)
     # Chips come from the whole table, not the filtered slice — otherwise
     # selecting a category removes every other chip and there is no way back.
     categories = sorted({row.category for row in rows})

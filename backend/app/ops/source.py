@@ -174,8 +174,9 @@ def filter_vessels(
     vessel_type: str | None = None,
     berth: str | None = None,
     status: str | None = None,
+    facility: str | None = None,
 ) -> list[VesselArrival]:
-    """Apply the search box and the two filter selects from the design."""
+    """Apply the search box and the filter selects from the design."""
     needle = (query or "").strip().lower()
     out = rows
     if needle:
@@ -186,6 +187,11 @@ def filter_vessels(
         out = [v for v in out if v.berth.lower() == berth.strip().lower()]
     if status:
         out = [v for v in out if v.status == status]
+    if facility:
+        # Equality, and a record with no facility is excluded rather than
+        # included. Asking for Port Zante and being handed movements that might
+        # be anywhere is the failure this field exists to prevent.
+        out = [v for v in out if v.facility == facility]
     return out
 
 
@@ -221,12 +227,18 @@ def filter_tariffs(
     rows: list[TariffRow],
     query: str | None = None,
     category: str | None = None,
+    facility: str | None = None,
 ) -> list[TariffRow]:
     """Apply the tariff search box and the category chips."""
     needle = (query or "").strip().lower()
     out = rows
     if category:
         out = [t for t in out if t.category == category]
+    if facility:
+        # Facility-specific rates AND the ones that apply everywhere: a charge
+        # published for the whole port applies at the facility being asked
+        # about, and dropping it would understate what a caller owes.
+        out = [t for t in out if t.facility in (facility, None)]
     if needle:
         out = [t for t in out if _matches(t.service, needle) or _matches(t.code, needle)]
     return out

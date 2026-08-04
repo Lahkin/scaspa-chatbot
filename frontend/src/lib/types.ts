@@ -487,6 +487,18 @@ export interface DataSource {
   notice: string | null;
 }
 
+/**
+ * The four facilities SCASPA operates.
+ *
+ * On every record that belongs to one, and **nullable on all of them**: null
+ * means the feed did not say, which is a real state. Nothing infers a facility
+ * from a berth name or a gate letter — that was the situation this replaces,
+ * where Deep Water Harbour and Port Zante were told apart only by whether the
+ * sample data said "Berth 1" or "Pier 1".
+ */
+export type Facility =
+  'deep_water_harbour' | 'port_zante' | 'basseterre_ferry_terminal' | 'rlb_airport';
+
 export type VesselStatus = 'at_berth' | 'en_route' | 'scheduled' | 'departed' | 'unknown';
 
 export interface VesselArrival {
@@ -496,6 +508,8 @@ export interface VesselArrival {
   vessel_type: string;
   agent: string;
   berth: string;
+  /** Null when the feed did not say. Never inferred from `berth`. */
+  facility: Facility | null;
   status: VesselStatus;
   /**
    * `eta` is a prediction; `ata` is a record of something that happened. Two
@@ -512,6 +526,12 @@ export interface VesselMetrics {
   berth_capacity: number | null;
   arrivals_next_24h: number | null;
   daily_cargo_teu: number | null;
+  /**
+   * A calendar day — which `arrivals_next_24h` is not, and the two diverge every
+   * evening. "Expected today" reads this; it read the rolling window before,
+   * because that was the nearest figure on the wire.
+   */
+  arrivals_today: number | null;
 }
 
 export interface VesselArrivalsResponse {
@@ -548,6 +568,15 @@ export interface FlightMetrics {
   on_time_percent: number | null;
   gates_active: number | null;
   gates_total: number | null;
+  /**
+   * The three tiles the design draws above the flights table. None of the four
+   * fields above is one of them — `total_flights` counts both directions across
+   * the whole feed, so under an "Arrivals today" label it reported four arrivals
+   * where the feed held three.
+   */
+  arrivals_today: number | null;
+  departures_today: number | null;
+  delayed: number | null;
 }
 
 export interface OperationalAdvisory {
@@ -597,6 +626,8 @@ export interface GateAssignment {
   flight_number: string | null;
   airline: string;
   scheduled_at: string | null;
+  /** Every stand is at RLB today. Stated on the record rather than assumed. */
+  facility: Facility | null;
 }
 
 export interface GateMapResponse {
@@ -671,6 +702,13 @@ export interface TariffRow {
   amount: number;
   currency: string;
   category: TariffCategory;
+  /**
+   * Null means the charge applies across SCASPA rather than at one facility,
+   * which is true of most of the published schedule. A facility filter keeps
+   * these: a port-wide charge applies at the facility being asked about, and
+   * dropping it would understate what a caller owes.
+   */
+  facility: Facility | null;
   /** The knowledge-base row this rate was published in, when it is indexed. */
   kb_id: string | null;
   as_of: string;

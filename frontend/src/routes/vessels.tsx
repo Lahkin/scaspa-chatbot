@@ -182,12 +182,13 @@ function VesselsRoute() {
       <MetricRow columns={4}>
         <MetricTile label="Vessels in port" value={data?.metrics.vessels_at_berth ?? null} />
         {/*
-          The label is the handoff's. The field is `arrivals_next_24h`, which is
-          a rolling 24-hour window rather than a calendar day — BLOCKED on
-          `arrivals_today` on `VesselMetrics`; it is the nearest figure the wire
-          carries, and the mismatch is recorded rather than hidden.
+          `arrivals_today` — a calendar day, which is what the label says.
+          UNBLOCKED in M2: this read `arrivals_next_24h`, a rolling window, as
+          the nearest figure the wire carried. The two agree at midday and
+          diverge every evening, and the tile claims the calendar day.
+          Null until a feed fills it, which is the em-dash treatment.
         */}
-        <MetricTile label="Expected today" value={data?.metrics.arrivals_next_24h ?? null} />
+        <MetricTile label="Expected today" value={data?.metrics.arrivals_today ?? null} />
         {/*
           **The single most dangerous default in the product.** The feed does not
           report berth occupancy, so this tile is the em dash — never 0, which

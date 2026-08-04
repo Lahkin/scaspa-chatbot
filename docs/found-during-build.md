@@ -9,6 +9,75 @@ acted on.
 
 ---
 
+## From the M2 session (formatting fix, eval correction, M2 proper)
+
+### 12. Query rewrite drops the ellipsis follow-up — the one false refuse
+
+Eval case 6, *"what about the other one?"* with history
+`How much is airport parking?|Is there a cheaper option?`, retrieves at **0.436**
+— comfortably above `RETRIEVAL_MIN_SCORE` (0.30) — and then does **not** answer.
+
+So it is not a threshold problem. The rewrite in
+`backend/app/rag/rewrite.py:102` is meant to make an elliptical follow-up
+standalone by borrowing the previous topic, and `_REFERENTIAL`
+(`rewrite.py:36-43`) matches `what about`. Something between the rewrite and the
+answer gate is losing it. **Query rewrite is not this week's work** — recorded
+so it is not rediscovered.
+
+### 13. `tests/contrast.test.ts` is incompatible with running Prettier over the source
+
+The scan at `frontend/tests/contrast.test.ts:769-794` reads source **one line at
+a time** and cross-pairs every `bg-*` with every `text-*` on that line. Two
+components deliberately split ternary branches across lines so the two halves are
+never measured against each other; `prettier --write` collapsed both and the
+suite reported contrast failures for pairs that **never render together**.
+
+Restored with `// prettier-ignore` at `frontend/src/components/ui/Segmented.tsx`
+and `frontend/src/components/ops/TariffCalculators.tsx`, each carrying the
+reason.
+
+Two traps for whoever touches this next:
+
+- **The scan reads comment lines as readily as code.** A comment explaining the
+  hazard, if it names both utilities on one line, trips the scan itself. That
+  happened while fixing it.
+- **The real fix is in the scanner**, which should understand that a ternary's
+  branches are alternatives. Adding entries to the `ICON_ONLY` exemption list
+  instead would mask genuine regressions.
+
+### 14. `CLAUDE.md` rule 9 is blank in the working tree
+
+HEAD (`587ee94`) and the index both carry:
+
+> 9. Log question text and latency. Never log IP addresses, audio, or user identifiers.
+
+The working tree has a bare `9.` with nothing after it. **Six source files cite
+rule 9 by number** — `backend/app/ratelimit.py:115`, `observability.py:11,93`,
+`schemas.py:610,819`, `main.py:70` — so the rule they defer to currently reads as
+empty in the file that governs the project.
+
+Rule 11 diverges the other way: the working tree's `design/` is correct, while
+the index names `design/SCASPA Assistant Component Spec.dc.spec.html`, a file
+that does not exist (the real one has no `.spec`).
+
+**`CLAUDE.md` was deliberately excluded from checkpoint `fb37852`** for this
+reason — mixed, and an owner's decision rather than a checkpoint's. It remains
+uncommitted.
+
+### 15. The eval's answer-matching varies run to run; retrieval does not
+
+Two `evaluate.py` runs over an identical corpus and an identical question set:
+retrieval was **bit-identical** (hit@1 73%, hit@3/5 82%, MRR 0.773 both times),
+while case 8 *"What time does the port open?"* went PASS → FAIL on
+`expected_facts` alone, having retrieved `kb-016` at rank 1 both times.
+
+`CHAT_TEMPERATURE` defaults to `0.0` (`backend/app/config.py:137`), so this is
+generation variance in how a figure is worded (`8:00 am` versus `8am`), not a
+retrieval change. **Read retrieval metrics as stable and answer-text metrics as
+noisy** at this sample size — 15 rows against 115 indexed.
+
+---
+
 ## From M1 (T-02, T-01 + T-01a + T-01b, T-03, T-04)
 
 ### 1. SCASPA publishes no fixed ferry timetable — client conversation item

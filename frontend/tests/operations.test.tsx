@@ -436,6 +436,10 @@ describe('the operations contract', () => {
         berth_capacity: 4,
         arrivals_next_24h: 1,
         daily_cargo_teu: 1111,
+        // The calendar-day tile. Null here on purpose: the field is on the wire
+        // from M2 and no feed fills it until M4, and this test exists to pin
+        // the shape the backend actually sends.
+        arrivals_today: null,
       },
       total: 3,
       request_id: 'test',
@@ -454,6 +458,7 @@ describe('the operations contract', () => {
         berth_capacity: null,
         arrivals_next_24h: null,
         daily_cargo_teu: null,
+        arrivals_today: null,
       },
       total: 1,
       request_id: 'test',
@@ -850,6 +855,7 @@ describe('the vessels screen', () => {
             berth_capacity: null,
             arrivals_next_24h: null,
             daily_cargo_teu: null,
+            arrivals_today: null,
           },
           total: MOCK_VESSELS.length,
           request_id: 'test',

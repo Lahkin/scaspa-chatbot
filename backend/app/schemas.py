@@ -402,6 +402,31 @@ VesselStatus = Literal["at_berth", "en_route", "scheduled", "departed", "unknown
 FlightStatus = Literal["on_time", "delayed", "landed", "arrived", "boarding", "cancelled"]
 FlightDirection = Literal["arrival", "departure"]
 
+# The four facilities SCASPA operates, as an enum on every record that belongs to
+# one.
+#
+# ## Why this exists
+#
+# Nothing on the operations surface said which facility a record belonged to. A
+# vessel carried `berth: str` and nothing else, so Deep Water Harbour and Port
+# Zante were distinguishable only by a berth-naming convention in the sample data
+# — `"Berth 1"` against `"Pier 1"`. "Which vessels are at Port Zante?" could not
+# be answered by filtering, on a product whose entire subject is four facilities.
+#
+# ## Why it is nullable rather than defaulted
+#
+# `None` means the feed did not say, and that is a real state: a source may
+# publish a movement without attributing it to a terminal. Defaulting to a
+# facility would attribute records to a place on no evidence, which is the same
+# class of error as `VesselMetrics` rendering a null occupancy as `0`. A client
+# renders the absence; it does not guess.
+Facility = Literal[
+    "deep_water_harbour",
+    "port_zante",
+    "basseterre_ferry_terminal",
+    "rlb_airport",
+]
+
 
 class VesselArrival(BaseModel):
     """One vessel movement."""
@@ -412,6 +437,13 @@ class VesselArrival(BaseModel):
     vessel_type: str = Field(default="", description="Container, Cruise, Tanker, …")
     agent: str = Field(default="", description="Shipping agent")
     berth: str = Field(default="", description="Berth or pier assignment")
+    facility: Facility | None = Field(
+        default=None,
+        description=(
+            "Which SCASPA facility this movement is at. Null when the feed did not "
+            "say — never inferred from the berth name."
+        ),
+    )
     status: VesselStatus = Field(default="unknown")
     # `eta` and `ata` are separate fields rather than one timestamp plus a flag,
     # because the difference is the whole point: an ETA is a prediction and an
@@ -431,6 +463,11 @@ class VesselMetrics(BaseModel):
     berth_capacity: int | None = Field(default=None)
     arrivals_next_24h: int | None = Field(default=None)
     daily_cargo_teu: int | None = Field(default=None)
+    # A calendar day, which `arrivals_next_24h` is not. The design's "Expected
+    # today" tile was reading the rolling window because it was the nearest
+    # figure on the wire; a rolling 24 hours and a calendar day answer different
+    # questions and diverge every evening.
+    arrivals_today: int | None = Field(default=None)
 
 
 class VesselArrivalsResponse(BaseModel):
@@ -470,6 +507,14 @@ class FlightMetrics(BaseModel):
     on_time_percent: float | None = Field(default=None)
     gates_active: int | None = Field(default=None)
     gates_total: int | None = Field(default=None)
+    # The three tiles the design actually draws above this table. None of the
+    # four fields above is one of them: `total_flights` counts both directions
+    # across the whole feed, so rendering it under "Arrivals today" reported four
+    # arrivals where the feed held three. The screen drew three em dashes rather
+    # than a wrong figure under the right label; these are what fill them.
+    arrivals_today: int | None = Field(default=None)
+    departures_today: int | None = Field(default=None)
+    delayed: int | None = Field(default=None)
 
 
 class OperationalAdvisory(BaseModel):
@@ -550,6 +595,11 @@ class GateAssignment(BaseModel):
     status: GateStatus = Field(default="free")
     flight_number: str | None = Field(default=None)
     airline: str = Field(default="")
+    # Every stand SCASPA operates is at RLB today, but the field is here rather
+    # than assumed: a second apron would otherwise be indistinguishable from the
+    # first, and the assumption would be buried in a screen rather than stated on
+    # the record. No query parameter — gates return the complete set (§6.8).
+    facility: Facility | None = Field(default=None)
     # Null, never "now". A gate with no published time is unknown, and rendering
     # it as imminent is the same class of error as VesselMetrics' null-not-zero.
     scheduled_at: datetime | None = Field(default=None)
@@ -653,6 +703,11 @@ class TariffRow(BaseModel):
     amount: float = Field(ge=0, description="The published figure, exactly as published")
     currency: str = Field(default="XCD")
     category: TariffCategory
+    # Null means the charge applies across SCASPA rather than at one facility,
+    # which is true of most of the published schedule. It is not "unknown" here —
+    # a rate is published for somewhere, and the schedule says where when it
+    # matters.
+    facility: Facility | None = Field(default=None)
     kb_id: str | None = Field(
         default=None, description="Knowledge-base row this rate was published in, if indexed"
     )

@@ -42,23 +42,24 @@ import type { FlightDirection } from '@/lib/types';
  * - **`landed` and `arrived` differ by glyph and label, never by hue**, so the
  *   two survive greyscale.
  *
- * ## The three tiles, and why all three read "not reported"
+ * ## The three tiles, and the field each one reads
  *
  * §5.3: "**Flights — three tiles**: Arrivals today · Departures today ·
  * Delayed. Same rules; any null takes the em-dash treatment."
  *
- * `FlightMetrics` carries `total_flights`, `on_time_percent`, `gates_active` and
- * `gates_total`. **None of them is one of those three.** This screen used to
- * render `total_flights` under the label "Arrivals today", relabelling the same
- * figure "Departures today" when the toggle flipped — and `total_flights` counts
- * the whole feed in both directions, so on the sample feed it read 4 arrivals
- * where there are 3. A wrong number under the handoff's label is worse than the
- * handoff's label with no number, which is the case §5.3 already draws.
+ * `FlightMetrics` now carries exactly those three, added in M2. It previously
+ * carried only `total_flights`, `on_time_percent`, `gates_active` and
+ * `gates_total` — **none of which is one of them** — and this screen rendered
+ * `total_flights` under "Arrivals today", relabelling the same figure
+ * "Departures today" when the toggle flipped. `total_flights` counts the whole
+ * feed in both directions, so on the sample feed it read 4 arrivals where there
+ * were 3.
  *
- * So the three tiles are the three the handoff names, each gated on a field the
- * wire does not carry yet, each taking the em-dash treatment until it does. The
- * two figures that were standing in belong to the Console (§6.7–6.13), which is
- * where the handoff puts gate and punctuality statistics.
+ * Each tile reads its own field now. They render the em dash until a feed fills
+ * them, which is §5.3's treatment for a null rather than a placeholder — a
+ * wrong number under the handoff's label is worse than the label with no
+ * number. The two figures that were standing in belong to the Console
+ * (§6.7–6.13), where the handoff puts gate and punctuality statistics.
  */
 
 const COLUMNS = ['Flight', 'From/To', 'Due', 'Gate', 'Airline', 'Status'] as const;
@@ -142,15 +143,16 @@ function FlightsRoute() {
           rendered a second copy of it directly underneath. */}
 
       {/*
-        §5.3: three tiles, and any null takes the em-dash treatment. All three
-        are BLOCKED — see the note at the top of this file. `arrivals_today`,
-        `departures_today` and `delayed` on `FlightMetrics` would fill them, and
-        each is wired to its own field rather than to the nearest figure.
+        §5.3: three tiles, and any null takes the em-dash treatment.
+        UNBLOCKED in M2 — `arrivals_today`, `departures_today` and `delayed` are
+        on `FlightMetrics` now, and each tile reads its own field rather than
+        the nearest figure. They render the em dash until a feed fills them,
+        which is §5.3's own treatment for a null and not a placeholder.
       */}
       <MetricRow columns={3}>
-        <MetricTile label="Arrivals today" value={null} />
-        <MetricTile label="Departures today" value={null} />
-        <MetricTile label="Delayed" value={null} />
+        <MetricTile label="Arrivals today" value={data?.metrics.arrivals_today ?? null} />
+        <MetricTile label="Departures today" value={data?.metrics.departures_today ?? null} />
+        <MetricTile label="Delayed" value={data?.metrics.delayed ?? null} />
       </MetricRow>
 
       {/*

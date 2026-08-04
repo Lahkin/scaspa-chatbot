@@ -14,7 +14,12 @@ from fastapi.testclient import TestClient
 from app.agent.memory import ConversationStore, get_conversation_store
 from app.config import Settings, get_settings
 from app.main import create_app
-from app.ops.fixtures import sample_tariffs
+from app.ops.fixtures import (
+    sample_flight_metrics,
+    sample_tariffs,
+    sample_vessel_metrics,
+    sample_vessels,
+)
 from app.ops.source import (
     FixtureOpsSource,
     UnavailableOpsSource,
@@ -184,6 +189,76 @@ def test_tariff_search_matches_code_and_service() -> None:
     rows = sample_tariffs()
     assert len(filter_tariffs(rows, query="SMP-013")) == 1
     assert filter_tariffs(rows, query="storage")[0].code == "SMP-013"
+
+
+# ── Facility scoping — M2 / T-06 ─────────────────────────────────────────────
+#
+# The field is on the wire before any fixture carries a value, which is the whole
+# point of landing it in its own milestone: fixture generation happens once,
+# against the final shape. Every assertion below is about the *mechanism*, so it
+# keeps working when M4 populates the records.
+
+
+def test_a_vessel_carries_its_facility_and_does_not_guess_one() -> None:
+    """Null means the feed did not say. It is never inferred from the berth."""
+    rows = sample_vessels()
+    # No fixture is attributed yet — M4's job — and that must read as absence.
+    assert all(v.facility is None for v in rows)
+
+
+def test_filtering_by_facility_excludes_the_unattributed() -> None:
+    """Asking for Port Zante must not return movements that might be anywhere."""
+    rows = sample_vessels()
+    assert filter_vessels(rows, facility="port_zante") == []
+
+    attributed = rows[0].model_copy(update={"facility": "port_zante"})
+    mixed = [attributed, *rows[1:]]
+
+    assert filter_vessels(mixed, facility="port_zante") == [attributed]
+    assert filter_vessels(mixed, facility="deep_water_harbour") == []
+    # No filter, no exclusion.
+    assert len(filter_vessels(mixed)) == len(mixed)
+
+
+def test_a_facility_tariff_filter_keeps_the_port_wide_rates() -> None:
+    """A charge published for the whole port applies at the facility asked about.
+
+    Dropping it would understate what a caller owes, which is the one direction
+    a tariff filter must never be wrong in.
+    """
+    rows = sample_tariffs()
+    port_wide = [r for r in rows if r.facility is None]
+    assert port_wide, "the fixture schedule is port-wide until M4 attributes it"
+
+    specific = rows[0].model_copy(update={"facility": "rlb_airport"})
+    mixed = [specific, *rows[1:]]
+
+    at_airport = filter_tariffs(mixed, facility="rlb_airport")
+    assert specific in at_airport
+    assert all(r.facility in ("rlb_airport", None) for r in at_airport)
+
+    elsewhere = filter_tariffs(mixed, facility="port_zante")
+    assert specific not in elsewhere
+
+
+def test_the_facility_filter_reaches_the_endpoint(fixture_api: TestClient) -> None:
+    """`total` is counted after filtering, so pagination cannot disagree."""
+    body = fixture_api.get("/api/vessels", params={"facility": "port_zante"}).json()
+    assert body["vessels"] == []
+    assert body["total"] == 0
+    # Unfiltered, the same feed is not empty — so the parameter did the work.
+    assert fixture_api.get("/api/vessels").json()["total"] == 3
+
+
+def test_the_metric_tiles_the_design_draws_are_on_the_wire() -> None:
+    """T-07. Present and null: the fields exist, no fixture fills them yet."""
+    metrics = sample_vessel_metrics()
+    assert metrics.arrivals_today is None, "a calendar day, not the rolling window"
+    assert metrics.arrivals_next_24h is not None, "the rolling window is unchanged"
+
+    flights = sample_flight_metrics()
+    for field in ("arrivals_today", "departures_today", "delayed"):
+        assert getattr(flights, field) is None, f"{field} must be null, never 0"
 
 
 def test_paging_reports_the_full_match_count(fixture_api: TestClient) -> None:

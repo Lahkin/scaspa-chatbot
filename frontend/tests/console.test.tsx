@@ -308,8 +308,16 @@ describe('the console panels — board 20', () => {
             flight_number: 'ZZ111',
             airline: 'Placeholder Air',
             scheduled_at: null,
+            facility: null,
           },
-          { gate: 'Z2', status: 'free', flight_number: null, airline: '', scheduled_at: null },
+          {
+            gate: 'Z2',
+            status: 'free',
+            flight_number: null,
+            airline: '',
+            scheduled_at: null,
+            facility: null,
+          },
         ]}
       />
     );

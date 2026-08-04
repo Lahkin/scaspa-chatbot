@@ -2438,3 +2438,96 @@ issue, so the countdown was documented as a guess while actually being accurate.
 The comment was corrected and the dev warning kept — it is now a regression
 check rather than a known bug, and it is the only thing that would notice if
 that header list were ever trimmed.
+
+---
+
+## 0032 — The fixture-integrity contract: realistic shape, unquotable values
+
+**Status:** accepted. Governs every fixture written from M4 onward.
+**Supersedes nothing.** Extends `app/ops/fixtures.py`'s existing convention.
+
+### The problem this exists to solve
+
+The demo runs on `OPS_DATA_SOURCE=fixture` with values upgraded to look
+realistic — plausible berths, real-shaped tariff codes, a flight board that
+exercises every column. The instruction that came with that decision was
+explicit: it must be **impossible** to mistake the data for live operational
+information.
+
+Those two goals pull against each other, and the tension is not rhetorical.
+Today the only thing separating sample data from a customer is a naming
+convention — `MV SAMPLE CARRIER`, airline `ZZ`, `SMP-` codes — documented at
+`backend/app/ops/fixtures.py:1-29`. **That convention works precisely because
+the data looks fake.** Make it look real and the convention stops doing any
+work, while the screen becomes more believable. The protection would weaken at
+exactly the moment the risk increased.
+
+`CLAUDE.md` rule 5 bans seed data mistakable for a real SCASPA fact. This record
+is how that rule survives realistic fixtures.
+
+### The contract — four layers, ordered by how hard each is to defeat
+
+**Layer 1 — schema.** `DataSource` refuses to construct a `fixture` or
+`unavailable` source without a notice (`app/schemas.py:365-376`), and
+`ProvenanceCard` takes `source` as a required prop with no suppress option. A
+fixture payload cannot reach a screen without carrying its own warning. *Already
+in place. Do not weaken it to make a layout tidier.*
+
+**Layer 2 — deployment.** `create_app` refuses to boot with `fixture` when
+`ENV=prod` (`app/main.py:193-206`). *Already in place, and note what changes
+here: with obviously-fake values this guard was belt-and-braces. With realistic
+values it is load-bearing.* It is now the only thing standing between sample
+operational data and a passenger, so it must never become a warning.
+
+**Layer 3 — the values themselves.** The new rule, and the one that does the
+real work:
+
+> **Realistic in every field that shapes the layout. Synthetic in every field
+> that could be written down and acted on.**
+
+| Realistic — these drive the rendering | Synthetic — these could be quoted |
+| --- | --- |
+| Berth and pier identifiers | Vessel names |
+| Gate and stand designators | IMO numbers (check-digit invalid) |
+| Tariff codes, bases, categories | Airline names and two-letter codes |
+| Times, statuses, quantities, directions | Flight numbers |
+| Route structure and column shape | **Every money amount, without exception** |
+
+Money keeps the repeated-digit convention — `44.44`, `222.22`, `5.55` — at every
+magnitude. A tariff of `XCD 222.22 per container` exercises the calculator, the
+alignment, the totalling and the disclaimer while being unquotable on sight.
+
+The result is a screen that *behaves* exactly like the real thing — every
+column, every chip, every null case, every arithmetic path — and contains not
+one figure a reader could act on.
+
+**This is a trade, and it is worth naming.** Using real carrier codes and real
+route cities would demo better. It would also put a plausible delayed-arrival
+claim on screen, and a screenshot of that is indistinguishable from an
+operational fact. If SCASPA later ask for real carrier names, that is their
+decision to record here, and Layer 2 becomes the only remaining protection.
+
+**Layer 4 — render.** A fixture-mode treatment that is visible without reading,
+present on every operations surface, and not dismissible — beyond the existing
+text notice. **This is a deliberate deviation from the design specification**,
+which specifies the notice (§4.1, §5.2) and forbids dismissing it but draws no
+watermark. It is recorded as a deviation rather than slipped in, and it is
+consistent with §5.2's own reasoning: *"A notice that says the data is not real
+must outlive the user's patience with it."* Built in M4 alongside the values it
+protects.
+
+### What this does not cover
+
+The knowledge base. Layers 1–4 are about the **operational feed**; KB content is
+governed by `confidence == "confirmed"` and the citation chain, which are
+separate mechanisms with separate failure modes. A fixture vessel and a
+sample knowledge-base row are not the same category of risk and are not
+protected the same way.
+
+### Why this landed in M2, before any fixture was written
+
+`docs/implementation-plan.md` sequences it deliberately: the contract decides
+what the values *are*, so writing fixtures first would mean rewriting every
+record to retro-fit the tells. One milestone, one pass. The same reasoning puts
+the `facility` enum and the metric fields here — schema before generation, so
+generation happens exactly once.
