@@ -364,16 +364,23 @@ clean · **839 vitest** · build ✓ · budget **133.7 kB gz** · **check:integr
 126 passed** · **check:a11y 0 violations** (13 routes × 2 viewports, 0 manual
 failures).
 
-**Frozen commit:** `09b0aca`, on `feat/connect-halves-and-import-mockups`.
+**Frozen commit:** `5c9f65d`, on `feat/connect-halves-and-import-mockups`.
 
-Re-frozen after the rehearsal's own findings were fixed — the mock control, the
-empty heading, the facility filter and the dead end it exposed. The previous
-freeze, `72c6990`, is superseded.
+Re-frozen after the greeting fix. Supersedes `09b0aca` and `72c6990`.
+
+**Open with a greeting.** "hi" used to return _"I do not have that in SCASPA's
+verified information"_ — the first word anyone types, answered as a failed
+lookup. It now replies directly, in 0 ms, with no retrieval and no model call
+behind it. Worth typing first on stage: it sets the register before the first
+real question, and it is instant.
+
+Politeness in front of a question is still a question — _"hi, where do cruise
+ships dock?"_ returns its two citations as normal.
 
 To return to it exactly:
 
 ```bash
-git checkout 09b0aca
+git checkout 5c9f65d
 cd backend  && uv run python scripts/build_index.py        # 115 indexed, 4 rejected
 lsof -ti:8000 | xargs kill 2>/dev/null
 OPS_DATA_SOURCE=fixture uv run uvicorn app.main:app

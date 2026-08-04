@@ -47,6 +47,59 @@ contract shape, the sourcing and the design deviation it would need.
 
 ## From M5
 
+### 28. Answer register — **THE FIRST POST-DEMO ITEM. Do not touch it before the demo.**
+
+The factual answers read closer to _"you may only ask these"_ than to an
+assistant. That is a real observation and worth fixing. It should not be fixed
+two days out, and the reasoning is worth keeping because it will come up again.
+
+**What it would involve.** The register lives in `app/agent/prompts.py`'s system
+prompt, and the prompt is load-bearing for three things that have nothing to do
+with tone:
+
+| Rule                                 | What it holds up                                                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| cite every factual claim             | `verify_citations` strips uncited markers, but nothing makes the model cite in the first place — the prompt does |
+| rule 4, never convert a currency     | the `_only_xcd` validator guards the calculator; assistant prose is guarded by the prompt alone                  |
+| rule 10, verbatim money and time     | `find_unverified_figures` catches violations _after_ generation; the prompt is what prevents them                |
+| the escalation and no-answer wording | shared with the deterministic gates, so a reworded prompt can leave two voices in one product                    |
+
+So it is not one edit. It is an edit, plus a re-run of the eval set, plus a read
+of every canned message for consistency of voice, plus a judgement about whether
+the softer wording has loosened rule 10 in a way no test can see.
+
+**What the eval set would and would not catch.** It is **15 cases**
+(`evals/stress_test_sample.csv`): 10 `answer`, 3 `escalate`, 1 `refuse`, 1
+`correct_premise`. Baseline `m1-corrected-baseline`, hit@1 **73%**, hallucinated
+citations **0**.
+
+- **Would catch:** a prompt that stops the model citing, that answers something
+  it should escalate (4 of 15 cases are behavioural), or that drops an expected
+  fact. Those are exactly the failures that matter most, and that is genuinely
+  reassuring.
+- **Would not catch:** the register itself. `score_facts` is substring matching
+  on `expected_facts` — a warmer prompt still containing "ferry operators" and
+  still citing `kb-182` scores identically. **There is no tone metric, and 15
+  cases is a thin net for a change that touches every answer.** A regression in
+  voice, or a subtle loosening that only shows on the 16th question, passes.
+
+**One correction to the precedent, because it changes the argument slightly.**
+The fabricated ferry citation was **not** a prompt regression. It was a
+hardcoded string in `routes/index.tsx`, written against the sample fixtures and
+never rechecked when the real corpus landed (entry 24) — the prompt was never
+involved, and no amount of prompt discipline would have prevented it.
+
+The conclusion is unchanged, and arguably stronger: that defect showed that the
+things guarding factual claims are **narrower than they look**, and survived
+every gate for weeks. Widening the register is precisely the kind of change whose
+failure mode is invisible to the gates that exist. Two days out, with a rehearsed
+and frozen build, the asymmetry is stark — the upside is that answers read more
+warmly, and the downside is a citation defect on stage.
+
+**Do it post-demo, with a bigger eval set first.** The right order is: grow the
+15 cases toward 40 with explicit register expectations, establish a baseline,
+then change the prompt — not the reverse.
+
 ### 26. The backend was serving the 10-row sample KB, and health called it `ok`
 
 Found at the start of the T-23 rehearsal, and it would have been found on stage
