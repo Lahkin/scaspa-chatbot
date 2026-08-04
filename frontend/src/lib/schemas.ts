@@ -177,6 +177,7 @@ export const flightSchema = z.object({
   airline: z.string(),
   airline_code: z.string(),
   direction: z.enum(['arrival', 'departure']).catch('arrival'),
+  facility: facilitySchema,
   port: z.string(),
   port_code: z.string(),
   gate: z.string().nullable(),

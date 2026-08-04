@@ -491,6 +491,15 @@ class Flight(BaseModel):
     # For an arrival this is where it came from; for a departure, where it goes.
     port: str = Field(default="", description="Other end of the route, spelled out")
     port_code: str = Field(default="", description="IATA code, e.g. MIA")
+    # Which SCASPA airport the movement is at — NOT `port` above, which is the
+    # other end of the route.
+    #
+    # Added after T-06 shipped without it. The audit named all four ops models
+    # and the task named three; nothing recorded why `Flight` was dropped, and
+    # the omission was invisible because FastAPI ignores an undeclared query
+    # parameter: `/api/flights?facility=port_zante` answered 200 with every
+    # flight in the feed, while the same parameter filtered vessels correctly.
+    facility: Facility | None = Field(default=None)
     gate: str | None = Field(default=None)
     status: FlightStatus = Field(default="on_time")
     scheduled_time: datetime | None = Field(default=None)

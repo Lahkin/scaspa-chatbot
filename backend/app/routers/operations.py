@@ -103,6 +103,12 @@ async def get_flights(
     airline: Annotated[str | None, Query(max_length=60)] = None,
     status: Annotated[str | None, Query(max_length=20)] = None,
     direction: Annotated[str | None, Query(max_length=10)] = None,
+    facility: Annotated[
+        str | None,
+        Query(
+            max_length=40, description="rlb_airport — the SCASPA site, not the route's other end"
+        ),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> FlightSchedulesResponse:
@@ -111,7 +117,7 @@ async def get_flights(
 
     enforce_rate_limit(request, limiter, scope="ops")
 
-    matched = filter_flights(source.flights(), q, airline, status, direction)
+    matched = filter_flights(source.flights(), q, airline, status, direction, facility)
     return FlightSchedulesResponse(
         source=source.describe(),
         flights=paginate(matched, limit, offset),

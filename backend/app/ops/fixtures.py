@@ -312,12 +312,12 @@ def sample_flights() -> list[Flight]:
     `ZZ`, `QQ` and `XX` are not assigned by IATA, and the port codes are not
     real either. The routes are shaped like routes; the places are not places.
 
-    **No `facility` here, and that is a gap rather than a decision.** `Flight`
-    has no such field — T-06 added it to `VesselArrival`, `GateAssignment` and
-    `TariffRow` only. These constructors carried `facility="rlb_airport"` for a
-    while and Pydantic's default `extra="ignore"` discarded it silently, so the
-    board looked attributed and was not. Adding the field is a schema change and
-    belongs to whoever revisits T-06; see `docs/found-during-build.md` #17.
+    `facility` is `rlb_airport` throughout, and it is **not** `port` above:
+    `port` is the other end of the route, this is the SCASPA site. Every
+    movement here is at RLB today, which is exactly why the field is stated
+    rather than assumed — a second airport would otherwise be indistinguishable
+    from the first, and Vance W. Amory on Nevis is in SCASPA's own published
+    location list.
     """
     return [
         # ── Arrivals ─────────────────────────────────────────────────────────
@@ -331,6 +331,7 @@ def sample_flights() -> list[Flight]:
             port_code="XXX",
             gate="Gate 1",
             status="landed",
+            facility="rlb_airport",
             scheduled_time=_at(-2, 5),
         ),
         Flight(
@@ -346,6 +347,7 @@ def sample_flights() -> list[Flight]:
             # `landed` by glyph and label, never by hue — the pair that could
             # not be checked until both existed.
             status="arrived",
+            facility="rlb_airport",
             scheduled_time=_at(-1, 40),
         ),
         Flight(
@@ -375,6 +377,7 @@ def sample_flights() -> list[Flight]:
             # Null: "not reported", never "TBD".
             gate=None,
             status="on_time",
+            facility="rlb_airport",
             scheduled_time=_at(2, 50),
         ),
         Flight(
@@ -387,6 +390,7 @@ def sample_flights() -> list[Flight]:
             port_code="XXX",
             gate="Gate 3",
             status="on_time",
+            facility="rlb_airport",
             scheduled_time=_at(4, 10),
         ),
         Flight(
@@ -399,6 +403,7 @@ def sample_flights() -> list[Flight]:
             port_code="XYZ",
             gate=None,
             status="cancelled",
+            facility="rlb_airport",
             scheduled_time=_at(5, 25),
         ),
         Flight(
@@ -413,6 +418,7 @@ def sample_flights() -> list[Flight]:
             port_code="ZZZ",
             gate=None,
             status="on_time",
+            facility="rlb_airport",
             scheduled_time=_at(7, 45),
         ),
         # ── Departures ───────────────────────────────────────────────────────
@@ -426,6 +432,7 @@ def sample_flights() -> list[Flight]:
             port_code="XXX",
             gate="Gate 1",
             status="boarding",
+            facility="rlb_airport",
             scheduled_time=_at(0, 55),
         ),
         Flight(
@@ -438,6 +445,7 @@ def sample_flights() -> list[Flight]:
             port_code="XYZ",
             gate="Gate 2",
             status="delayed",
+            facility="rlb_airport",
             scheduled_time=_at(1, 30),
             estimated_time=_at(3, 5),
         ),
@@ -451,6 +459,7 @@ def sample_flights() -> list[Flight]:
             port_code="PBY",
             gate="Gate 5",
             status="on_time",
+            facility="rlb_airport",
             scheduled_time=_at(3, 40),
         ),
         Flight(
@@ -463,6 +472,7 @@ def sample_flights() -> list[Flight]:
             port_code="ZZZ",
             gate="Gate 6",
             status="on_time",
+            facility="rlb_airport",
             scheduled_time=_at(6, 20),
         ),
         Flight(
@@ -475,6 +485,7 @@ def sample_flights() -> list[Flight]:
             port_code="XXX",
             gate=None,
             status="on_time",
+            facility="rlb_airport",
             scheduled_time=_at(9, 0),
         ),
     ]

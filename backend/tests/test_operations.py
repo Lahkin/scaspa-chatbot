@@ -303,6 +303,39 @@ def test_filtering_by_facility_excludes_the_unattributed() -> None:
     assert len(filter_vessels(rows)) == len(rows)
 
 
+def test_the_facility_filter_works_on_flights_too() -> None:
+    """The asymmetry that shipped in T-06, and the way it hid.
+
+    `facility` reached `VesselArrival`, `GateAssignment` and `TariffRow` but not
+    `Flight`. FastAPI **ignores an undeclared query parameter**, so
+    `/api/flights?facility=port_zante` answered `200` with every flight in the
+    feed while the same parameter filtered vessels correctly. Nothing failed;
+    the board was simply unfiltered and looked filtered.
+
+    "Show me the airport" is the same move as "show me Port Zante", and a screen
+    showing both would have disagreed with itself.
+    """
+    rows = sample_flights()
+    assert all(f.facility == "rlb_airport" for f in rows), "every movement is at RLB today"
+
+    assert len(filter_flights(rows, facility="rlb_airport")) == len(rows)
+    # And a facility with no flights is empty rather than everything.
+    assert filter_flights(rows, facility="port_zante") == []
+    assert filter_flights(rows, facility="deep_water_harbour") == []
+
+
+def test_the_flights_endpoint_honours_the_facility_parameter(fixture_api: TestClient) -> None:
+    """End to end, because the gap was in the router signature rather than the data."""
+    everything = fixture_api.get("/api/flights").json()["total"]
+    airport = fixture_api.get("/api/flights", params={"facility": "rlb_airport"}).json()
+    elsewhere = fixture_api.get("/api/flights", params={"facility": "port_zante"}).json()
+
+    assert airport["total"] == everything
+    # The one that used to return the whole feed.
+    assert elsewhere["total"] == 0
+    assert elsewhere["flights"] == []
+
+
 def test_a_facility_tariff_filter_keeps_the_port_wide_rates() -> None:
     """A charge published for the whole port applies at the facility asked about.
 

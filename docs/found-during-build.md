@@ -11,7 +11,7 @@ acted on.
 
 ## From M4a (T-09, T-10)
 
-### 17. `Flight` has no `facility`, and passing one is silently discarded
+### 17. `Flight` had no `facility`, and passing one was silently discarded — **CLOSED**
 
 T-06 added `facility` to `VesselArrival`, `GateAssignment` and `TariffRow`.
 **Not to `Flight`** — the plan's task named three models and that is what
@@ -32,23 +32,37 @@ takes the keyword and drops it. It surfaced only when the per-facility
 distribution was actually counted rather than assumed, which is the argument for
 counting it.
 
-The dead keywords are removed. **The open question is whether `Flight` should
-carry the field**, and there is a real case for it: `GateAssignment` got one on
-the reasoning that "a second apron would otherwise be indistinguishable from the
-first", and a second airport is not hypothetical — the design's §6.2 location
-list includes **Vance W. Amory International on Nevis**, which is not in the
-`Facility` enum either. Both are T-06 questions, and adding a schema field
-inside a fixture-generation milestone would be exactly the scope creep the
-session rules forbid.
+**Resolved: the field was added.** It was one field, one filter branch and the
+type mirrors — the same shape T-06 had already done three times — and the
+failure mode was worse than a missing feature. FastAPI **ignores an undeclared
+query parameter**, so:
 
-**Two things for whoever picks this up:**
+```
+BEFORE   /api/vessels?facility=port_zante   11 -> 3    filtered
+         /api/flights?facility=port_zante   12 -> 12   FILTER IGNORED
+         /api/flights?facility=nonsense     12 -> 12   also ignored
 
-- The `Facility` enum has four values and SCASPA's published location list has
-  five sites. Vance W. Amory and Charlestown Port are absent.
-- More generally: **a wrong keyword to any Pydantic model in this codebase is
-  silent.** No model sets `extra="forbid"` except `KBRow`
-  (`app/rag/models.py:51`), which is the one place someone thought about it.
-  Worth considering repo-wide.
+AFTER    /api/vessels  all=11  ?port_zante=3  ?rlb_airport=0
+         /api/flights  all=12  ?port_zante=0  ?rlb_airport=12
+```
+
+"Show me the airport" is the same move as "show me Port Zante", and a screen
+showing both would have disagreed with itself while returning `200` throughout.
+Two tests now pin it, one on the filter and one end to end through the router,
+because the gap was in the router signature rather than in the data.
+
+**Two things that came out of it and are still open:**
+
+- **The `Facility` enum has four values; SCASPA's published location list has
+  five sites.** `06-support-console-voice.md` §6.2 names Vance W. Amory
+  International on Nevis and Charlestown Port, and neither is in the enum. Not a
+  problem while every movement is at RLB, Deep Water Harbour, Port Zante or the
+  ferry terminal — but "a second airport is hypothetical" is the assumption that
+  made this bug reasonable-looking, and it is not true.
+- **A wrong keyword to any Pydantic model in this codebase is silent.** No model
+  sets `extra="forbid"` except `KBRow` (`app/rag/models.py:51`), which is the one
+  place someone thought about it. Worth considering repo-wide: it is what turned
+  a missing field into twelve constructors that looked correct.
 
 ---
 

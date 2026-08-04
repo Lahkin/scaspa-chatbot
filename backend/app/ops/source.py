@@ -201,6 +201,7 @@ def filter_flights(
     airline: str | None = None,
     status: str | None = None,
     direction: str | None = None,
+    facility: str | None = None,
 ) -> list[Flight]:
     """Apply the flight search box and its filter selects."""
     needle = (query or "").strip().lower()
@@ -220,6 +221,13 @@ def filter_flights(
         out = [f for f in out if f.status == status]
     if direction:
         out = [f for f in out if f.direction == direction]
+    if facility:
+        # Equality, matching `filter_vessels`: an unattributed movement is
+        # excluded rather than included. Asking for one facility and being
+        # handed movements that might be anywhere is the failure the field
+        # exists to prevent, and it does not stop being one because the
+        # movements happen to be aircraft.
+        out = [f for f in out if f.facility == facility]
     return out
 
 

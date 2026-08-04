@@ -556,6 +556,11 @@ export interface Flight {
   /** The other end of the route: origin for an arrival, destination for a departure. */
   port: string;
   port_code: string;
+  /**
+   * Which SCASPA airport the movement is at — **not** `port` above, which is
+   * the far end of the route. `rlb_airport` throughout today.
+   */
+  facility: Facility | null;
   gate: string | null;
   status: FlightStatus;
   scheduled_time: string | null;
