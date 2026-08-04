@@ -1222,7 +1222,83 @@ found on screens it did not touch.
 closed green by end of day 2, drop T-15 to the backlog."*
 
 **Both closed green, first pass, with no rework between them.** On that
-criterion T-15 is a **GO** and M3 proceeds as planned. The caveat worth stating:
-this session measured milestone completion, not wall-clock — if more than two
-days have actually elapsed, the elapsed-time half of the rule is the owner's
-call, not something this record can settle.
+criterion T-15 is a **GO** and M3 proceeds as planned.
+
+**Wall-clock, settled:** the plan was written 2026-08-03 and both milestone
+commits are stamped `2026-08-03 20:12` and `20:27 -0400`. M1 and M2 closed green
+on **day 1**, ahead of the day-2 deadline the rule guards. GO confirmed on both
+halves of the rule.
+
+---
+
+## 12. Milestone M3 — one shell across the walkthrough
+
+Plan of record: `docs/implementation-plan.md` §5, milestone M3. Task T-15.
+
+### 12.1 What changed
+
+`/vessels`, `/flights`, `/tariffs` and `/support` rendered through `OpsPage`: a
+56px navy bar with a "← Assistant" link, in the pre-handoff `ops-*` palette.
+`/chat` rendered through `FullPageShell`. **A walkthrough that opened on the
+assistant and moved to the vessel board changed application at step two** —
+different chrome, different palette, a back link instead of navigation. §2.1 puts
+every operations screen in the 240px-sidebar shell with a 60px header row.
+
+| Change | Evidence |
+| --- | --- |
+| `FullPageShell` takes `title`, `children` and `onAsk`. `children` absent means chat, which is what every caller meant before. It is the discriminator rather than a `variant` prop: a screen either supplies its own main column or it does not, and there is no third state | `frontend/src/components/shells/FullPageShell.tsx:60-105` |
+| The source panel goes with the chat case — docked column, overlay sheet and header button alike. Sources are citations; a tariff table has none, and an empty "Sources" panel beside one implies the rows were cited | `FullPageShell.tsx:271-277, 337-355, 384-398` |
+| `main` gains `overflow-y-auto` **only** for an operations screen. The shell is a fixed `dvh` column and `ChatCore` owns its own scrolling transcript, so giving chat a second scrollbar would nest one inside another — but a tariff table has no inner scroll region, and without this the rows below the fold are unreachable | `FullPageShell.tsx:357-370` |
+| ✚ `OpsShell` composes the shell for the four routes. It exists because **`FullPageShell` has no router dependency**, which is what lets `shells.test.tsx` render it bare; `useNavigate` would take that away. The navigation lives in a component only ever rendered inside a route | `frontend/src/components/shells/OpsShell.tsx` |
+| A sidebar starter question sends into the transcript on chat, and there is no transcript here. It travels to `/chat` through the in-memory handoff the landing page already uses — never a query string, which would put the question in history, the address bar and every screenshot | `OpsShell.tsx:50-56`; `features/chat/pending.ts` |
+| §5.2's banner is rendered by each route rather than the shell. `OpsPage` drew it for every screen, which was right while every screen was a table with no meta strip; `OpsShell` carries no data and cannot. `/tariffs` deliberately has none — every payload on it is a provenance card already | `routes/vessels.tsx:169-182`; `flights.tsx:136-142`; `tariffs.tsx:52-64` |
+| The header phone link was `size-8` — **32px at every width**, where §7 requires 44px at ≤640px. One control on one route while only `/chat` used this shell; moving four screens in would have propagated it to five. Now `size-11 sm:size-8`, the touch-growing treatment `Button`, `Input` and `IconButton` already carry | `FullPageShell.tsx:399-414` |
+
+**`OpsPage` is unchanged and still in the tree** — `/settings` and `/profile`
+use it, and `OpsListState` is the console's shared list state. Nothing was
+deleted, so abandoning T-15 would have been a checkout of five files.
+
+### 12.2 Gates — actual output
+
+```
+backend    pytest                  574 passed
+frontend   build                   ✓ built in 2.71s
+           lint                    clean
+           format:check            All matched files use Prettier code style!
+           typecheck               clean
+           test                    824 passed (25 files)  — no test needed changing
+           check:budget            Performance budget met. Initial JS 133.7 kB gzipped
+```
+
+**`check:a11y` ran, and passed.** Both dependencies installed in one command
+(`npm i -D --no-save playwright@1.56.1 @axe-core/playwright@4.11.0` — a second
+`--no-save` install rewrites `node_modules` and removes the first), chromium
+installed, backend running on `:8000`:
+
+```
+0 axe violation(s), 0 manual check(s) failed
+26 route × viewport combinations, including /vessels /flights /tariffs /support
+at both mobile and desktop
+```
+
+`check:responsive`: **0 horizontal-overflow failures**, which is the exit
+criterion. Touch-target reports went 44 → **38** after the phone-link fix, and
+the three screens that newly failed at ≤640px — `/vessels`, `/flights`,
+`/support` — now pass there entirely. What remains at ≤640px is pre-existing and
+recorded: `/chat` and `/widget`'s 34px send button, attach button and suggestion
+chips, which the handoff draws at that size, and `/tariffs`' calculator fields
+measuring 42px inside their 44px wrapper — §5a item 6, product-wide.
+
+### 12.3 Newly demoable
+
+The walkthrough is one product. `/chat → /vessels → /flights → /tariffs →
+/support` navigates from the sidebar's Operations group with the active row in
+`--brand-500`, rather than through a navy bar and a back link. This is the first
+point at which the five screens read as one application.
+
+### 12.4 Declared eight files, touched six
+
+`tests/operations.test.tsx` and `tests/shells.test.tsx` were expected to need
+updates and needed none: all 824 tests passed unmodified. The route-level tests
+assert on content — headings, controls, copy — rather than on chrome, which is
+why a shell swap did not disturb them.

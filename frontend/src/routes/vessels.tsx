@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Icon, Segmented } from '@/components/ui';
 import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
-import { OpsPage } from '@/components/ops/OpsPage';
+import { OpsShell } from '@/components/shells/OpsShell';
+import { SourceNotice } from '@/components/ops/SourceNotice';
 import { OpsCell, OpsRow, OpsRowCard, OpsTable, type Density } from '@/components/ops/OpsTable';
 import {
   FilteredOutState,
@@ -166,18 +167,21 @@ function VesselsRoute() {
   );
 
   return (
-    <OpsPage
+    <OpsShell
       title="Vessel movements"
       intro="Arrivals and berth occupancy across SCASPA port facilities."
-      source={source}
     >
       {/*
         §5.2's banner — above the tiles, full width, never dismissible for the
-        two kinds that can actually occur — is rendered by `OpsPage`, which puts
-        it on every operations screen rather than leaving each page to remember.
-        This screen rendered a SECOND one directly beneath it: the same sentence,
-        the same badge and the same timestamp, twice.
+        two kinds that can actually occur.
+
+        It is rendered here rather than by the shell. `OpsPage` drew it for every
+        screen, which was right while every screen was a table with no meta strip
+        of its own; `OpsShell` carries no data and cannot. Exactly one banner per
+        screen is still the rule, and `/tariffs` deliberately has none because
+        every payload on it is a provenance card already.
       */}
+      {source ? <SourceNotice source={source} /> : null}
 
       <MetricRow columns={4}>
         <MetricTile label="Vessels in port" value={data?.metrics.vessels_at_berth ?? null} />
@@ -283,7 +287,7 @@ function VesselsRoute() {
           ))}
         </OpsTable>
       )}
-    </OpsPage>
+    </OpsShell>
   );
 }
 

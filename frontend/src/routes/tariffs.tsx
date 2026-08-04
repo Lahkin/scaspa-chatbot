@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { OpsPage } from '@/components/ops/OpsPage';
+import { OpsShell } from '@/components/shells/OpsShell';
 import { QuoteResult } from '@/components/ops/QuoteResult';
 import { CargoCalculator, MaritimeCalculator } from '@/components/ops/TariffCalculators';
 import { TariffTable } from '@/components/ops/TariffTable';
@@ -51,15 +51,15 @@ function TariffsRoute() {
 
   return (
     /*
-     * No `source` on the shell, and that is not an omission.
+     * No source banner on this screen, and that is not an omission.
      *
-     * `OpsPage` renders §5.2's screen banner for the tables that have no meta
-     * strip of their own — vessels and flights. **Every payload on this screen
-     * carries its own strip**: the schedule is a provenance card and so is the
-     * quote. Passing it here put the same "sample data" sentence on screen
-     * twice, one line above the card that was already saying it.
+     * §5.2's screen banner exists for tables that have no meta strip of their
+     * own — vessels and flights. **Every payload here carries its own strip**:
+     * the schedule is a provenance card and so is the quote. Adding one would
+     * put the same "sample data" sentence on screen twice, one line above the
+     * card that was already saying it.
      */
-    <OpsPage
+    <OpsShell
       title="Port tariffs and fees"
       intro="Published schedule of port charges, aviation fees and cargo levies."
     >
@@ -108,7 +108,7 @@ function TariffsRoute() {
       ) : null}
 
       {quote.data ? <QuoteResult quote={quote.data} /> : null}
-    </OpsPage>
+    </OpsShell>
   );
 }
 
