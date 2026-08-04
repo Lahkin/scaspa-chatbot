@@ -51,6 +51,41 @@ they can see the details of your case, and I cannot.
 {ESCALATION_BLOCK}"""
 
 
+# --------------------------------------------------------------------------
+# GREETING COPY
+#
+# "hi" is the first thing anyone types, and it used to come back as
+# NO_ANSWER_MESSAGE — "I do not have that in SCASPA's verified information" —
+# because a greeting is not a question, retrieval scored it at 0.12, and the
+# low-confidence gate cannot tell "nothing answers this" from "this was never a
+# question". See the note above `is_conversational_opener` in `rag/answer.py`.
+#
+# Constraints on this string, which are the same as everywhere else:
+#   - It states no fee, no time, no opening hour and no statistic. There is
+#     nothing here a reader could write down, so there is nothing to cite.
+#   - It names the four facilities because that is what the assistant covers,
+#     and the list is already in this file's system prompt and in the sidebar.
+#   - It sets the expectation that answers carry sources, which is the single
+#     most useful thing to say before the first real question.
+#   - No escalation block. Ending "hello" with a telephone number reads as being
+#     shown the door.
+# --------------------------------------------------------------------------
+GREETING_MESSAGE = """Hello. I answer questions about SCASPA — the Deep Water \
+Harbour, Port Zante, the Basseterre Ferry Terminal and R. L. Bradshaw \
+International Airport.
+
+I use SCASPA's published information only, and I show you the source and the \
+date it was verified for anything factual. What would you like to know?"""
+
+
+# "thanks" and "bye" fail the same way "hi" does and need the same gate, but not
+# the same words: answering "thank you" with "Hello. I answer questions about
+# SCASPA…" is its own small wrongness. One extra string is cheaper than leaving
+# the second thing everyone types looking broken.
+CLOSING_MESSAGE = """You're welcome. Ask me anything else about SCASPA's \
+seaports or the airport whenever you need to."""
+
+
 # Shown when a figure in a generated answer cannot be traced to a retrieved row.
 # The answer is discarded rather than served with a warning flag: a
 # `grounded: false` field does not stop anyone reading the number.

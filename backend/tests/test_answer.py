@@ -6,16 +6,24 @@ trust it.
 """
 
 import logging
+import re
 
 import pytest
 
-from app.agent.prompts import ESCALATION_BLOCK, NO_ANSWER_MESSAGE, REFUSAL_MESSAGE
+from app.agent.prompts import (
+    CLOSING_MESSAGE,
+    ESCALATION_BLOCK,
+    GREETING_MESSAGE,
+    NO_ANSWER_MESSAGE,
+    REFUSAL_MESSAGE,
+)
 from app.rag.answer import (
     answer_question,
     build_citations,
     extract_citations,
     find_unverified_figures,
     format_context,
+    is_conversational_opener,
     match_refusal_category,
     verify_citations,
 )
@@ -410,3 +418,127 @@ def test_only_confirmed_rows_can_ever_be_cited(indexed, fake_embeddings) -> None
     assert "kb-003" not in [c.kb_id for c in result.citations]
     assert "kb-009" not in [c.kb_id for c in result.citations]
     assert result.grounded is False
+
+
+# ── Greetings ────────────────────────────────────────────────────────────────
+#
+# "hi" is the first thing anyone types. It used to reach retrieval, embed to a
+# best score of ~0.12, and come back as NO_ANSWER_MESSAGE — "I do not have that
+# in SCASPA's verified information" — followed by a telephone number.
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "hi",
+        "Hi!",
+        "  hello  ",
+        "hey there",
+        "Good morning",
+        "good afternoon!",
+        "hiya",
+        "how are you?",
+        "thanks",
+        "Thank you!",
+        "cheers",
+        "bye",
+    ],
+)
+def test_a_pleasantry_is_recognised(message: str) -> None:
+    assert is_conversational_opener(message) is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # The one that matters: politeness in front of a real question must not
+        # swallow the question. A greeting gate that does this stops the product
+        # answering, which is far worse than the defect it was added to fix.
+        "hi, how much is a 40ft container?",
+        "hello, where do cruise ships dock?",
+        "good morning, what time is the last ferry?",
+        "thanks, but where is the ferry terminal?",
+        # Ordinary questions, no pleasantry at all.
+        "where do cruise ships dock in St. Kitts?",
+        "what are SCASPA's opening hours?",
+        # Words that merely start with a greeting's letters.
+        "high tide times",
+        "hello kitty cargo shipment",
+        "is there a helipad?",
+    ],
+)
+def test_a_question_is_never_a_pleasantry(message: str) -> None:
+    assert is_conversational_opener(message) is False
+
+
+def test_a_greeting_never_reaches_retrieval(indexed, fake_embeddings) -> None:
+    """The point of the gate: no model call, no retrieval, no fabrication.
+
+    `ExplodingModel` raises if it is called at all, so this also proves the
+    greeting cannot be talked into saying something — there is no generation
+    behind it to influence.
+    """
+    result = answer_question(
+        "hi",
+        chat_model=ExplodingModel(),
+        embeddings=fake_embeddings,
+        settings=indexed,
+    )
+
+    assert result.answer == GREETING_MESSAGE
+    # Not a refusal. Filing "hello" as a refusal makes the refusal rate
+    # meaningless and tells the client the assistant declined to help.
+    assert result.refusal is False
+    assert result.grounded is False
+    assert result.citations == []
+    assert result.retrieved == []
+    assert result.model is None
+
+
+def test_the_greeting_states_no_fact_anyone_could_act_on(indexed, fake_embeddings) -> None:
+    """It names what it covers and cites nothing, because it claims nothing."""
+    result = answer_question(
+        "hello",
+        chat_model=ExplodingModel(),
+        embeddings=fake_embeddings,
+        settings=indexed,
+    )
+
+    assert re.search(r"\d{1,2}:\d{2}", result.answer) is None, "no clock time"
+    assert re.search(r"(XCD|EC\$|US\$|\$)\s*\d", result.answer) is None, "no money"
+    # No escalation block: ending "hello" with a telephone number reads as
+    # being shown the door.
+    assert ESCALATION_BLOCK not in result.answer
+
+
+def test_a_polite_question_is_still_answered_normally(indexed, fake_embeddings) -> None:
+    """The regression that would matter most, driven end to end.
+
+    If the gate ever swallowed this, every politely-phrased question would
+    return a greeting and the product would look like it had stopped working.
+    """
+    model = StubModel("Ferry luggage is set by the operator [kb-001].")
+
+    result = answer_question(
+        "hi, what is the ferry luggage allowance?",
+        chat_model=model,
+        embeddings=fake_embeddings,
+        settings=indexed,
+    )
+
+    assert result.answer != GREETING_MESSAGE
+    assert result.retrieved, "a real question must still reach retrieval"
+
+
+def test_a_closing_is_answered_as_a_closing(indexed, fake_embeddings) -> None:
+    """ "thanks" is the second thing people type, and "Hello." is the wrong reply."""
+    result = answer_question(
+        "thanks!",
+        chat_model=ExplodingModel(),
+        embeddings=fake_embeddings,
+        settings=indexed,
+    )
+
+    assert result.answer == CLOSING_MESSAGE
+    assert result.answer != GREETING_MESSAGE
+    assert result.refusal is False

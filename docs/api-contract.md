@@ -6,24 +6,24 @@ Base path `/api`. Interactive docs at `/docs`, machine-readable schema at
 This file is the contract for the frontend team. If an endpoint or a schema
 changes, this file changes in the same pull request.
 
-| Endpoint | Purpose |
-| --- | --- |
-| `POST /api/chat` | Ask a question, get one JSON response |
-| `POST /api/chat/stream` | The same answer, streamed as Server-Sent Events |
-| `GET /api/health` | Liveness, index state, configured models, uptime |
-| `POST /api/stt` | Transcribe recorded audio to text |
-| `POST /api/tts` | Synthesise text to MP3 audio |
-| `POST /api/tts/preview` | Show what TTS would say, free |
-| `GET /api/vessels` | Vessel arrivals and berth occupancy |
-| `GET /api/flights` | Flight arrivals and departures |
-| `GET /api/tariffs` | Published schedule of port charges |
-| `POST /api/tariffs/quote` | Estimate charges from published rates |
-| `GET /api/support/directory` | Published contact routes |
-| `POST /api/support/ticket` | Raise a ticket, get a reference |
+| Endpoint                     | Purpose                                          |
+| ---------------------------- | ------------------------------------------------ |
+| `POST /api/chat`             | Ask a question, get one JSON response            |
+| `POST /api/chat/stream`      | The same answer, streamed as Server-Sent Events  |
+| `GET /api/health`            | Liveness, index state, configured models, uptime |
+| `POST /api/stt`              | Transcribe recorded audio to text                |
+| `POST /api/tts`              | Synthesise text to MP3 audio                     |
+| `POST /api/tts/preview`      | Show what TTS would say, free                    |
+| `GET /api/vessels`           | Vessel arrivals and berth occupancy              |
+| `GET /api/flights`           | Flight arrivals and departures                   |
+| `GET /api/tariffs`           | Published schedule of port charges               |
+| `POST /api/tariffs/quote`    | Estimate charges from published rates            |
+| `GET /api/support/directory` | Published contact routes                         |
+| `POST /api/support/ticket`   | Raise a ticket, get a reference                  |
 
 **`/api/chat` and `/api/chat/stream` return identical content.** They share the
-same retrieval, generation and verification path. Streaming changes *when* you
-see the answer, never *what* it says.
+same retrieval, generation and verification path. Streaming changes _when_ you
+see the answer, never _what_ it says.
 
 ---
 
@@ -72,20 +72,20 @@ a stack trace, a filesystem path, a model name or any upstream provider detail.
 
 Switch on `code`, never on `message`.
 
-| `code` | HTTP | Meaning | Suggested client behaviour |
-| --- | --- | --- | --- |
-| `VALIDATION_ERROR` | 422 | Message blank, over 1000 characters, or an unknown `category` | Show inline by the input; do not retry |
-| `RATE_LIMITED` | 429 | **This client** has sent too many requests | Show the message, count down `Retry-After`, disable send. **Never auto-retry** |
-| `INDEX_MISSING` | 503 | The knowledge index has not been built | Show the message; retry later |
-| `RETRIEVAL_EMPTY` | 503 | Index metadata exists but holds no rows | Show the message; retry later |
-| `UPSTREAM_RATE_LIMITED` | 503 | The model provider is throttling us | Show the message; offer a retry button |
-| `UPSTREAM_TIMEOUT` | 504 | The model did not answer in time | Show the message; offer a retry button |
-| `NOT_FOUND` | 404 | No such route | — |
-| `INTERNAL` | 500 | Anything else | Show the message; offer a retry button |
+| `code`                  | HTTP | Meaning                                                       | Suggested client behaviour                                                     |
+| ----------------------- | ---- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `VALIDATION_ERROR`      | 422  | Message blank, over 1000 characters, or an unknown `category` | Show inline by the input; do not retry                                         |
+| `RATE_LIMITED`          | 429  | **This client** has sent too many requests                    | Show the message, count down `Retry-After`, disable send. **Never auto-retry** |
+| `INDEX_MISSING`         | 503  | The knowledge index has not been built                        | Show the message; retry later                                                  |
+| `RETRIEVAL_EMPTY`       | 503  | Index metadata exists but holds no rows                       | Show the message; retry later                                                  |
+| `UPSTREAM_RATE_LIMITED` | 503  | The model provider is throttling us                           | Show the message; offer a retry button                                         |
+| `UPSTREAM_TIMEOUT`      | 504  | The model did not answer in time                              | Show the message; offer a retry button                                         |
+| `NOT_FOUND`             | 404  | No such route                                                 | —                                                                              |
+| `INTERNAL`              | 500  | Anything else                                                 | Show the message; offer a retry button                                         |
 
 `RATE_LIMITED` and `UPSTREAM_RATE_LIMITED` are **different things** and deserve
 different copy. The first is this client being limited by us, on a 429, and the
-user can fix it by waiting. The second is the model provider throttling *us*, on
+user can fix it by waiting. The second is the model provider throttling _us_, on
 a 503, and the user can do nothing about it. Treating them as one is how someone
 gets told to slow down when the fault is entirely ours.
 
@@ -98,7 +98,29 @@ button.
 
 If the assistant has no verified information, that is a successful `200` with
 `refusal: true` and a helpful message. Do not render it as a failure. Errors are
-for when the *service* broke, not for when the *answer* is "I don't know".
+for when the _service_ broke, not for when the _answer_ is "I don't know".
+
+### A greeting is **not** a refusal
+
+`hi`, `hello`, `thanks` and the like are answered directly, before retrieval, on
+both `/api/chat` and `/api/chat/stream`. They return `200` with:
+
+```
+refusal: false      grounded: false      citations: []
+```
+
+**`refusal` is `false`** — nothing was declined. Filing a greeting as a refusal
+would make the refusal rate meaningless and tell the client the assistant would
+not help. `grounded` is `false` because there is no retrieved row behind it,
+there being no factual claim in it to ground; the message states no fee, time or
+statistic, so there is nothing to cite.
+
+Clients should render it as an ordinary answer with an empty sources panel, and
+must not attach the escalation block: ending "hello" with a telephone number
+reads as being shown the door.
+
+Anything containing a question is **not** a greeting, however politely it opens —
+`"hi, how much is a 40ft container?"` is retrieved and answered normally.
 
 ---
 
@@ -106,11 +128,11 @@ for when the *service* broke, not for when the *answer* is "I don't know".
 
 ### Request
 
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `message` | `string` | yes | 1–1000 characters. Whitespace-only is rejected |
-| `conversation_id` | `string \| null` | no | Omit on the first request; send back what you were given. Anything that is not a well-formed UUID is replaced with a fresh id |
-| `category` | `string \| null` | no | Optional retrieval filter: `ferry`, `cargo`, `cruise`, `airport`, `general`, `marine`, `payments`, `access`, `jobs`, `corporate`. Anything else is a **422** |
+| Field             | Type             | Required | Notes                                                                                                                                                        |
+| ----------------- | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `message`         | `string`         | yes      | 1–1000 characters. Whitespace-only is rejected                                                                                                               |
+| `conversation_id` | `string \| null` | no       | Omit on the first request; send back what you were given. Anything that is not a well-formed UUID is replaced with a fresh id                                |
+| `category`        | `string \| null` | no       | Optional retrieval filter: `ferry`, `cargo`, `cruise`, `airport`, `general`, `marine`, `payments`, `access`, `jobs`, `corporate`. Anything else is a **422** |
 
 **About `category`.** It is a hard constraint, not a hint. It restricts
 retrieval to rows in that area and it **overrides** the category the agent would
@@ -130,21 +152,21 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 
 ### Response
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `answer` | `string` | Verified text. Unverifiable citation markers already stripped |
-| `conversation_id` | `string` | Send this on the next request |
-| `grounded` | `boolean` | See the warning below |
-| `refusal` | `boolean` | True when the assistant declined |
-| `refusal_category` | `string \| null` | `vessel_or_aircraft_operations`, `personal_record`, or null |
-| `question_sanitised` | `string \| null` | The question as actually sent, when input safety changed it. See below |
-| `answer_replaced` | `boolean` | The draft was discarded as ungrounded and rewritten. See below |
-| `step_limit_reached` | `boolean` | The agent ran out of tool calls. **Not** the same as "not in our data" |
-| `citations` | `Citation[]` | Verified sources, built from stored metadata |
-| `chart` | `ChartSpec \| null` | A chart to render, or null. Usually null |
-| `card` | `AssistantCard \| null` | An interactive card to render below the answer, or null |
-| `tool_calls` | `ToolCall[]` | Tools the agent used this turn, in order |
-| `meta` | `ResponseMeta` | Diagnostics |
+| Field                | Type                    | Notes                                                                  |
+| -------------------- | ----------------------- | ---------------------------------------------------------------------- |
+| `answer`             | `string`                | Verified text. Unverifiable citation markers already stripped          |
+| `conversation_id`    | `string`                | Send this on the next request                                          |
+| `grounded`           | `boolean`               | See the warning below                                                  |
+| `refusal`            | `boolean`               | True when the assistant declined                                       |
+| `refusal_category`   | `string \| null`        | `vessel_or_aircraft_operations`, `personal_record`, or null            |
+| `question_sanitised` | `string \| null`        | The question as actually sent, when input safety changed it. See below |
+| `answer_replaced`    | `boolean`               | The draft was discarded as ungrounded and rewritten. See below         |
+| `step_limit_reached` | `boolean`               | The agent ran out of tool calls. **Not** the same as "not in our data" |
+| `citations`          | `Citation[]`            | Verified sources, built from stored metadata                           |
+| `chart`              | `ChartSpec \| null`     | A chart to render, or null. Usually null                               |
+| `card`               | `AssistantCard \| null` | An interactive card to render below the answer, or null                |
+| `tool_calls`         | `ToolCall[]`            | Tools the agent used this turn, in order                               |
+| `meta`               | `ResponseMeta`          | Diagnostics                                                            |
 
 `ResponseMeta`: `request_id`, `latency_ms`, `retrieved_count`, `best_score`,
 `cited_ids`, `hallucinated_citations`, `unverified_figures`, `kb_version`.
@@ -153,18 +175,18 @@ has none. Do not require it.
 
 ### `Citation`
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `kb_id` | `string` | The row id, matching the `[kb-xxx]` marker |
-| `category` | `string` | `ferry`, `cargo`, `cruise`, `airport`, `general`, `marine`, `payments`, `access`, `jobs`, `corporate` |
-| `subcategory` | `string` | Narrower topic, e.g. `fares` |
-| `source_url` | `string` | The published source |
-| `source_type` | `string` | `official-site`, `official-pdf`, `client-interview`, `press`, `regulator` |
-| `as_of` | `string` | ISO date a researcher verified the fact |
-| `confidence` | `string` | Always `confirmed` for an indexed row |
-| `volatility` | `"low" \| "medium" \| "high" \| null` | How fast the fact goes stale |
-| `label` | `string \| null` | The row's own question — a readable name for the source |
-| `snippet` | `string \| null` | Short excerpt of the row's stored answer |
+| Field         | Type                                  | Notes                                                                                                 |
+| ------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `kb_id`       | `string`                              | The row id, matching the `[kb-xxx]` marker                                                            |
+| `category`    | `string`                              | `ferry`, `cargo`, `cruise`, `airport`, `general`, `marine`, `payments`, `access`, `jobs`, `corporate` |
+| `subcategory` | `string`                              | Narrower topic, e.g. `fares`                                                                          |
+| `source_url`  | `string`                              | The published source                                                                                  |
+| `source_type` | `string`                              | `official-site`, `official-pdf`, `client-interview`, `press`, `regulator`                             |
+| `as_of`       | `string`                              | ISO date a researcher verified the fact                                                               |
+| `confidence`  | `string`                              | Always `confirmed` for an indexed row                                                                 |
+| `volatility`  | `"low" \| "medium" \| "high" \| null` | How fast the fact goes stale                                                                          |
+| `label`       | `string \| null`                      | The row's own question — a readable name for the source                                               |
+| `snippet`     | `string \| null`                      | Short excerpt of the row's stored answer                                                              |
 
 Every field is copied from the stored metadata of a row that was really
 retrieved. **None of it is model output**, and none of it is inferred.
@@ -190,15 +212,15 @@ page title.
 
 `ChartSpec`:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `type` | `"line" \| "bar" \| "area"` | Nothing else is supported |
-| `title` | `string` | Short, factual |
-| `x_label` | `string` | X axis label |
-| `y_label` | `string` | Y axis label, including units |
-| `series` | `ChartSeries[]` | 1–4 series |
-| `caption` | `string` | **Always present.** States whether figures are official or illustrative |
-| `source` | `string` | The single `kb-xxx` row every figure came from |
+| Field     | Type                        | Notes                                                                   |
+| --------- | --------------------------- | ----------------------------------------------------------------------- |
+| `type`    | `"line" \| "bar" \| "area"` | Nothing else is supported                                               |
+| `title`   | `string`                    | Short, factual                                                          |
+| `x_label` | `string`                    | X axis label                                                            |
+| `y_label` | `string`                    | Y axis label, including units                                           |
+| `series`  | `ChartSeries[]`             | 1–4 series                                                              |
+| `caption` | `string`                    | **Always present.** States whether figures are official or illustrative |
+| `source`  | `string`                    | The single `kb-xxx` row every figure came from                          |
 
 `ChartSeries`: `name`, `points[]`. `ChartPoint`: `x` (`string \| number`), `y`
 (`number`). Maximum 40 points per series — beyond that it is unreadable on a
@@ -242,7 +264,7 @@ directly, e.g. `"Searching SCASPA knowledge base — ferry fares"`.
 > ### `answer_replaced` and `step_limit_reached`
 >
 > Both are computed on every turn. Both used to be dropped at the wire boundary,
-> which left a client able to see that *an* answer came back but not that it had
+> which left a client able to see that _an_ answer came back but not that it had
 > been rewritten, nor that it stopped early.
 >
 > **`answer_replaced`** is true when the drafted answer carried a money or time
@@ -254,7 +276,7 @@ directly, e.g. `"Searching SCASPA knowledge base — ferry fares"`.
 >
 > **`step_limit_reached`** is true when the agent hit its tool-call cap before
 > finishing. It is a different failure from "we do not hold that", and it takes
-> different copy: *"ask for one thing at a time"* resolves this one and sends the
+> different copy: _"ask for one thing at a time"_ resolves this one and sends the
 > other group round in circles, because no amount of simplifying reaches a fact
 > the knowledge base does not contain. When it is true, `replace` has already
 > carried the text to show (streaming) and `refusal` is `true`.
@@ -265,7 +287,7 @@ directly, e.g. `"Searching SCASPA knowledge base — ferry fares"`.
 > ### `question_sanitised` — when the user's own words changed
 >
 > Input safety neutralises instruction-override phrasing rather than rejecting
-> it, because *"ignore the sign at the gate"* is a reasonable thing for a
+> it, because _"ignore the sign at the gate"_ is a reasonable thing for a
 > traveller to type. The matched span is replaced **in place** with the literal
 > marker `[instruction-like text removed]`, so the position in the sentence
 > survives.
@@ -449,14 +471,14 @@ is doing research rather than stalling.
 
 The five tools, so you can pick an icon per `name`:
 
-| `name` | What it means |
-| --- | --- |
-| `search_scaspa_knowledge` | Searching the verified knowledge base |
-| `search_site_content` | Searching scaspa.com pages and PDFs |
-| `make_chart` | Building a chart |
-| `calculate` | Doing arithmetic on retrieved figures |
-| `escalate_to_human` | Fetching SCASPA contact details |
-| `show_card` | Attaching an interactive card below the answer |
+| `name`                    | What it means                                  |
+| ------------------------- | ---------------------------------------------- |
+| `search_scaspa_knowledge` | Searching the verified knowledge base          |
+| `search_site_content`     | Searching scaspa.com pages and PDFs            |
+| `make_chart`              | Building a chart                               |
+| `calculate`               | Doing arithmetic on retrieved figures          |
+| `escalate_to_human`       | Fetching SCASPA contact details                |
+| `show_card`               | Attaching an interactive card below the answer |
 
 ### The `chart` event
 
@@ -515,7 +537,7 @@ Once headers are sent the status code is fixed at 200. A failure therefore
 arrives as an `error` event and the connection closes. Handle `error` at any
 point after `meta`.
 
-Validation failures happen *before* streaming starts, so a bad body still gets a
+Validation failures happen _before_ streaming starts, so a bad body still gets a
 normal `422` with the usual error envelope.
 
 ### Disconnect
@@ -548,15 +570,15 @@ $ uv run python scripts/stream_demo.py "How much is a ferry ticket?"
 
 No parameters, no auth.
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `status` | `"ok" \| "degraded"` | `degraded` when the index is missing or empty |
-| `env` | `string` | From `ENV` |
-| `version` | `string` | Backend version |
-| `uptime_s` | `number` | Seconds since the process started |
-| `request_id` | `string` | Matches the response header |
-| `models` | `ModelNames` | `chat`, `embedding`, `transcribe`, `tts` |
-| `index` | `IndexStatus` | Knowledge index state |
+| Field        | Type                 | Notes                                         |
+| ------------ | -------------------- | --------------------------------------------- |
+| `status`     | `"ok" \| "degraded"` | `degraded` when the index is missing or empty |
+| `env`        | `string`             | From `ENV`                                    |
+| `version`    | `string`             | Backend version                               |
+| `uptime_s`   | `number`             | Seconds since the process started             |
+| `request_id` | `string`             | Matches the response header                   |
+| `models`     | `ModelNames`         | `chat`, `embedding`, `transcribe`, `tts`      |
+| `index`      | `IndexStatus`        | Knowledge index state                         |
 
 `IndexStatus`: `ready`, `kb_version`, `kb_rows`, `kb_rows_rejected`,
 `kb_csv_filename`, `kb_updated_at`, `index_built_at`, `embedding_model`,
@@ -599,7 +621,6 @@ With no index built, `status` is `degraded`, `index.ready` is `false`, and
 `models` appears here and **only** here. It never appears in a chat response or
 an error.
 
-
 ---
 
 ## Voice
@@ -639,11 +660,11 @@ if (!navigator.mediaDevices?.getUserMedia) {
 
 Multipart upload, field name **`audio`**.
 
-| Constraint | Value |
-| --- | --- |
-| Formats | WebM, MP4, M4A, MPEG/MP3, WAV, OGG (parameters like `;codecs=opus` are fine) |
-| Max size | 20 MB |
-| Max duration | about 60 seconds |
+| Constraint   | Value                                                                        |
+| ------------ | ---------------------------------------------------------------------------- |
+| Formats      | WebM, MP4, M4A, MPEG/MP3, WAV, OGG (parameters like `;codecs=opus` are fine) |
+| Max size     | 20 MB                                                                        |
+| Max duration | about 60 seconds                                                             |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/stt -F "audio=@question.webm;type=audio/webm"
@@ -684,15 +705,15 @@ numbers and currency expanded. You do not need to pre-clean anything.
 
 What sanitisation does, with the cases that matter:
 
-| In | Spoken |
-| --- | --- |
-| `869-465-8121` | `8 6 9, 4 6 5, 8 1 2 1` |
-| `869-465-8121 / 2 / 3` | the three numbers, each as digits |
-| `XCD 44.44` | `44.44 East Caribbean dollars` |
-| `**bold**`, `` `code` ``, `## head` | the words only |
-| `[kb-008].` | removed, with no stray space before the full stop |
-| `https://www.scaspa.com/x` | `the SCASPA website` |
-| `\| Berth \| EC$100 \|` | `Berth, 100 East Caribbean dollars.` |
+| In                                  | Spoken                                            |
+| ----------------------------------- | ------------------------------------------------- |
+| `869-465-8121`                      | `8 6 9, 4 6 5, 8 1 2 1`                           |
+| `869-465-8121 / 2 / 3`              | the three numbers, each as digits                 |
+| `XCD 44.44`                         | `44.44 East Caribbean dollars`                    |
+| `**bold**`, `` `code` ``, `## head` | the words only                                    |
+| `[kb-008].`                         | removed, with no stray space before the full stop |
+| `https://www.scaspa.com/x`          | `the SCASPA website`                              |
+| `\| Berth \| EC$100 \|`             | `Berth, 100 East Caribbean dollars.`              |
 
 The phone number is the one that matters most: read as an integer it becomes
 "eight hundred sixty-nine million…", which nobody can write down — and it ends
@@ -704,7 +725,7 @@ unavailable.
 
 ### `POST /api/tts/preview`
 
-Same body. Returns `{ "text": "..." }` — the sanitised text that *would* be
+Same body. Returns `{ "text": "..." }` — the sanitised text that _would_ be
 spoken, with **no provider call and no cost**. Useful for showing a caption, and
 the fastest way to find a sanitisation bug.
 
@@ -753,7 +774,7 @@ either way.
 > the model cannot put one there. Every row is read from the operational feed
 > after the answer is written, and the card carries that feed's `DataSource`.
 >
-> This is why an answer can say *"I cannot see live vessel movements"* and carry
+> This is why an answer can say _"I cannot see live vessel movements"_ and carry
 > an arrivals board in the same breath, without contradicting itself. The
 > sentence is the assistant, bound by its rules. The board is the feed, labelled
 > as such.
@@ -798,12 +819,12 @@ Added so the design's map, gate and advisory panels have something behind them.
 All four return an **empty result on every source without that feed**, which is
 every real one today, and the panels render their "not connected" state from it.
 
-| Endpoint | Returns | Notes |
-| --- | --- | --- |
-| `GET /api/ops/positions` | `positions[]`, `total` | Each carries `reported_by`: `ais`, `manual` or `estimated`. `speed_knots` is **null when not reported**, never `0` |
-| `GET /api/ops/gates` | `gates[]`, `active`, `total` | `active` is counted **server-side** from the gates, so it cannot disagree with the flight screen's tile |
-| `GET /api/ops/advisories` | `advisories[]`, `total` | Notices to mariners, passed through verbatim. **An empty list is not an all-clear** — see below |
-| `GET /api/ops/profile` | `profile` or `null` | A demo card. **Not authentication** — see below |
+| Endpoint                  | Returns                      | Notes                                                                                                              |
+| ------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/ops/positions`  | `positions[]`, `total`       | Each carries `reported_by`: `ais`, `manual` or `estimated`. `speed_knots` is **null when not reported**, never `0` |
+| `GET /api/ops/gates`      | `gates[]`, `active`, `total` | `active` is counted **server-side** from the gates, so it cannot disagree with the flight screen's tile            |
+| `GET /api/ops/advisories` | `advisories[]`, `total`      | Notices to mariners, passed through verbatim. **An empty list is not an all-clear** — see below                    |
+| `GET /api/ops/profile`    | `profile` or `null`          | A demo card. **Not authentication** — see below                                                                    |
 
 **`/api/ops/advisories` carries the only fake datum in this API that a reader
 could act on.** Marine safety information is different in kind from a fabricated
@@ -834,11 +855,11 @@ the range readout (`Showing 1–25 of 100`) true, and it is why a client must no
 filter the rows it was handed: filtering a page while quoting the unfiltered
 total describes a result set that does not exist.
 
-| Endpoint | Filters | Paging |
-| --- | --- | --- |
-| `GET /api/vessels` | `q` (name or IMO, substring, case-insensitive) · `vessel_type` · `berth` · `status` · `facility` | `limit` 1–100, default 25 · `offset` |
-| `GET /api/flights` | `q` (flight number or port) · `airline` · `status` · `direction` (`arrival` / `departure`) | `limit` 1–100, default 25 · `offset` |
-| `GET /api/tariffs` | `q` (code or description) · `category` · `facility` | `limit` 1–100, default 100 · `offset` |
+| Endpoint           | Filters                                                                                          | Paging                                |
+| ------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| `GET /api/vessels` | `q` (name or IMO, substring, case-insensitive) · `vessel_type` · `berth` · `status` · `facility` | `limit` 1–100, default 25 · `offset`  |
+| `GET /api/flights` | `q` (flight number or port) · `airline` · `status` · `direction` (`arrival` / `departure`)       | `limit` 1–100, default 25 · `offset`  |
+| `GET /api/tariffs` | `q` (code or description) · `category` · `facility`                                              | `limit` 1–100, default 100 · `offset` |
 
 ### `facility` — the four sites, on the record and as a filter
 
@@ -853,9 +874,9 @@ facilities.
 
 The two filters behave **differently on purpose**:
 
-| Endpoint | `?facility=port_zante` returns |
-| --- | --- |
-| `GET /api/vessels` | Only records attributed to that facility. An unattributed record is **excluded** — being handed movements that might be anywhere is the failure the field exists to prevent. |
+| Endpoint           | `?facility=port_zante` returns                                                                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/vessels` | Only records attributed to that facility. An unattributed record is **excluded** — being handed movements that might be anywhere is the failure the field exists to prevent.                       |
 | `GET /api/tariffs` | Facility-specific rates **and** rates with `facility: null`. A charge published for the whole port applies at the facility being asked about, and dropping it would understate what a caller owes. |
 
 `GET /api/ops/gates` carries the field but takes **no** `facility` parameter: it
@@ -882,12 +903,12 @@ complete set with a total. Do not send `limit` or `offset` to them.
 
 ### `DataSource`, on every operations response
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `kind` | `"live" \| "fixture" \| "unavailable"` | Which of the three you are looking at |
-| `label` | `string` | Human-readable origin, safe to render |
-| `as_of` | `string \| null` | When the data was produced. **Not** when you fetched it |
-| `notice` | `string \| null` | **Render this whenever present** |
+| Field    | Type                                   | Notes                                                   |
+| -------- | -------------------------------------- | ------------------------------------------------------- |
+| `kind`   | `"live" \| "fixture" \| "unavailable"` | Which of the three you are looking at                   |
+| `label`  | `string`                               | Human-readable origin, safe to render                   |
+| `as_of`  | `string \| null`                       | When the data was produced. **Not** when you fetched it |
+| `notice` | `string \| null`                       | **Render this whenever present**                        |
 
 > **`notice` is mandatory to display.** It is non-null for every `fixture` and
 > `unavailable` source and the server will not build one without it. A table of
@@ -947,8 +968,8 @@ Applies published rates to the quantities you send and totals them.
 > is byte-for-byte as tidy as a complete one.
 >
 > When `unpriced` is non-empty the total is not the amount payable, and the three
-> rules above are not enough on their own — the disclaimer covers *"confirmed on
-> invoice"*, which is about rounding and revision, not about a charge that was
+> rules above are not enough on their own — the disclaimer covers _"confirmed on
+> invoice"_, which is about rounding and revision, not about a charge that was
 > never counted. So a client must additionally:
 >
 > 1. Label the figure **"Total so far"**, not "Total".
@@ -990,11 +1011,11 @@ optionally `include_transcript` with a `conversation_id`.
 Three budgets, split by what a request costs rather than by which router it is
 in:
 
-| Scope | Endpoints | Limit |
-| --- | --- | --- |
-| `chat` | `/api/chat`, `/api/chat/stream` | `RATE_LIMIT_PER_MINUTE` |
-| `voice` | `/api/stt`, `/api/tts` | a third of it — billed per second and per character |
-| `ops` | vessels, flights, tariffs, support | four times it — no model, no embedding |
+| Scope   | Endpoints                          | Limit                                               |
+| ------- | ---------------------------------- | --------------------------------------------------- |
+| `chat`  | `/api/chat`, `/api/chat/stream`    | `RATE_LIMIT_PER_MINUTE`                             |
+| `voice` | `/api/stt`, `/api/tts`             | a third of it — billed per second and per character |
+| `ops`   | vessels, flights, tariffs, support | four times it — no model, no embedding              |
 
 The `ops` split matters to a client: browsing an arrivals board is naturally
 several requests, and if they came out of the chat budget then paging through

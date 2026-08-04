@@ -40,8 +40,10 @@ from pydantic import BaseModel, Field
 
 from app.agent.graph import AgentTurnResult, arun_agent, best_available_score, run_agent
 from app.agent.prompts import (
+    CLOSING_MESSAGE,
     CONTEXT_CHUNK_TEMPLATE,
     ESCALATION_BLOCK,
+    GREETING_MESSAGE,
     NO_ANSWER_MESSAGE,
     REFUSAL_MESSAGE,
     UNGROUNDED_NUMBER_MESSAGE,
@@ -242,6 +244,77 @@ def match_refusal_category(query: str) -> str | None:
     return None
 
 
+# A greeting is not a question, and the pipeline had nowhere to put one.
+#
+# Before this gate existed there were exactly two pre-model outcomes: refuse a
+# boundary question, or report that nothing in the corpus answers it. "hi" is
+# neither. It fell through to the retrieval probe, embedded to a best score of
+# 0.12, and came back as NO_ANSWER_MESSAGE — "I do not have that in SCASPA's
+# verified information, so I will not guess at it" — followed by a telephone
+# number. The first word anyone types, answered as a failed lookup.
+#
+# **Anchored end to end, and that is the whole safety argument.** The pattern
+# matches only when the entire message is a pleasantry, so anything carrying a
+# question rides straight past it into the normal path:
+#
+#     "hi"                          -> greeting
+#     "hi there"                    -> greeting
+#     "hi, how much is a container" -> NOT a greeting; retrieved and answered
+#     "good morning"                -> greeting
+#     "what are your opening hours" -> NOT a greeting
+#
+# The failure mode to avoid is a greeting gate that swallows a real question
+# because it happened to start politely, which would be a far worse defect than
+# the one being fixed: it would silently stop answering.
+#
+# Closings are here for the same reason openings are. "thanks" is the second
+# thing people type, and it failed identically.
+_GREETING_WORDS = (
+    r"hi|hii+|hey+|hello|hiya|howdy|yo|greetings|"
+    r"good\s+(?:morning|afternoon|evening|day)|"
+    r"how\s+are\s+you|how(?:'s|\s+is)\s+it\s+going|what's\s+up"
+)
+_CLOSING_WORDS = r"thanks?|thank\s+you|thanks\s+a\s+lot|cheers|bye|goodbye|good\s?bye|see\s+you"
+
+
+def _anchored(words: str) -> re.Pattern[str]:
+    return re.compile(
+        rf"^[\s!.,]*(?:{words})"
+        # Trailing address or filler only — "hi there", "hello again". Anything
+        # else, including any question, means this is not merely a pleasantry.
+        r"(?:\s+(?:there|again|all|team|folks|everyone|so\s+much|a\s+lot))?"
+        r"[\s!.,?]*$",
+        re.IGNORECASE,
+    )
+
+
+GREETING_PATTERN = _anchored(_GREETING_WORDS)
+CLOSING_PATTERN = _anchored(_CLOSING_WORDS)
+
+
+def is_conversational_opener(query: str) -> bool:
+    """True when the message is a pleasantry and nothing else.
+
+    Deliberately conservative: a message containing a question is never an
+    opener, however politely it begins.
+    """
+    return bool(GREETING_PATTERN.match(query) or CLOSING_PATTERN.match(query))
+
+
+def conversational_reply(query: str) -> str | None:
+    """The reply for a pleasantry, or `None` if this is a real question.
+
+    Greetings and closings are split because they are the same routing problem
+    and different words: answering "thank you" with "Hello. I answer questions
+    about SCASPA…" is its own small wrongness.
+    """
+    if CLOSING_PATTERN.match(query):
+        return CLOSING_MESSAGE
+    if GREETING_PATTERN.match(query):
+        return GREETING_MESSAGE
+    return None
+
+
 def find_unverified_figures(text: str, chunks: list[RetrievedChunk]) -> list[str]:
     """Money and time values in `text` that appear in no retrieved chunk.
 
@@ -416,6 +489,27 @@ def _refusal_result(category: str, elapsed_ms: int) -> AnswerResult:
     )
 
 
+def _greeting_result(message: str, elapsed_ms: int) -> AnswerResult:
+    """The conversational reply, identical on both paths.
+
+    `refusal` is **False**: nothing was refused and nothing failed. It is not
+    `grounded` either — there is no retrieved row behind it, because there is no
+    factual claim in it to ground. Both flags are read by the client and by the
+    observability record, so getting them wrong would file every "hello" as a
+    refusal and make the refusal rate meaningless.
+    """
+    return AnswerResult(
+        answer=message,
+        grounded=False,
+        refusal=False,
+        citations=[],
+        retrieved=[],
+        best_score=0.0,
+        model=None,
+        latency_ms=elapsed_ms,
+    )
+
+
 def _no_answer_result(
     chunks: list[RetrievedChunk], best_score: float, elapsed_ms: int
 ) -> AnswerResult:
@@ -553,6 +647,13 @@ def answer_question(
         )
         return _refusal_result(refusal_category, elapsed)
 
+    # --- Not a question: answer it as one and skip retrieval entirely ---
+    pleasantry = conversational_reply(query)
+    if pleasantry is not None:
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info("greeting question=%r latency_ms=%d", query, elapsed)
+        return _greeting_result(pleasantry, elapsed)
+
     # --- Pre-flight probe: nothing can answer this, so skip the agent entirely ---
     best_score = best_available_score(query, settings, embeddings)
     if best_score < settings.RETRIEVAL_MIN_SCORE:
@@ -669,6 +770,22 @@ async def astream_answer(
             "refused question=%r category=%s latency_ms=%d", query, refusal_category, elapsed
         )
         result = _refusal_result(refusal_category, elapsed)
+        yield "token", {"text": result.answer}
+        yield "citations", {"citations": []}
+        yield "done", _done_payload(result, settings)
+        return
+
+    # --- Not a question. Same gate as `answer_question`, same order. ---
+    #
+    # This must exist on BOTH paths or the browser never sees it: the UI streams,
+    # so a greeting fixed only in `answer_question` would still arrive as
+    # NO_ANSWER_MESSAGE for every user while passing a test written against the
+    # synchronous endpoint.
+    pleasantry = conversational_reply(query)
+    if pleasantry is not None:
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info("greeting question=%r latency_ms=%d", query, elapsed)
+        result = _greeting_result(pleasantry, elapsed)
         yield "token", {"text": result.answer}
         yield "citations", {"citations": []}
         yield "done", _done_payload(result, settings)
