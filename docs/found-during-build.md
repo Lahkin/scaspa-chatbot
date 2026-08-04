@@ -33,7 +33,112 @@ to behave correctly; **every vessel name, IMO, carrier code and money amount is
 synthetic**, the source notice is enforced by the schema rather than by
 convention, and the service refuses to boot with this data when `ENV=prod`.
 
+### "Can it show US dollars?"
+
+> The tariffs are published in XCD, and that is what the schedule shows. The USD
+> peg is already in our knowledge base as a confirmed, cited fact — USD 1.00 to
+> XCD 2.70 — so showing dollars is a display change rather than a data question.
+> We left it out deliberately: the schedule you are looking at shows exactly what
+> SCASPA publishes, unconverted.
+
+**A scoping decision, and the analysis exists** — see entry 20 below for the
+contract shape, the sourcing and the design deviation it would need.
+
 ---
+
+## From the pre-M5 pass
+
+### 20. Currency — **POST-DEMO**, analysis complete so it need not be redone
+
+Investigated before M5 and deliberately not built. Recorded in full because when
+SCASPA asks for it, the work should start from this rather than from scratch.
+
+**What is citable.** Exactly one rate, and it is a `confirmed` knowledge-base row
+like any other claim in the product:
+
+- `kb-009` — "The official currency is the Eastern Caribbean Dollar (XCD). US
+  Dollars are widely accepted across terminals and services in St. Kitts."
+- `kb-010` (`as_of` 2026-07-31) — "The Eastern Caribbean Dollar is pegged to the
+  US Dollar at a fixed rate of USD 1.00 to XCD 2.70. Retailers and exchange
+  bureaux may apply their own slightly different rates."
+
+`kb-010`'s **second sentence is the caveat the UI must carry** next to any
+converted figure. SCASPA hedging their own peg is better copy than anything we
+would write, and it is already cited.
+
+**Which currencies.** One: USD. XCD is the currency of all eight ECCU members, so
+there is nothing to convert for the rest of the Eastern Caribbean. Everything
+else splits into *real peg, uncitable* (BBD, BSD, BZD, KYD, AWG — no KB row) and
+*floating, needs an FX feed we do not have* (TTD, JMD, DOP, GYD, HTG). We show
+none of them, and say so.
+
+**Why it is not a frontend constant.** `src/lib/scaspa-facts.ts:10-14` forbids
+"fees, fares, tariffs, charges, **rates**" in client constants, without
+exception. An FX rate is a rate. So `2.70` cannot be hardcoded in the client — it
+has to arrive over the wire carrying its `kb_id` and `as_of`, like every other
+figure in the product. That is what makes this a contract change rather than a
+display tweak, and it is what took the estimate from one session to roughly two:
+
+| | sessions |
+| --- | --- |
+| `FxRate` model + field on `TariffTableResponse` (and `TariffQuote` if the total converts) | 0.2 |
+| Backend constant sourced to `kb-010`, **plus a test asserting it still matches the KB row** — otherwise the peg silently drifts from its own citation | 0.3 |
+| TS types, zod, MSW mirror | 0.2 |
+| The control, plus converted display across 30 rows | 0.4 |
+| Quote total | 0.2 |
+| Provenance line + `kb-010`'s caveat | 0.2 |
+| Decision record for the deviation below | 0.2 |
+| Tests: primary never converted, control never changes the request, caveat always present | 0.4 |
+
+**≈ 2.1 sessions**; table-only, leaving the quote in XCD, gets it to ~1.5.
+
+**The deviation that needs a decision record.** `design/` §5.10 is explicit —
+*"Currency is a fixed label, **not a select** — the schedule is published in XCD
+only"* — and `TariffCalculators.tsx:366-380` implements exactly that, with the
+reasoning in a comment. A subordinate `≈ USD` line is arguably outside that rule.
+**A labelled XCD/USD control is visually the thing §5.10 forbids**, on the screen
+showing SCASPA's fee schedule. That is the finding that decided this: it is
+defensible, but only with a recorded deviation and copy that makes display-only
+unmistakable — SCASPA invoices in XCD.
+
+Existing guards that would need updating rather than deleting:
+`backend/tests/test_operations.py:644 test_currency_conversion_is_refused`,
+`frontend/tests/operations.test.tsx:1333` ("states the currency rather than
+offering to change it"), and `backend/app/schemas.py:790` `_only_xcd`.
+
+### 21. `/dev/rehearsal` does not exist in a production build — the documented fallback
+
+`scripts/preflight-frontend.md` step 7 and its failure table both send the
+presenter to `/dev/rehearsal` as the last resort: *"Anything unrecoverable →
+`/dev/rehearsal`, and the sentence from step 7."*
+
+It is dev-only, twice over:
+
+- `src/routes/dev.rehearsal.tsx:14` — `import.meta.env.DEV ? lazy(...) : null`,
+  a build-time literal, so **the production build emits no chunk for it**;
+- `src/routes/dev.rehearsal.tsx:27` — `beforeLoad` throws `notFound()` when
+  `!config.isDev`.
+
+Both are correct decisions on their own terms — a recorded fake conversation
+should not ship to a production origin. The defect is the **contradiction with
+the runbook**, which tells the presenter to open the deployed URL (step 1) and
+then to reach a route that 404s there.
+
+It works if the demo is presented from `npm run dev`. It does not if presented
+from a deployed production build, and the preflight does not say which is
+assumed. **Settle which one the demo runs on, then fix whichever side is wrong.**
+
+### 22. `scaspa-facts.ts` claims a test enforces the no-rates rule; the test does not exist
+
+`src/lib/scaspa-facts.ts` documents that `tests/scaspa-facts.test.ts` "fails on a
+currency symbol, a clock time or a bare figure". **There is no such file.** The
+rule that would catch a hardcoded rate is documented and unenforced.
+
+The pass came back clean, which is why this is a small job rather than a
+discovery: in production source (excluding `src/mocks/`, `src/dev/`, tests) there
+are **zero** hardcoded clock times and **zero** hardcoded money amounts. Every
+currency hit is a doc comment, a type literal (`currency?: 'XCD'`), a column
+regex, or the `XCD` label §5.10 requires.
 
 ## From M4c
 
