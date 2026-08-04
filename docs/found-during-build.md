@@ -9,6 +9,49 @@ acted on.
 
 ---
 
+## From M4a (T-09, T-10)
+
+### 17. `Flight` has no `facility`, and passing one is silently discarded
+
+T-06 added `facility` to `VesselArrival`, `GateAssignment` and `TariffRow`.
+**Not to `Flight`** — the plan's task named three models and that is what
+shipped.
+
+M4a's flight fixtures were written with `facility="rlb_airport"` on all twelve
+constructors anyway. Pydantic's default is `extra="ignore"`, so every one was
+**accepted without error and thrown away**:
+
+```python
+>>> Flight(id='x', flight_no='ZZ 1', facility='rlb_airport')
+>>> 'facility' in f.model_dump()
+False
+```
+
+Nothing caught it. Not `ruff`, not `pytest`, not the typechecker — the model
+takes the keyword and drops it. It surfaced only when the per-facility
+distribution was actually counted rather than assumed, which is the argument for
+counting it.
+
+The dead keywords are removed. **The open question is whether `Flight` should
+carry the field**, and there is a real case for it: `GateAssignment` got one on
+the reasoning that "a second apron would otherwise be indistinguishable from the
+first", and a second airport is not hypothetical — the design's §6.2 location
+list includes **Vance W. Amory International on Nevis**, which is not in the
+`Facility` enum either. Both are T-06 questions, and adding a schema field
+inside a fixture-generation milestone would be exactly the scope creep the
+session rules forbid.
+
+**Two things for whoever picks this up:**
+
+- The `Facility` enum has four values and SCASPA's published location list has
+  five sites. Vance W. Amory and Charlestown Port are absent.
+- More generally: **a wrong keyword to any Pydantic model in this codebase is
+  silent.** No model sets `extra="forbid"` except `KBRow`
+  (`app/rag/models.py:51`), which is the one place someone thought about it.
+  Worth considering repo-wide.
+
+---
+
 ## From M3 (T-15)
 
 ### 16. `check:a11y` passes in this working copy only, and `npm ci` loses it
