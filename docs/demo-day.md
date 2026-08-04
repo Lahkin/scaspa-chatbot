@@ -1,7 +1,7 @@
 # Demo day
 
 **The one runbook.** `scripts/preflight-frontend.md` is the machine checklist —
-what to start and what to verify. This is what to *do* and what to *say*.
+what to start and what to verify. This is what to _do_ and what to _say_.
 
 Audience: SCASPA operational staff and management, **plus their IT staff**. The
 technical questions are in §6 and they are the ones most likely to be asked.
@@ -74,7 +74,7 @@ Tap a citation chip. The panel opens at that source with its `as_of` date.
 > "This is the operations side. Eleven vessels, every status the schema allows —
 > alongside, expected, departed, and the ones we have no report for."
 
-**Filter by status** — the control is "Filter by status", *not* by facility; see
+**Filter by status** — the control is "Filter by status", _not_ by facility; see
 §5. Rehearsed: All 11 → Expected 2 → En route 3 → Alongside 4.
 
 Show that **"not reported" is an em dash, never a zero** — §5.3 calls that the
@@ -124,8 +124,8 @@ plausible ones failed this check and were removed (§8).
 
 The fourth is the strongest of the four and worth saving for last. It is the
 question on the landing page, and the assistant answers it by **declining to
-invent a timetable** — *"I do not have a fixed last-departure time. Ferry times
-vary by operator and day; SCASPA directs travellers to its ferry schedule."* Then
+invent a timetable** — _"I do not have a fixed last-departure time. Ferry times
+vary by operator and day; SCASPA directs travellers to its ferry schedule."_ Then
 it cites the row that says so.
 
 > "That is the whole product in one answer. It could easily have given you a
@@ -146,7 +146,7 @@ with the Authority's name.
 
 > "It will not guess. It has no live view of operations, so rather than inventing
 > a location it routes you to the people who can actually look. Everything it
-> *does* answer, it answers from a verified source with a citation — and that is
+> _does_ answer, it answers from a verified source with a citation — and that is
 > only possible because it refuses everything else."
 
 The same discipline is why there is no fee, no sailing time and no statistic
@@ -167,9 +167,9 @@ anywhere in the product that did not come from a cited row.
 > **There is no facility filter in the interface.** The API supports
 > `?facility=`, and nothing in the frontend sends it — `features/ops/queries.ts`
 > does not mention the field. Do not promise to filter by facility on stage. If
-> asked, it is an honest answer: *"the API filters by facility today; we have not
+> asked, it is an honest answer: _"the API filters by facility today; we have not
 > put a control on it yet, because the four St. Kitts facilities fit on one
-> screen."* Filed in `found-during-build.md` entry 25.
+> screen."_ Filed in `found-during-build.md` entry 25.
 
 ---
 
@@ -190,8 +190,8 @@ rendering its designed "not connected" state.
 > fixtures and unavailable. Yours would be the third, and nothing above it
 > changes."
 
-What we need from you: *what system holds vessel movements today, and can it
-export? One worked example of a real record — not a schema.*
+What we need from you: _what system holds vessel movements today, and can it
+export? One worked example of a real record — not a schema._
 
 ### 6.2 "Is this data real?" — say this **before** they ask
 
@@ -244,12 +244,12 @@ entry 20 has the contract shape, the sourcing and the design deviation.
 
 The asks, phrased as asks. Full table: `docs/implementation-plan.md` §3.
 
-| We need | Why | Until then |
-|---|---|---|
-| **An operational feed** — AIS provider, AODB, or an agreed file drop. Format, cadence, credentials | Unblocks 20 of the audit's findings | Marked sample data, and the designed empty states |
-| **The published tariff schedule** — codes, descriptions, bases, XCD amounts, effective dates, and which are indexed in the knowledge base | The calculator arithmetic is finished and correct; only the rates are placeholders | Realistic shape, synthetic amounts |
-| **Whether berth occupancy is measured at all**, and against what capacity | We will not invent a denominator | "Not reported", which is the correct rendering |
-| **Confirmation of the five per-facility telephone numbers** | The design draws them; they are in no verified source | The published switchboard, on every location |
+| We need                                                                                                                                   | Why                                                                                | Until then                                        |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **An operational feed** — AIS provider, AODB, or an agreed file drop. Format, cadence, credentials                                        | Unblocks 20 of the audit's findings                                                | Marked sample data, and the designed empty states |
+| **The published tariff schedule** — codes, descriptions, bases, XCD amounts, effective dates, and which are indexed in the knowledge base | The calculator arithmetic is finished and correct; only the rates are placeholders | Realistic shape, synthetic amounts                |
+| **Whether berth occupancy is measured at all**, and against what capacity                                                                 | We will not invent a denominator                                                   | "Not reported", which is the correct rendering    |
+| **Confirmation of the five per-facility telephone numbers**                                                                               | The design draws them; they are in no verified source                              | The published switchboard, on every location      |
 
 > "Every one of these is a question about your data, not about the software. The
 > software is waiting for them."
@@ -271,33 +271,33 @@ from ten rows and nothing announces it.
 
 **Chat questions** — all four returned a cited answer with a real `as_of`:
 
-| Question | Citations | Verified |
-| --- | --- | --- |
-| Where do cruise ships dock in St. Kitts? | `kb-113`, `kb-117` | 2026-07-31 |
+| Question                                          | Citations          | Verified                |
+| ------------------------------------------------- | ------------------ | ----------------------- |
+| Where do cruise ships dock in St. Kitts?          | `kb-113`, `kb-117` | 2026-07-31              |
 | Where do I collect a barrel shipped to St. Kitts? | `kb-161`, `kb-153` | 2026-07-31 / 2025-09-01 |
-| What are SCASPA's opening hours? | `kb-016`, `kb-005` | 2026-07-31 |
-| What time is the last ferry back from Nevis? | `kb-192` | 2026-07-31 |
+| What are SCASPA's opening hours?                  | `kb-016`, `kb-005` | 2026-07-31              |
+| What time is the last ferry back from Nevis?      | `kb-192`           | 2026-07-31              |
 
 **Two questions were removed** for failing the bar:
 
-- *"Who do I contact about a shipment?"* — **0 citations.** The number-verification
-  guard fires and the answer becomes *"I could not verify one of the figures
-  against SCASPA's published sources, so I will not repeat it."* Correct
+- _"Who do I contact about a shipment?"_ — **0 citations.** The number-verification
+  guard fires and the answer becomes _"I could not verify one of the figures
+  against SCASPA's published sources, so I will not repeat it."_ Correct
   behaviour, useless as a demonstration of a cited answer.
-- *"How much is a 40-foot container?"* — the real schedule is blocked on SCASPA.
+- _"How much is a 40-foot container?"_ — the real schedule is blocked on SCASPA.
 
-**The deliberate no-answer** — *"Where is my container right now?"* returns
+**The deliberate no-answer** — _"Where is my container right now?"_ returns
 `refusal: true`, `refusal_category: personal_record`, `grounded: false`, and the
 escalation renders with **4 `tel:` links** on the page. Reads as care, not as
 failure.
 
 **Calculator, live.** 12 × 40 ft, 3 storage days:
 
-| Line | Working | Amount |
-| --- | --- | --- |
-| Wharfage — 40 ft container | 12 × 44.44 | 533.28 |
-| Container handling | 12 × 33.33 | 399.96 |
-| Container storage | 12 × 3 × 5.55 | 199.80 |
+| Line                       | Working       | Amount |
+| -------------------------- | ------------- | ------ |
+| Wharfage — 40 ft container | 12 × 44.44    | 533.28 |
+| Container handling         | 12 × 33.33    | 399.96 |
+| Container storage          | 12 × 3 × 5.55 | 199.80 |
 
 Maritime, 220 ft × 2 days — **and the vessel type genuinely moves the figure**:
 cruise `220 × 2 × 2.22 = 976.80`, commercial `220 × 2 × 1.11 = 488.40`, with
@@ -316,27 +316,41 @@ clean · **839 vitest** · build ✓ · budget **133.7 kB gz** · **check:integr
 126 passed** · **check:a11y 0 violations** (13 routes × 2 viewports, 0 manual
 failures).
 
-**Frozen commit:** `4c0b0e3`
+**Frozen commit:** `72c6990` — _"a unit symbol takes no plural, and the T-23
+rehearsal record"_, on `feat/connect-halves-and-import-mockups`.
+
+That is the commit every figure above was measured against. To return to it
+exactly:
+
+```bash
+git checkout 72c6990
+cd backend  && uv run python scripts/build_index.py        # 115 indexed, 4 rejected
+lsof -ti:8000 | xargs kill 2>/dev/null
+OPS_DATA_SOURCE=fixture uv run uvicorn app.main:app
+cd frontend && npm install && npm run dev
+```
+
+Anything committed after this has not been rehearsed.
 
 ---
 
 ## If something fails
 
-| Symptom | First thing |
-|---|---|
-| Page loads, answers do not | CORS. `ALLOWED_ORIGINS` must include this page's origin. The fix is never in the frontend |
-| "You appear to be offline" but wifi works | Same, or the backend is down. The browser cannot tell a CORS refusal from being offline |
-| Screens say "no source configured" | A **stale backend** on `:8000` answering with its old config. `lsof -ti:8000`. This has happened twice |
-| Everything is slow | Use the chips and keep talking. Say so plainly — a slow demo you narrate beats a fast one you apologise for |
-| A rate limit trips | Expected, and designed. "Several people are asking at once." The Send button shows a countdown |
-| **Anything unrecoverable** | `VITE_ENABLE_MOCKS=true npm run dev`, or the tab already open at **`/dev/rehearsal`** — the recorded conversation, no network at all |
+| Symptom                                   | First thing                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Page loads, answers do not                | CORS. `ALLOWED_ORIGINS` must include this page's origin. The fix is never in the frontend                                            |
+| "You appear to be offline" but wifi works | Same, or the backend is down. The browser cannot tell a CORS refusal from being offline                                              |
+| Screens say "no source configured"        | A **stale backend** on `:8000` answering with its old config. `lsof -ti:8000`. This has happened twice                               |
+| Everything is slow                        | Use the chips and keep talking. Say so plainly — a slow demo you narrate beats a fast one you apologise for                          |
+| A rate limit trips                        | Expected, and designed. "Several people are asking at once." The Send button shows a countdown                                       |
+| **Anything unrecoverable**                | `VITE_ENABLE_MOCKS=true npm run dev`, or the tab already open at **`/dev/rehearsal`** — the recorded conversation, no network at all |
 
 Have `/dev/rehearsal` **open in a background tab before you start**. Reaching it
 should not involve typing a URL in front of people.
 
 Say the line out loud once, beforehand:
 
-> *"The venue wifi has gone — here is the same conversation, recorded earlier."*
+> _"The venue wifi has gone — here is the same conversation, recorded earlier."_
 
 Rehearsing that sentence is what makes it sound calm rather than apologetic.
 **Composure beats perfection.** Every failure on this list has a next action, and
