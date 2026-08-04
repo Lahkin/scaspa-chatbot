@@ -40,20 +40,71 @@ import type { MarineAdvisory, OperationalAdvisory } from '@/lib/types';
  * therefore unreachable until the wire grows them, exactly like the other gated
  * components in `08-blocked-and-forbidden.md`: built, not enabled, and waiting
  * on a named field rather than on a guess.
+ *
+ * ## One component, two boards — T-16
+ *
+ * There were two of these. This one, and a second `AdvisoryPanel` in
+ * `console/SidePanels.tsx`, rendering the same `OperationalAdvisory` in the
+ * console palette. Both call sites passed the identical prop
+ * (`advisory={data?.advisory ?? null}`), which is what gave the duplication
+ * away: not two components with different jobs, one component with two skins.
+ *
+ * `tone` picks the board. **Neither rendering changed** in the merge:
+ *
+ * | | `public` — §5.6 | `console` — §6.8 |
+ * | --- | --- | --- |
+ * | palette | `--surface-muted` / `--caution-tint` | `--ops-surface` |
+ * | heading | none | "Aviation advisory" |
+ * | fields | headline, detail | headline, temperature, detail, systems status |
+ * | attribution gate | yes — see above | not drawn on this board |
+ *
+ * The field difference is deliberate and left alone. Unifying it would put a
+ * temperature reading on the public flights page, which §5.6 does not draw —
+ * a design change wearing a refactor's clothes.
  */
 export function OperationalAdvisoryPanel({
   advisory,
+  tone = 'public',
   publishedBy,
   at,
 }: {
-  advisory: OperationalAdvisory | null;
+  advisory: OperationalAdvisory | null | undefined;
+  /** Which board draws it. `console` is §6.8's aviation panel. */
+  tone?: 'public' | 'console';
   /** **BLOCKED** — needs `published_by` on `OperationalAdvisory`. */
   publishedBy?: string | undefined;
   /** **BLOCKED** — needs `published_at` on `OperationalAdvisory`. */
   at?: string | null | undefined;
 }) {
-  // Not rendered at all — see above.
+  // Not rendered at all — see above. True on both boards.
   if (!advisory) return null;
+
+  if (tone === 'console') {
+    return (
+      <section
+        aria-labelledby="advisory-heading"
+        className="rounded-lg border border-ops-outline-variant bg-ops-surface p-4"
+      >
+        <h2 id="advisory-heading" className="text-small font-semibold text-ops-ink">
+          Aviation advisory
+        </h2>
+        <p className="mt-1 text-body text-ops-ink">
+          {advisory.headline}
+          {advisory.temperature_c !== null && advisory.temperature_c !== undefined ? (
+            <span className="tabular"> · {advisory.temperature_c}°C</span>
+          ) : null}
+        </p>
+        {advisory.detail ? (
+          <p className="text-caption text-ops-ink-variant">{advisory.detail}</p>
+        ) : null}
+        {advisory.systems_status ? (
+          <p className="mt-2 border-t border-ops-outline-variant pt-2 text-caption text-ops-ink-variant">
+            {advisory.systems_status}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
 
   const attributed = Boolean(publishedBy);
 

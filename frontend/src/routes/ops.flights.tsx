@@ -4,7 +4,7 @@ import { Button, Input } from '@/components/ui';
 import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
 import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
 import { Pagination } from '@/components/ops/console/Pagination';
-import { AdvisoryPanel } from '@/components/ops/console/SidePanels';
+import { OperationalAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
 import { GateMap } from '@/components/ops/GateMap';
 import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsListState } from '@/components/ops/OpsPage';
@@ -49,7 +49,7 @@ function OpsFlightsRoute() {
       }
       aside={
         <>
-          <AdvisoryPanel advisory={data?.advisory ?? null} />
+          <OperationalAdvisoryPanel advisory={data?.advisory ?? null} tone="console" />
           {/*
             §6.8. `active` and `total` are the SERVER's figures — "never
             recomputed from the visible rows, which would drop to zero under a

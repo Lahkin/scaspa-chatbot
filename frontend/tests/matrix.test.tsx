@@ -405,6 +405,23 @@ describe('one event, one treatment — board 22', () => {
     ]);
   });
 
+  it('the operational advisory is one component, drawing both boards', () => {
+    /*
+     * T-16. There were two: this one, and an `AdvisoryPanel` in
+     * `console/SidePanels.tsx` rendering the same `OperationalAdvisory` in the
+     * console palette. Both call sites passed the identical prop, which is what
+     * gave it away — one component with two skins, not two components.
+     *
+     * The failure mode is the marine panel's, one screen over: two renderings of
+     * one payload drift, and the drift is invisible because each has passing
+     * tests of its own. This assertion is the cheap guard against a third.
+     *
+     * `filesRendering` strips comments first, so the note left behind in
+     * SidePanels.tsx explaining where the panel went does not trip it.
+     */
+    expect(filesRendering(/Aviation advisory/)).toEqual(['src/components/ops/AdvisoryPanel.tsx']);
+  });
+
   it('the escalation block is one component, never re-typed', () => {
     // §7.1: "Every error is followed by the escalation block." `ErrorState` used
     // to re-type the three phone lines and the postal address into a panel of

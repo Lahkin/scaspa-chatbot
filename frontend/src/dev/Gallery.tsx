@@ -950,6 +950,15 @@ function OperationsTableSection() {
           </p>
         </div>
       </Section>
+
+      <Section
+        title="Operational advisory — the console skin, §6.8"
+        note="The same component and the same payload as above, with tone=&quot;console&quot;. There used to be a second component for this in console/SidePanels.tsx; T-16 merged them. It draws two fields the public board does not — temperature and systems status — which is why the merge kept the boards apart rather than unifying their contents."
+      >
+        <div className="max-w-measure bg-ops-bg p-4">
+          <OperationalAdvisoryPanel advisory={GALLERY_ADVISORY} tone="console" />
+        </div>
+      </Section>
     </>
   );
 }

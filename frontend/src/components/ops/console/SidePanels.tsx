@@ -1,10 +1,10 @@
 import { buildActivityFeed } from '@/features/ops/activity';
-import type { DataSource, OperationalAdvisory, VesselArrival } from '@/lib/types';
+import type { DataSource, VesselArrival } from '@/lib/types';
 
 /**
- * The console's two remaining side panels.
+ * The console's one remaining side panel.
  *
- * ## Three of them moved out, because they existed twice
+ * ## Four of them moved out, because they existed twice
  *
  * Positions, gates and marine advisories were built here in the pre-handoff
  * palette **and** again under `ops/` to §6.7–6.9. Two implementations of the
@@ -17,8 +17,12 @@ import type { DataSource, OperationalAdvisory, VesselArrival } from '@/lib/types
  * tests reads as covered, which is what got `VesselCard` and `FlightCard`
  * deleted on board 17.
  *
- * What stays is what the handoff does not draw and this console still needs: a
- * restatement of the arrivals it sits beside, and the aviation advisory.
+ * The fourth was the aviation advisory, and it went the same way for the same
+ * reason — T-16, see the note further down. `OperationalAdvisoryPanel` now
+ * draws both boards from one component.
+ *
+ * What stays is the one thing the handoff does not draw and this console still
+ * needs: a restatement of the arrivals it sits beside.
  */
 
 /**
@@ -92,38 +96,12 @@ export function ActivityPanel({
   );
 }
 
-/**
- * The weather and runway panel.
+/*
+ * The weather and runway panel used to live here, as a second `AdvisoryPanel`.
  *
- * Unlike the two above, this one has a real source: `advisory` is a passthrough
- * of whatever the feed published. Nothing is forecast, inferred or converted —
- * if the feed says nothing, the panel does not appear.
+ * It rendered the same `OperationalAdvisory` as
+ * `components/ops/AdvisoryPanel.tsx`, from an identical prop, differing only in
+ * palette and in the two extra fields this board draws. T-16 merged the two:
+ * it is now `<OperationalAdvisoryPanel tone="console" />`, and the console
+ * rendering came across unchanged.
  */
-export function AdvisoryPanel({ advisory }: { advisory: OperationalAdvisory | null | undefined }) {
-  if (!advisory) return null;
-
-  return (
-    <section
-      aria-labelledby="advisory-heading"
-      className="rounded-lg border border-ops-outline-variant bg-ops-surface p-4"
-    >
-      <h2 id="advisory-heading" className="text-small font-semibold text-ops-ink">
-        Aviation advisory
-      </h2>
-      <p className="mt-1 text-body text-ops-ink">
-        {advisory.headline}
-        {advisory.temperature_c !== null && advisory.temperature_c !== undefined ? (
-          <span className="tabular"> · {advisory.temperature_c}°C</span>
-        ) : null}
-      </p>
-      {advisory.detail ? (
-        <p className="text-caption text-ops-ink-variant">{advisory.detail}</p>
-      ) : null}
-      {advisory.systems_status ? (
-        <p className="mt-2 border-t border-ops-outline-variant pt-2 text-caption text-ops-ink-variant">
-          {advisory.systems_status}
-        </p>
-      ) : null}
-    </section>
-  );
-}
