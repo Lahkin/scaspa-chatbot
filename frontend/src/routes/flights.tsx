@@ -4,7 +4,8 @@ import { Icon, Segmented } from '@/components/ui';
 import { AirlineAvatar } from '@/components/ops/AirlineAvatar';
 import { OperationalAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
 import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
-import { OpsPage } from '@/components/ops/OpsPage';
+import { OpsShell } from '@/components/shells/OpsShell';
+import { SourceNotice } from '@/components/ops/SourceNotice';
 import { OpsCell, OpsRow, OpsRowCard, OpsTable, type Density } from '@/components/ops/OpsTable';
 import {
   FilteredOutState,
@@ -134,13 +135,13 @@ function FlightsRoute() {
   );
 
   return (
-    <OpsPage
+    <OpsShell
       title="Flight movements"
       intro="Arrivals and departures at R. L. Bradshaw International."
-      source={source}
     >
-      {/* §5.2's banner is `OpsPage`'s, on every operations screen. This screen
-          rendered a second copy of it directly underneath. */}
+      {/* §5.2's banner — one per screen, rendered here now that the shell
+          carries no data of its own. See the note in `routes/vessels.tsx`. */}
+      {source ? <SourceNotice source={source} /> : null}
 
       {/*
         §5.3: three tiles, and any null takes the em-dash treatment.
@@ -251,7 +252,7 @@ function FlightsRoute() {
           ))}
         </OpsTable>
       )}
-    </OpsPage>
+    </OpsShell>
   );
 }
 

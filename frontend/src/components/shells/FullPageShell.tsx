@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { ChatCore } from '@/components/chat/ChatCore';
 import { ChatSessionProvider, useChatSessionContext } from '@/features/chat/ChatSessionContext';
@@ -57,18 +57,52 @@ import { SourcePanel } from './SourcePanel';
  * software keyboard opens; this one cannot, because there is nothing to scroll the
  * composer out of.
  */
-export function FullPageShell() {
+export interface FullPageShellProps {
+  /**
+   * The screen title in the header row. Defaults to the chat screen's.
+   *
+   * `| undefined` on every prop here, not just `?`: `exactOptionalPropertyTypes`
+   * is on, so an omitted key and an explicit `undefined` are different types and
+   * a wrapper forwarding its own optional props needs the second.
+   */
+  title?: string | undefined;
+  /**
+   * The main column's content. **Absent means chat**, which is what every
+   * caller meant before the operations screens moved in here.
+   *
+   * When it is present the source panel goes with it — docked column, overlay
+   * sheet and header button alike. Sources are citations, a tariff table has
+   * none, and an empty "Sources" panel beside one implies the rows were cited.
+   */
+  children?: ReactNode | undefined;
+  /**
+   * What a sidebar starter question does. Defaults to sending it into this
+   * page's own conversation.
+   *
+   * A screen with no transcript has to override it, or the question is sent
+   * somewhere the user cannot see it. `OpsShell` passes the navigating version.
+   */
+  onAsk?: ((question: string) => void) | undefined;
+}
+
+export function FullPageShell({ title, children, onAsk }: FullPageShellProps = {}) {
   // The provider wraps the sidebar, `ChatCore` and the source panel: a chip
   // rendered inside the transcript has to open a panel that is its sibling, and
   // a starter question in the sidebar has to send through the same path.
+  //
+  // It wraps the operations screens too, even though they hold no conversation:
+  // the sidebar reads `recordedQuestions` off the transcript, and a provider per
+  // route would give each screen its own empty one.
   return (
     <ChatSessionProvider>
-      <FullPageShellInner />
+      <FullPageShellInner title={title} onAsk={onAsk}>
+        {children}
+      </FullPageShellInner>
     </ChatSessionProvider>
   );
 }
 
-function FullPageShellInner() {
+function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
   const {
     entries,
     grounding,
@@ -148,9 +182,18 @@ function FullPageShellInner() {
     ),
   ];
 
+  /**
+   * Chat is the default because it was the only case until the operations
+   * screens moved into this shell. `children` is the discriminator rather than a
+   * `variant` prop: a screen either supplies its own main column or it does not,
+   * and there is no third state to get wrong.
+   */
+  const isChat = children === undefined;
+  const ask = onAsk ?? ((question: string) => void send(question));
+
   const sidebar = (
     <Sidebar
-      onAsk={(question) => void send(question)}
+      onAsk={ask}
       recordedQuestions={recordedQuestions}
       dataSource={opsSource}
       profile={operator?.profile ?? null}
@@ -223,7 +266,7 @@ function FullPageShellInner() {
         </span>
 
         <h1 className="hidden min-w-0 flex-1 truncate text-h3 font-semibold text-ink lg:block">
-          New question
+          {title ?? 'New question'}
         </h1>
         <span className="flex-1 lg:hidden" />
 
@@ -250,21 +293,33 @@ function FullPageShellInner() {
         {/* Sources are reachable from the header below xl, where the panel is
             an overlay. At xl it is docked and permanently visible — two ways
             to reach the same panel is one too many. */}
-        <span className="xl:hidden">
-          <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
-            <Icon name="file" size={16} />
-          </IconButton>
-        </span>
+        {isChat ? (
+          <span className="xl:hidden">
+            <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
+              <Icon name="file" size={16} />
+            </IconButton>
+          </span>
+        ) : null}
 
         {/*
           "Talk to a person" is not a fallback tucked into a footer. Someone who
           has decided the assistant cannot help them has already spent patience
           they did not have, so the way out is on screen from the start.
         */}
+        {/*
+          44px under a thumb, 32px on a desktop — §7's touch minimum applied at
+          ≤640px, the same `h-11 sm:h-…` treatment `Button`, `Input`, `IconButton`
+          and the toolbar fields already carry.
+
+          It was a flat 32px at every width. That was one control on one route
+          while only `/chat` used this shell; moving four operations screens in
+          here would have propagated it to five, and `npm run check:responsive`
+          reports it at 320 and 390 on every one of them.
+        */}
         <a
           href={SCASPA_PHONE_HREF}
           aria-label="Telephone the Authority"
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-button border border-border text-ink-muted hover:bg-surface-3 hover:text-ink"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-button border border-border text-ink-muted hover:bg-surface-3 hover:text-ink sm:size-8"
         >
           <Icon name="phone" size={16} />
         </a>
@@ -311,24 +366,38 @@ function FullPageShellInner() {
 
           See `features/i18n/locales.ts` for the full reasoning.
         */}
-        <main id="main" lang="en" className="min-w-0 flex-1">
-          <ChatCore />
+        {/*
+          `overflow-y-auto` for an operations screen and NOT for chat.
+
+          The shell is a fixed `dvh` column that never scrolls, and `ChatCore`
+          owns its own scrolling transcript — giving this element a scrollbar too
+          would nest one inside another. A tariff table has no such inner region,
+          so without this the rows below the fold are simply unreachable.
+        */}
+        <main
+          id="main"
+          lang="en"
+          className={cn('min-w-0 flex-1', isChat ? undefined : 'overflow-y-auto')}
+        >
+          {children ?? <ChatCore />}
         </main>
 
         {/* Docked sources at xl only. Below that the sidebar has the width, and
             a third column would leave the conversation unreadable. */}
-        <aside
-          aria-label="Sources"
-          className="hidden w-80 shrink-0 border-l border-border bg-surface-muted xl:block"
-        >
-          <SourcePanel
-            entries={entries}
-            grounding={grounding}
-            highlighted={highlighted}
-            onHighlight={setHighlighted}
-            scrollTo={scrollTo}
-          />
-        </aside>
+        {isChat ? (
+          <aside
+            aria-label="Sources"
+            className="hidden w-80 shrink-0 border-l border-border bg-surface-muted xl:block"
+          >
+            <SourcePanel
+              entries={entries}
+              grounding={grounding}
+              highlighted={highlighted}
+              onHighlight={setHighlighted}
+              scrollTo={scrollTo}
+            />
+          </aside>
+        ) : null}
       </div>
 
       {/* The drawer, below lg. Same `sidebar` element as the docked rail, so the
@@ -356,18 +425,20 @@ function FullPageShellInner() {
           the two placements cannot drift apart. `Sheet` is a bottom sheet below
           `md` and a right-hand panel from `md` up, which is exactly the split
           the table in this file's docstring calls for. */}
-      <div className="xl:hidden">
-        <Sheet open={panelOpen} onClose={() => setPanelOpen(false)} title="Sources">
-          <SourcePanel
-            headed={false}
-            entries={entries}
-            grounding={grounding}
-            highlighted={highlighted}
-            onHighlight={setHighlighted}
-            scrollTo={scrollTo}
-          />
-        </Sheet>
-      </div>
+      {isChat ? (
+        <div className="xl:hidden">
+          <Sheet open={panelOpen} onClose={() => setPanelOpen(false)} title="Sources">
+            <SourcePanel
+              headed={false}
+              entries={entries}
+              grounding={grounding}
+              highlighted={highlighted}
+              onHighlight={setHighlighted}
+              scrollTo={scrollTo}
+            />
+          </Sheet>
+        </div>
+      ) : null}
 
       {/*
         About SCASPA, as a sheet rather than a route.

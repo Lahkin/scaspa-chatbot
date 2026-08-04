@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { OpsPage } from '@/components/ops/OpsPage';
+import { OpsShell } from '@/components/shells/OpsShell';
 import { ContactCard } from '@/components/ops/ContactCard';
 import { EmergencyStrip } from '@/components/ops/EmergencyStrip';
 import { EnquiryForm } from '@/components/ops/EnquiryForm';
@@ -58,7 +58,7 @@ function SupportRoute() {
   };
 
   return (
-    <OpsPage
+    <OpsShell
       title="Contact SCASPA"
       intro="Published contact routes, and a way to leave an enquiry for a department."
     >
@@ -108,7 +108,7 @@ function SupportRoute() {
           )}
         </div>
       </div>
-    </OpsPage>
+    </OpsShell>
   );
 }
 
