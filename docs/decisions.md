@@ -2501,6 +2501,38 @@ The result is a screen that *behaves* exactly like the real thing — every
 column, every chip, every null case, every arithmetic path — and contains not
 one figure a reader could act on.
 
+#### Times are realistic, and that is the rule rather than an oversight
+
+The repeated-digit convention stops at the clock. **Times are generated
+realistic** — `06:40`, `11:15`, `17:25` — offset from the current time so the
+board is never stale-looking.
+
+The reason is that the convention stops working here and starts doing harm. A
+board where every arrival lands at `11:11` and `22:22` does not read as
+*labelled*; it reads as **broken**, and a reader who concludes the screen is
+malfunctioning has stopped reading the notice at the top of it. Worse, it
+destroys the thing the fixture exists for: sorting, the ETA/ATA distinction, the
+struck-through revised time and the "due in" ordering are all exercised only by
+times that behave like times.
+
+The synthetic signal is carried by **names, IMO numbers, carrier codes, flight
+numbers, money, and layer 4's render treatment** — six independent tells. It
+does not need a seventh at the cost of the clock.
+
+Two constraints on generating them:
+
+- **Offset from now, never absolute.** A fixture with hardcoded dates is stale
+  the next morning and reads as a dead feed.
+- **Deterministic — no RNG.** Fixed offsets and fixed minute values, so the same
+  code produces the same board on every call and a test can assert against it.
+  If randomness is ever introduced here it must be explicitly seeded; an
+  unseeded fixture is a test that fails once a week for no reason.
+
+One consequence worth stating: **the minute must be set per record, not
+inherited from the clock.** Deriving every time from `now()` and zeroing only
+the seconds gives every row on the board the same minute — `14:37`, `16:37`,
+`22:37` — which is its own tell, and a sillier one than repeated digits.
+
 **This is a trade, and it is worth naming.** Using real carrier codes and real
 route cities would demo better. It would also put a plausible delayed-arrival
 claim on screen, and a screenshot of that is indistinguishable from an

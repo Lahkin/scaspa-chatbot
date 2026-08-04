@@ -9,6 +9,40 @@ acted on.
 
 ---
 
+## From M3 (T-15)
+
+### 16. `check:a11y` passes in this working copy only, and `npm ci` loses it
+
+M3 reports **0 axe violations across 26 route × viewport combinations**, and
+that result is real — it was run, not assumed. But it is **not reproducible from
+a clean checkout**, and should not be read as though it were.
+
+The harness needs two dependencies that are deliberately **not saved**
+(`scripts/a11y-check.mjs:11-28` explains why: CI has no browsers and `npm ci`
+should not download hundreds of megabytes of them):
+
+```bash
+npm i -D --no-save playwright@1.56.1 @axe-core/playwright@4.11.0   # one command
+npx playwright install chromium
+```
+
+They are installed in this working copy now. **`npm ci`, a fresh clone, or a
+second `--no-save` install all remove them** — the last because `--no-save`
+rewrites `node_modules` from `package.json`, which is why both must go in one
+command. It also needs the backend running, and the harness serves on `:4400`,
+so that origin must be in `ALLOWED_ORIGINS`.
+
+So the gate is **runnable on demand and green when run**, not continuously
+enforced. It is absent from `.github/workflows/frontend.yml`, which runs build,
+lint, format:check, typecheck, test and check:budget. Whoever picks this up
+should either save the dependencies and accept the CI cost, or keep it as a
+release-time check that someone is accountable for running — but it should not
+appear in a status table beside gates that CI actually enforces.
+
+Not this week's fix.
+
+---
+
 ## From the M2 session (formatting fix, eval correction, M2 proper)
 
 ### 12. Query rewrite drops the ellipsis follow-up — the one false refuse
