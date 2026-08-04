@@ -201,6 +201,15 @@ time.
 is not a gate. It reported green each time it ran; what it could not do was fail
 when it was missing.
 
+**This also closes reconciliation finding 0.20**, open since before M1.
+`design/IMPLEMENTATION_PROGRESS.md` §8 claimed "a11y 0 axe violations", and the
+M1 reconciliation downgraded that to `PARTIAL — not reproducible from a clean
+checkout`, because the harness needed two unsaved dependencies and a manual
+install. It is reproducible now: a plain `npm install` restores both, verified by
+deleting `playwright`, `playwright-core` and `@axe-core/playwright` and running
+it. The §8 claim can be read at face value from this commit onward — though the
+gate is still **not in CI**, so it is green-when-run rather than enforced.
+
 ---
 
 <details>
