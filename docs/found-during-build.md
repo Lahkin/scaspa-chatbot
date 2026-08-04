@@ -116,7 +116,7 @@ that can empty the table must appear in that panel**, because the panel is the
 only thing on screen once it does. `/vessels` already did this for status, which
 is why the gap was invisible until a second filter arrived.
 
-### 25. There is no facility filter in the interface
+### 25. There was no facility filter in the interface — **CLOSED**
 
 `GET /api/vessels?facility=` and `/api/flights?facility=` both filter correctly —
 that was T-06 and M4a, and it was verified at the API. **No control reaches it.**
@@ -132,10 +132,24 @@ So the field is reachable by curl and by nothing else. It is not WIRED-EMPTY in
 the audit's sense — it is **not wired at all**, which the audit's own category
 would have missed the same way F-23 did (entry 18).
 
-Not fixed for the demonstration: adding a filter control to two screens on the
-last working day is a change to the screens being demonstrated, for a filter over
-four facilities that fit on one page. `demo-day.md` §5 now says not to promise it
-and gives the honest answer if asked.
+**Wired in M5** after sizing it at well under an hour — the pieces were all in
+place. `Facility` already existed as a client type and was already on every row
+type; `queryString(params)` serialises whatever it is given, so the API side was
+two lines; and the MSW handlers had filtered on `facility` since M4c, because
+`applyEquals` was written generically. What was missing was a `<select>` and the
+parameter, on two screens.
+
+The options live in `features/ops/facilities.ts`, shared rather than declared per
+route — two copies would drift the moment a fifth facility is added, which is the
+defect T-16 merged away one component over.
+
+Verified against the fixture distribution rather than asserted: `/vessels` Deep
+Water Harbour 5, Port Zante 3, Basseterre Ferry Terminal 2, All 11; `/flights`
+R. L. Bradshaw 7, Port Zante 0. `'all'` sends **no parameter** rather than
+`facility=all`, which would match no row and empty the table on the option named
+"All facilities" — tested in both directions.
+
+It also surfaced entry 27, which is the more useful finding of the two.
 
 ### 24 (continued below). Also worth noting from the same pass
 
