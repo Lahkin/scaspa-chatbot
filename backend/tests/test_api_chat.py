@@ -404,7 +404,8 @@ def test_a_greeting_is_answered_on_the_streaming_path_too(api) -> None:
     done = next(data for name, data in events if name == "done")
     # Not a refusal on this path either — the two must agree.
     assert done["refusal"] is False
-    assert done["grounded"] is False
+    # Grounded, so the client draws no "could not fully verify" notice.
+    assert done["grounded"] is True
     assert [data for name, data in events if name == "citations"] == [{"citations": []}]
 
 

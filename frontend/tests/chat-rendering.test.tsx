@@ -481,6 +481,84 @@ function message(partial: Partial<Message> & Pick<Message, 'id' | 'role' | 'text
 }
 
 describe('MessageBubble', () => {
+  it('draws no verification warning on a greeting', () => {
+    /*
+     * `UngroundedNotice` — "I could not fully verify this — please confirm with
+     * SCASPA" — renders on any assistant turn where `grounded` is false. The
+     * greeting gate returned `grounded: false` on the reasoning that nothing had
+     * been retrieved, so "hi" was answered warmly and then undercut by an amber
+     * warning about a claim it never made, on the interaction demo-day.md opens
+     * with.
+     *
+     * `grounded` asks whether every id and figure traces to a retrieved row. A
+     * greeting has neither, so the answer is yes, vacuously — and the backend
+     * now says so. This asserts the rendering rather than the flag, because the
+     * flag was already asserted and the defect was still on screen.
+     */
+    render(
+      <MessageBubble
+        message={message({
+          id: 'g1',
+          role: 'assistant',
+          text: 'Hello. I answer questions about SCASPA.',
+          grounded: true,
+          refusal: false,
+          citations: [],
+        })}
+      />
+    );
+
+    expect(screen.queryByText(/could not fully verify/i)).toBeNull();
+    // And no escalation handoff: ending "hello" with a telephone number reads
+    // as being shown the door.
+    expect(screen.queryByText(/Speak to the Authority/i)).toBeNull();
+    expect(screen.queryByText(/Call SCASPA on/i)).toBeNull();
+  });
+
+  it('still warns when an answer genuinely could not be verified', () => {
+    // The counterweight. If this ever stops firing, the fix above has been
+    // over-applied and the product has quietly stopped withdrawing confidence.
+    render(
+      <MessageBubble
+        message={message({
+          id: 'g2',
+          role: 'assistant',
+          text: 'The fare is XCD 44.44.',
+          grounded: false,
+          refusal: false,
+          citations: [],
+        })}
+      />
+    );
+
+    expect(screen.getByText(/could not fully verify/i)).toBeInTheDocument();
+  });
+
+  it('lets the bubble column fill its row, so a short message is one line', () => {
+    /*
+     * "hi" rendered as "h" over "i".
+     *
+     * The column is a flex item; without a width it shrinks to fit, and
+     * `min-w-0` lets it shrink below its own min-content. Measured in a browser:
+     * the column collapsed to 46px inside a 688px row, and the bubble — capped
+     * at 76% of that 46px — wrapped every character onto its own line. A
+     * one-character message was 34px wide, a two-character message 35px.
+     *
+     * jsdom does no layout, so this asserts the cause rather than the symptom.
+     * The symptom was verified in Chromium: with the fix, one, two and eleven
+     * character messages all render on one line, and a long one still wraps at
+     * 523px — 76% of the row, which is the cap that was always intended.
+     */
+    const { container } = render(
+      <MessageBubble message={message({ id: 'u-short', role: 'user', text: 'hi' })} />
+    );
+
+    const column = container.firstElementChild!.firstElementChild!;
+    expect(column.className).toContain('w-full');
+    expect(column.className).toContain('max-w-measure');
+    expect(column.className).toContain('items-end');
+  });
+
   it('renders user text as plain text, never as markdown', () => {
     render(
       <MessageBubble message={message({ id: 'u1', role: 'user', text: 'Is **this** bold?' })} />

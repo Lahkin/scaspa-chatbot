@@ -84,7 +84,23 @@ export function MessageBubble({
       data-role={message.role}
       data-state={message.refusal ? 'refusal' : grounded ? 'grounded' : 'ungrounded'}
     >
-      <div className={cn('flex max-w-measure min-w-0 flex-col', isUser && 'items-end')}>
+      {/*
+        `w-full` is load-bearing, and its absence produced one of the stranger
+        defects in this project: **"hi" rendered as "h" over "i".**
+
+        This column is a flex item. Without a width it shrinks to fit, and
+        `min-w-0` lets it shrink below its own min-content — so the column
+        collapsed to 46px inside a 688px row, and the bubble, capped at 76% of
+        a 46px parent, wrapped every character onto its own line. Measured: a
+        one-character message was 34px wide and a two-character message 35px,
+        which is padding plus almost nothing.
+
+        `w-full` makes the column fill the row; `max-w-measure` still caps it,
+        `items-end` still right-aligns the user's bubble, and the bubble still
+        shrinks to its own content within that. The 76% cap now measures
+        against the real width it was always written for.
+      */}
+      <div className={cn('flex w-full max-w-measure min-w-0 flex-col', isUser && 'items-end')}>
         {/*
           The live view, while the user is waiting. Handed over to `ToolTrace`
           the moment the stream settles — see the note beside it below.

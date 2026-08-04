@@ -492,15 +492,29 @@ def _refusal_result(category: str, elapsed_ms: int) -> AnswerResult:
 def _greeting_result(message: str, elapsed_ms: int) -> AnswerResult:
     """The conversational reply, identical on both paths.
 
-    `refusal` is **False**: nothing was refused and nothing failed. It is not
-    `grounded` either — there is no retrieved row behind it, because there is no
-    factual claim in it to ground. Both flags are read by the client and by the
-    observability record, so getting them wrong would file every "hello" as a
-    refusal and make the refusal rate meaningless.
+    `refusal` is **False**: nothing was refused and nothing failed. Filing every
+    "hello" as a refusal would make the refusal rate meaningless.
+
+    `grounded` is **True**, which reads oddly next to `citations: []` and is the
+    correct answer to the question the field actually asks. Its definition is
+    *"every id and figure traces to a retrieved row"* — and this message contains
+    no id and no figure, so every one of them traces, vacuously.
+
+    It was `False` first, on the reasoning that nothing had been retrieved. That
+    is a different question, and answering it here had a visible consequence:
+    `MessageBubble` renders `UngroundedNotice` — *"I could not fully verify this
+    — please confirm with SCASPA"* — on any assistant turn that is not grounded.
+    So "hi" was answered warmly and then undercut by an amber warning about a
+    claim it had not made, on the interaction `docs/demo-day.md` opens with.
+
+    Setting it True is safe in one direction only, and that is the direction
+    that matters: `grounded` is **never used to add confidence** — there is no
+    "verified" badge anywhere in this product, by design — so the only effect is
+    that nothing is withdrawn from a message with nothing to withdraw.
     """
     return AnswerResult(
         answer=message,
-        grounded=False,
+        grounded=True,
         refusal=False,
         citations=[],
         retrieved=[],

@@ -489,7 +489,11 @@ def test_a_greeting_never_reaches_retrieval(indexed, fake_embeddings) -> None:
     # Not a refusal. Filing "hello" as a refusal makes the refusal rate
     # meaningless and tells the client the assistant declined to help.
     assert result.refusal is False
-    assert result.grounded is False
+    # Grounded, vacuously — no id and no figure, so every one of them traces.
+    # False here made `MessageBubble` render `UngroundedNotice`: an amber
+    # "I could not fully verify this" under a message that made no claim, on
+    # the interaction demo-day.md opens with. See `_greeting_result`.
+    assert result.grounded is True
     assert result.citations == []
     assert result.retrieved == []
     assert result.model is None
@@ -509,6 +513,8 @@ def test_the_greeting_states_no_fact_anyone_could_act_on(indexed, fake_embedding
     # No escalation block: ending "hello" with a telephone number reads as
     # being shown the door.
     assert ESCALATION_BLOCK not in result.answer
+    assert "465-8121" not in result.answer, "no telephone number in either form"
+    assert "465 8121" not in result.answer
 
 
 def test_a_polite_question_is_still_answered_normally(indexed, fake_embeddings) -> None:
@@ -542,3 +548,6 @@ def test_a_closing_is_answered_as_a_closing(indexed, fake_embeddings) -> None:
     assert result.answer == CLOSING_MESSAGE
     assert result.answer != GREETING_MESSAGE
     assert result.refusal is False
+    # Same reasoning as the greeting: nothing to verify, so nothing is withdrawn.
+    assert result.grounded is True
+    assert ESCALATION_BLOCK not in result.answer

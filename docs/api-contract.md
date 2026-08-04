@@ -106,18 +106,29 @@ for when the _service_ broke, not for when the _answer_ is "I don't know".
 both `/api/chat` and `/api/chat/stream`. They return `200` with:
 
 ```
-refusal: false      grounded: false      citations: []
+refusal: false      grounded: true      citations: []
 ```
 
 **`refusal` is `false`** — nothing was declined. Filing a greeting as a refusal
 would make the refusal rate meaningless and tell the client the assistant would
-not help. `grounded` is `false` because there is no retrieved row behind it,
-there being no factual claim in it to ground; the message states no fee, time or
-statistic, so there is nothing to cite.
+not help.
 
-Clients should render it as an ordinary answer with an empty sources panel, and
-must not attach the escalation block: ending "hello" with a telephone number
-reads as being shown the door.
+**`grounded` is `true` with no citations**, which looks contradictory and is the
+correct answer to the question the field asks: _every id and figure traces to a
+retrieved row_. A greeting contains no id and no figure, so every one of them
+traces, vacuously. The message states no fee, time or statistic, so there is
+nothing to cite and nothing to withdraw.
+
+> It was `false` first, on the reasoning that nothing had been retrieved — a
+> different question, and answering it here put an amber _"I could not fully
+> verify this — please confirm with SCASPA"_ under the word "hello". `grounded`
+> is only ever used to **take confidence away**, never to add it (there is no
+> "verified" badge in this product, by design), so `true` is safe in the one
+> direction that matters.
+
+Clients should render it as an ordinary answer with an empty sources panel, no
+verification notice, and no escalation block: ending "hello" with a telephone
+number reads as being shown the door.
 
 Anything containing a question is **not** a greeting, however politely it opens —
 `"hi, how much is a 40ft container?"` is retrieved and answered normally.
