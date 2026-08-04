@@ -161,7 +161,52 @@ because the gap was in the router signature rather than in the data.
 
 ## From M3 (T-15)
 
-### 16. `check:a11y` passes in this working copy only, and `npm ci` loses it
+### 16. `check:a11y` was runnable only by luck — **CLOSED**, and the diagnosis failed
+
+**Resolved: both dependencies are saved devDependencies**, pinned exactly
+(`playwright@1.56.1`, `@axe-core/playwright@4.11.0`).
+
+The entry below said `npm ci` or a fresh clone would lose them. That was true and
+too generous: **they disappeared three times in a single working session**,
+without a clone, a `npm ci`, or any install other than the `--no-save` ones that
+put them there.
+
+**Ten minutes of diagnosis did not find the cause, and the negative result is
+worth keeping.** None of these evicts an unsaved package — each was tested
+directly, with the package present before and after:
+
+```
+npx prettier · npm run typecheck · npm run build
+npm run test · npm run check:budget · npm run lint · npm run format:check
+```
+
+There is no `preinstall`, `postinstall` or `prepare` hook in `package.json`, and
+no script in `frontend/scripts/` runs `npm ci`, `npm prune` or `npm install`.
+`npm`'s own log directory keeps only ten files and had already rotated past the
+evidence, so the invocation that did it is not recoverable. The likeliest
+remaining explanation is an install run outside the automated loop — which is an
+entirely ordinary thing to do and exactly why the dependency should not have
+been fragile.
+
+**The original reasoning was half right.** `--no-save` was chosen so `npm ci`
+would not fetch 300MB of browsers. But the npm packages fetch no browsers:
+`playwright` ships no install scripts, and `@axe-core/playwright`'s `prepare`
+runs only for git and local installs, never a registry tarball. The 300MB was
+always behind an explicit `npx playwright install`. Saving both costs CI about
+26MB, cannot reach the bundle — verified, `check:budget` unchanged at 133.8 kB
+gzipped — and makes the gate reproducible from a clean checkout for the first
+time.
+
+**The lesson worth carrying:** a gate that must be reinstalled before every use
+is not a gate. It reported green each time it ran; what it could not do was fail
+when it was missing.
+
+---
+
+<details>
+<summary>The original entry, kept for the reasoning</summary>
+
+### 16 (original). `check:a11y` passes in this working copy only, and `npm ci` loses it
 
 M3 reports **0 axe violations across 26 route × viewport combinations**, and
 that result is real — it was run, not assumed. But it is **not reproducible from
@@ -190,6 +235,12 @@ release-time check that someone is accountable for running — but it should not
 appear in a status table beside gates that CI actually enforces.
 
 Not this week's fix.
+
+</details>
+
+*It became this week's fix. The "save the dependencies and accept the CI cost"
+option above is the one taken — and the cost turned out to be 26MB rather than
+the 300MB everyone had been avoiding.*
 
 ---
 

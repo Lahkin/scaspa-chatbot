@@ -9,15 +9,26 @@ thing that does not, while there is still time.
 > **Running the browser checks** (`check:responsive`, `check:a11y`,
 > `check:charts`, `check:slow`, `check:browsers`)
 >
-> Playwright is deliberately not a saved dependency, so `npm ci` does not fetch
-> 300MB. Install what you need in **one** command — `--no-save` installs prune
-> each other, so installing them separately silently removes the first:
+> **Playwright and `@axe-core/playwright` are saved devDependencies**, pinned
+> exactly. `npm install` is enough; the browsers are a separate, explicit step:
 >
 > ```bash
-> npm i -D --no-save playwright@1.56.1 @axe-core/playwright@4.11.0
+> npm install
 > npx playwright install chromium          # add webkit firefox for check:browsers
 > npm run build                            # the checks run the production build
 > ```
+>
+> They were `--no-save` until M5, to stop `npm ci` fetching 300MB of browsers.
+> That reasoning was half right: **the npm packages download no browsers at all**
+> — `playwright` ships no install scripts, and `@axe-core/playwright`'s `prepare`
+> runs only for git and local installs, never a registry tarball. The 300MB was
+> always behind `npx playwright install`, which is still explicit.
+>
+> What being unsaved actually cost: the dependency disappeared three times in one
+> working session, and each time `check:a11y` went from green to unrunnable with
+> nothing failing to announce it. A gate you must remember to reinstall before
+> every use is not a gate you have during a rehearsal. Saving both costs `npm ci`
+> about 26MB and cannot reach the bundle — no file under `src/` imports them.
 >
 > `check:a11y` drives the real chat UI, and the production build does not bundle
 > the mocks — so it needs the backend up with its preview origin allowed:
@@ -33,9 +44,11 @@ thing that does not, while there is still time.
 > in its origins, and produces exactly the same two failures.
 > `lsof -nP -iTCP:8000 -sTCP:LISTEN` names the owner.
 >
-> **Any later `npm install` prunes `--no-save` packages.** If a check suddenly
-> reports Playwright missing again, that is why — reinstall both, in one
-> command, and carry on.
+> That stale-instance warning is not hypothetical: it cost a walkthrough during
+> M4c. A uvicorn from four hours earlier held :8000, the new one could not bind,
+> and the old one answered every request with the configuration it had booted
+> with — so the screens reported `source.kind: unavailable` long after the feed
+> had been switched on. It reads exactly like a config bug and is a process bug.
 
 ---
 
