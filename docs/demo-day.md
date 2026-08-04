@@ -365,9 +365,12 @@ clean · **839 vitest** · build ✓ · budget **133.7 kB gz** · **check:integr
 126 passed** · **check:a11y 0 violations** (13 routes × 2 viewports, 0 manual
 failures).
 
-**Frozen commit:** `5c9f65d`, on `feat/connect-halves-and-import-mockups`.
+**Frozen commit:** `1c2a03b`, on `feat/connect-halves-and-import-mockups`.
 
-Re-frozen after the greeting fix. Supersedes `09b0aca` and `72c6990`.
+Re-frozen after two defects in the greeting flow itself: an amber _"I could not
+fully verify this"_ notice under a message that made no claim, and a user bubble
+that rendered "hi" as "h" over "i". Supersedes `5c9f65d`, `09b0aca` and
+`72c6990`.
 
 **Open with a greeting.** "hi" used to return _"I do not have that in SCASPA's
 verified information"_ — the first word anyone types, answered as a failed
@@ -378,13 +381,13 @@ real question, and it is instant.
 Politeness in front of a question is still a question — _"hi, where do cruise
 ships dock?"_ returns its two citations as normal.
 
-**Code freeze is `5c9f65d`. Present from the branch tip**, not from that hash —
+**Code freeze is `1c2a03b`. Present from the branch tip**, not from that hash —
 the commits after it are this document and the backlog, and they change no code.
 Checking out `5c9f65d` directly would hand you a stale copy of the runbook you
 are reading.
 
 ```bash
-git checkout feat/connect-halves-and-import-mockups   # tip; code identical to 5c9f65d
+git checkout feat/connect-halves-and-import-mockups   # tip; code identical to 1c2a03b
 cd backend  && uv run python scripts/build_index.py        # 115 indexed, 4 rejected
 lsof -ti:8000 | xargs kill 2>/dev/null
 OPS_DATA_SOURCE=fixture uv run uvicorn app.main:app
