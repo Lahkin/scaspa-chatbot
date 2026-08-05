@@ -1,9 +1,17 @@
 """Ingestion tests: confidence gating, hash caching, dry run."""
 
 import shutil
+from datetime import date
 from pathlib import Path
 
-from app.rag.ingest import build_kb_index, index_meta_path, read_index_meta, sha256_file
+from app.rag.ingest import (
+    build_kb_index,
+    index_meta_path,
+    read_index_meta,
+    redact_blocked_links,
+    sha256_file,
+)
+from app.rag.models import KBRow
 from app.rag.store import KB_COLLECTION, get_store, search
 
 
@@ -140,3 +148,83 @@ def test_indexed_content_is_searchable(sample_csv, tmp_settings, fake_embeddings
     assert results
     assert all(r.metadata["confidence"] == "confirmed" for r in results)
     assert all("notes" not in r.metadata for r in results)
+
+
+# ── Blocklisted links — CLAUDE.md rule 3 ─────────────────────────────────────
+#
+# `source_url` is rendered as an `href` by the client, so a row pointing at
+# pay.scaspa.com would put a live payment link in front of a user. The row is
+# kept and stays answerable; only the link is removed.
+
+
+def test_a_blocklisted_source_url_is_blanked(tmp_settings) -> None:
+    """The portal must not survive ingestion as a link."""
+    rows = [
+        _row("kb-001", "https://pay.scaspa.com/"),
+        _row("kb-002", "https://www.scaspa.com/tariffs.html"),
+    ]
+
+    kept, redacted = redact_blocked_links(rows, tmp_settings, echo=quiet)
+
+    assert redacted == ["kb-001"]
+    assert kept[0].source_url == "", "the link is gone"
+    assert kept[0].answer == rows[0].answer, "the row itself is untouched and still answerable"
+    assert kept[1].source_url == "https://www.scaspa.com/tariffs.html", "other hosts are left alone"
+
+
+def test_a_blocklisted_host_is_matched_however_it_is_written(tmp_settings) -> None:
+    """Scheme, case, port, path and a missing scheme must all fail to get past it."""
+    written = [
+        "https://pay.scaspa.com/",
+        "http://pay.scaspa.com/checkout?amount=100",
+        "https://PAY.scaspa.com:443/",
+        "pay.scaspa.com/receipt",
+    ]
+    rows = [_row(f"kb-{i:03d}", url) for i, url in enumerate(written, start=1)]
+
+    kept, redacted = redact_blocked_links(rows, tmp_settings, echo=quiet)
+
+    assert len(redacted) == len(written), f"one of these slipped through: {written}"
+    assert all(row.source_url == "" for row in kept)
+
+
+def test_a_blocklisted_link_never_reaches_the_index(
+    tmp_path, tmp_settings, fake_embeddings
+) -> None:
+    """The end-to-end guarantee: not in the chunk metadata, not anywhere."""
+    csv = tmp_path / "portal_kb.csv"
+    csv.write_text(
+        "id,category,subcategory,question,answer,keywords,audience,"
+        "source_url,source_type,as_of,volatility,confidence,notes\n"
+        "kb-001,payments,portal,Can I pay online?,"
+        "SAMPLE DATA — a placeholder answer about paying.,,all,"
+        "https://pay.scaspa.com/,official-site,2026-01-01,low,confirmed,\n",
+        encoding="utf-8",
+    )
+
+    build(csv, tmp_settings, fake_embeddings)
+
+    store = get_store(KB_COLLECTION, embeddings=fake_embeddings, settings=tmp_settings)
+    stored = store.get()
+    assert stored["ids"] == ["kb-001"], "the row is still indexed and still answerable"
+    assert stored["metadatas"][0]["source_url"] == ""
+    assert "pay.scaspa.com" not in str(stored["metadatas"])
+
+
+def _row(row_id: str, source_url: str) -> KBRow:
+    """A minimal valid row. Obviously-fake content — CLAUDE.md rule 5."""
+    return KBRow(
+        id=row_id,
+        category="payments",
+        subcategory="portal",
+        question="Sample question?",
+        answer="SAMPLE DATA — a placeholder answer.",
+        keywords="",
+        audience="all",
+        source_url=source_url,
+        source_type="official-site",
+        as_of=date(2026, 1, 1),
+        volatility="low",
+        confidence="confirmed",
+        notes="",
+    )

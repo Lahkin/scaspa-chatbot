@@ -16,17 +16,19 @@
 import { createServer } from 'vite';
 
 /**
- * Playwright is deliberately NOT a saved dependency: CI has no browsers and
- * `npm ci` should not download 300MB of them. It is installed on demand, and a
- * bare "Cannot find package" is a confusing way to say so.
+ * Playwright IS a saved devDependency. It was `--no-save` for most of this
+ * project's life to keep `npm ci` from fetching 300MB of browsers — but the npm
+ * package downloads none of them; that is behind an explicit `npx playwright
+ * install`. Unsaved, it vanished three times in one session and took the
+ * accessibility gate with it each time. See `scripts/a11y-check.mjs`.
  */
 async function requirePlaywright() {
   try {
     return await import('playwright');
   } catch {
     console.error(
-      '\nThis check needs Playwright, which is not a saved dependency.\n' +
-        '  npm i -D --no-save playwright@1.56.1\n' +
+      '\nThis check needs Playwright, a saved devDependency.\n' +
+        '  npm install\n' +
         '  npx playwright install chromium webkit firefox\n'
     );
     process.exit(2);

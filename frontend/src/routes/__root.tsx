@@ -37,23 +37,90 @@ import { createRootRoute, HeadContent, Link, Outlet, useRouterState } from '@tan
  * everything else. `<HeadContent />` stays in both branches: every route still
  * needs its title.
  */
-const SELF_CHROMED_ROUTES = ['/chat', '/widget', '/dev/rehearsal'];
+const SELF_CHROMED_ROUTES = [
+  '/chat',
+  '/widget',
+  '/dev/rehearsal',
+  // The operations surfaces. Every one renders through `OpsPage` or
+  // `ConsoleShell`, both of which supply their own header, `<main>` and footer —
+  // so nesting them here produced exactly the two-`<main>` defect described
+  // above, and additionally squeezed a console designed for 1440px into the
+  // marketing column's `max-w-3xl`.
+  //
+  // Found by `npm run check:responsive`, not by review: in jsdom the duplicate
+  // landmarks are present but harmless-looking, and the width constraint is
+  // invisible without layout.
+  '/vessels',
+  '/flights',
+  '/tariffs',
+  '/support',
+  '/settings',
+  // Renders through `OpsPage`, which supplies its own header and `<main>`.
+  '/profile',
+];
+
+/** Prefixes whose whole subtree is self-chromed, so `/ops/*` needs no upkeep. */
+const SELF_CHROMED_PREFIXES = ['/ops'];
 
 /**
- * Dev-only mock controls.
+ * Routes that lay out their own width inside the chrome.
+ *
+ * These still get the nav, the footer and the skip link — they are documents,
+ * not app shells — but `<main>` does not constrain them, because a full-bleed
+ * hero cannot be drawn inside a `max-w-3xl` column.
+ *
+ * The alternative was the usual `width: 100vw; margin-inline: calc(50% - 50vw)`
+ * escape. Rejected: `100vw` includes the classic scrollbar, so on any desktop
+ * browser that reserves gutter space the page gains a horizontal scrollbar —
+ * and headless Chromium uses overlay scrollbars, so `check:responsive` would
+ * have reported it green. A false green on an overflow check is the exact
+ * failure that hid the console's sr-only bug (decision 0024), and it is not
+ * worth re-creating to save one wrapper.
+ *
+ * A route in here owns its own horizontal padding for every child.
+ */
+const FULL_BLEED_ROUTES = ['/'];
+
+function isSelfChromed(pathname: string): boolean {
+  if (SELF_CHROMED_ROUTES.includes(pathname)) return true;
+  return SELF_CHROMED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
+/**
+ * Dev-only mock controls, behind an explicit opt-in.
  *
  * `import.meta.env.DEV` is a build-time literal, so in a production build this
  * whole expression folds to `null` and Rollup never follows the dynamic import —
  * keeping `@/mocks/*`, its fixtures and MSW itself out of the shipped bundle.
  * A static import would pull all of it in regardless of the condition.
+ *
+ * ## Why DEV alone is not the gate
+ *
+ * The client demonstration runs on `npm run dev`, deliberately — that is what
+ * keeps `/dev/rehearsal` reachable as the last-resort fallback (`docs/demo-day.md`
+ * §0). Gated on DEV alone, this panel therefore sits on screen throughout the
+ * demonstration: a floating pill reading **"Mock: Normal cited answer"**, which
+ * in the T-23 rehearsal was also **overlapping the source panel's footer text**.
+ *
+ * On a product whose entire argument is that it is honest about which data is
+ * real, a control captioned "Mock" is the worst thing that could be visible, and
+ * no automated gate can see it — in dev it is behaving exactly as designed.
+ *
+ * So DEV is necessary and no longer sufficient. `VITE_SHOW_MOCK_CONTROLS=true`
+ * turns it back on for the people who actually want it, and it stays off for a
+ * plain `npm run dev`. Both conditions are build-time literals, so the
+ * production fold is unchanged.
  */
-const MockControls = import.meta.env.DEV
-  ? lazy(() =>
-      import('@/components/dev/MockControls').then((module) => ({
-        default: module.MockControls,
-      }))
-    )
-  : null;
+const MockControls =
+  import.meta.env.DEV && import.meta.env.VITE_SHOW_MOCK_CONTROLS === 'true'
+    ? lazy(() =>
+        import('@/components/dev/MockControls').then((module) => ({
+          default: module.MockControls,
+        }))
+      )
+    : null;
 
 function DevMockControls() {
   if (!MockControls) return null;
@@ -67,7 +134,7 @@ function DevMockControls() {
 function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
-  if (SELF_CHROMED_ROUTES.includes(pathname)) {
+  if (isSelfChromed(pathname)) {
     return (
       <>
         <HeadContent />
@@ -93,25 +160,55 @@ function RootLayout() {
         Skip to main content
       </a>
 
+      {/* Every link clears the 44px minimum.
+       *
+       * They measured 20px tall until `npm run check:responsive` was pointed at
+       * these routes for the first time — the check only ever covered `/chat`
+       * and `/widget`, so three public pages carried undersized nav targets for
+       * the life of the project without anything saying so. The routes are in
+       * its list now.
+       */}
       <header className="border-b border-border">
-        <nav aria-label="Main" className="mx-auto flex max-w-3xl gap-4 px-4 py-3 text-small">
-          <Link to="/" className="font-semibold text-blue-700">
+        <nav
+          aria-label="Main"
+          className="mx-auto flex max-w-3xl items-center gap-2 px-4 text-small"
+        >
+          <Link
+            to="/"
+            className="inline-flex min-h-touch items-center rounded-sm font-semibold text-blue-700"
+          >
             SCASPA Assistant
           </Link>
           <span className="flex-1" />
-          <Link to="/chat" className="text-ink-muted hover:text-ink">
+          <Link
+            to="/chat"
+            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
+          >
             Chat
           </Link>
-          <Link to="/about" className="text-ink-muted hover:text-ink">
+          <Link
+            to="/about"
+            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
+          >
             About
           </Link>
-          <Link to="/privacy" className="text-ink-muted hover:text-ink">
+          <Link
+            to="/privacy"
+            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
+          >
             Privacy
           </Link>
         </nav>
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
+      <main
+        id="main"
+        className={
+          FULL_BLEED_ROUTES.includes(pathname)
+            ? 'w-full flex-1'
+            : 'mx-auto w-full max-w-3xl flex-1 px-4 py-6'
+        }
+      >
         <RouteErrorBoundary key={pathname} routeName={pathname}>
           <Outlet />
         </RouteErrorBoundary>

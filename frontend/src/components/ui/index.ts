@@ -2,9 +2,15 @@
 export { Badge } from './Badge';
 export { Button } from './Button';
 export { Card } from './Card';
+export { Checkbox } from './Checkbox';
 export { Chip } from './Chip';
+export { CopyToast } from './CopyToast';
+export { Disclosure } from './Disclosure';
+export { Icon } from './Icon';
 export { IconButton } from './IconButton';
 export { Input } from './Input';
+export { Segmented } from './Segmented';
+export { TapToCall } from './TapToCall';
 export { Sheet } from './Sheet';
 export { Skeleton } from './Skeleton';
 export { Spinner } from './Spinner';

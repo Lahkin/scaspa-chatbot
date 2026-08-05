@@ -52,7 +52,7 @@ from app.agent.prompts import render_system_prompt
 from app.agent.tools import ALL_TOOLS, RetrievedChunk, ToolCallRecord, TurnContext, turn_context
 from app.config import Settings, get_settings
 from app.rag.store import KB_COLLECTION, WEB_COLLECTION, get_store, search
-from app.schemas import ChartSpec
+from app.schemas import CardRequest, ChartSpec
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,9 @@ class AgentTurnResult:
     model_calls: int = 0
     hit_tool_limit: bool = False
     chart: ChartSpec | None = None
+    # The card the model asked for, unpopulated. Rows are filled in downstream
+    # from the operational feed — see app/ops/cards.py.
+    card: CardRequest | None = None
 
 
 def build_agent(
@@ -145,6 +148,31 @@ def best_available_score(
     return best
 
 
+def message_text(content: object) -> str:
+    """The plain text of a model message, whichever shape it arrived in.
+
+    `content` is a string on `/v1/chat/completions` and a list of typed blocks
+    on `/v1/responses` — `[{"type": "text", "text": "..."}, ...]`, with reasoning
+    and tool blocks mixed in. The previous `str(content)` fallback turned the
+    second case into a Python `repr` and put `[{'type': 'text', ...}]` in front
+    of a user as the answer, which no test would have caught because the fixture
+    models all return strings.
+
+    Only `text` blocks are joined. A reasoning block is the model's private
+    working and must never be shown.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            block["text"]
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text" and block.get("text")
+        ]
+        return "".join(parts)
+    return ""
+
+
 def _accumulate_usage(message: AIMessage, result: AgentTurnResult) -> None:
     """Add one model response's token usage to the running totals."""
     usage = getattr(message, "usage_metadata", None) or {}
@@ -180,8 +208,10 @@ def _finish(context: TurnContext, answer: str, result: AgentTurnResult) -> Agent
     result.tool_calls = list(context.tool_calls)
     result.retrieved = dict(context.retrieved)
     # Taken from the turn, not from model output: make_chart already validated
-    # every figure against a retrieved row.
+    # every figure against a retrieved row, and a card request carries no data
+    # at all.
     result.chart = context.chart
+    result.card = context.card
     if answer.startswith(TOOL_LIMIT_MARKER):
         result.hit_tool_limit = True
         result.answer = ""
@@ -201,13 +231,18 @@ def run_agent(
     chat_model: BaseChatModel | None = None,
     embeddings: Embeddings | None = None,
     today: date | None = None,
+    category: str | None = None,
 ) -> AgentTurnResult:
-    """Run one agent turn synchronously."""
+    """Run one agent turn synchronously.
+
+    `category` is the caller's retrieval filter from the request body. It is put
+    on the turn rather than into the prompt, so the model cannot argue with it.
+    """
     settings = settings or get_settings()
     started = time.perf_counter()
     result = AgentTurnResult(answer="")
 
-    with turn_context(settings=settings, embeddings=embeddings) as context:
+    with turn_context(settings=settings, embeddings=embeddings, category=category) as context:
         agent = build_agent(settings, chat_model, today)
         state = agent.invoke({"messages": [{"role": "user", "content": query}]})
 
@@ -216,8 +251,7 @@ def run_agent(
                 _accumulate_usage(message, result)
 
         final = state["messages"][-1]
-        answer = final.content if isinstance(final.content, str) else str(final.content)
-        _finish(context, answer, result)
+        _finish(context, message_text(final.content), result)
 
     log_turn(query, result, int((time.perf_counter() - started) * 1000))
     return result
@@ -230,6 +264,7 @@ async def arun_agent(
     chat_model: BaseChatModel | None = None,
     embeddings: Embeddings | None = None,
     today: date | None = None,
+    category: str | None = None,
 ) -> AsyncIterator[tuple[str, dict]]:
     """Run one agent turn, streaming events.
 
@@ -243,7 +278,7 @@ async def arun_agent(
     pieces: list[str] = []
     pending: dict[str, str] = {}
 
-    with turn_context(settings=settings, embeddings=embeddings) as context:
+    with turn_context(settings=settings, embeddings=embeddings, category=category) as context:
         agent = build_agent(settings, chat_model, today)
 
         async for mode, chunk in agent.astream(
@@ -278,7 +313,7 @@ async def arun_agent(
                 # tool's raw output would stream to the user as the answer.
                 if metadata.get("langgraph_node") != "model":
                     continue
-                text = message.content if isinstance(message.content, str) else ""
+                text = message_text(message.content)
                 if text:
                     pieces.append(text)
                     yield "token", {"text": text}

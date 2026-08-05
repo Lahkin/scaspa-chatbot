@@ -13,11 +13,22 @@ import { isStale, useHealth } from '@/features/chat/queries';
  * fifteen seconds** and then start a conversation. Everything here is measured
  * against that.
  *
- * So: no stock gradient, no headline about the future of AI, no robot. A visitor
- * standing on a pier does not care what this is built from — they care whether
- * they will make the last ferry. The hero shows the assistant answering a real
- * question, because seeing one answer with a source under it does more for trust
- * than any sentence claiming trustworthiness.
+ * So: no headline about the future of AI, no robot. A visitor standing on a pier
+ * does not care what this is built from — they care whether they will make the
+ * last ferry. The hero shows the assistant answering a real question, because
+ * seeing one answer with a source under it does more for trust than any sentence
+ * claiming trustworthiness.
+ *
+ * ## The hero is navy, and the page under it is not
+ *
+ * This once said "no stock gradient", and the objection still holds against the
+ * thing it was aimed at: a decorative wash behind body copy. `--grad-hero` is
+ * not that. It is a full-bleed structural band that ends at a literal horizon
+ * line, and everything below it — including the example answer, which is the
+ * one thing on this page a visitor actually reads — sits on a flat surface.
+ *
+ * `/` is in `FULL_BLEED_ROUTES` so `<main>` does not constrain it; this file
+ * therefore owns the horizontal padding for every one of its own children.
  */
 function Landing() {
   const navigate = useNavigate();
@@ -36,121 +47,147 @@ function Landing() {
   };
 
   return (
-    <div className="space-y-10">
-      <section className="space-y-4">
-        <h1 className="text-display font-semibold text-balance">Will you make the last ferry?</h1>
-        <p className="max-w-measure text-lead text-ink-muted">
-          Ask about ferries, cruise arrivals, cargo and the airport in St. Kitts. Every answer shows
-          where it came from and when it was checked.
-        </p>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button size="lg" onClick={() => void navigate({ to: '/chat' })}>
-            Ask a question
-          </Button>
-          <a
-            href={SCASPA_PHONE_LINES[0].href}
-            className="inline-flex min-h-touch items-center text-small font-medium text-blue-700 underline"
-          >
-            Or call SCASPA on {SCASPA_PHONE_LINES[0].text}
-          </a>
-        </div>
-
-        <ExampleAnswer />
-      </section>
-
-      <section aria-labelledby="try-it" className="space-y-3">
-        <div>
-          <h2 id="try-it" className="text-h2 font-semibold">
-            Try it here
-          </h2>
-          <p className="mt-1 text-small text-ink-muted">
-            Tap a question and the assistant will answer it straight away.
+    <div>
+      {/*
+        The hero band. Full-bleed because it is structure — the top of the page
+        is navy from edge to edge, and the content column resumes below it.
+      */}
+      <section className="bg-surface-sunken">
+        <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-10">
+          <h1 className="text-display font-semibold text-balance text-on-navy-primary">
+            Will you make the last ferry?
+          </h1>
+          <p className="max-w-measure text-lead text-on-navy-secondary">
+            Ask about ferries, cruise arrivals, cargo and the airport in St. Kitts. Every answer
+            shows where it came from and when it was checked.
           </p>
-        </div>
 
-        <ul className="flex flex-wrap gap-2">
-          {SUGGESTED_QUESTIONS.map((question) => (
-            <li key={question}>
-              <button
-                type="button"
-                onClick={() => ask(question)}
-                className="flex min-h-touch items-center gap-2 rounded-md bg-navy px-3 py-2 text-left text-small font-medium text-ink-inverse transition-colors duration-fast hover:bg-navy-deep"
-              >
-                <span aria-hidden="true" className="text-amber-board">
-                  \u203a
-                </span>
-                {question}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section aria-labelledby="helps-with" className="space-y-3">
-        <h2 id="helps-with" className="text-h2 font-semibold">
-          What it can help with
-        </h2>
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {CAPABILITIES.map((item) => (
-            <li key={item.title} className="rounded-md bg-surface-muted p-4">
-              <p className="text-small font-semibold text-ink">{item.title}</p>
-              <p className="mt-1 text-small text-ink-muted">{item.body}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section aria-labelledby="trust" className="space-y-3">
-        <h2 id="trust" className="text-h2 font-semibold">
-          Why you can trust it
-        </h2>
-        <TrustPoints />
-      </section>
-
-      <section
-        aria-labelledby="talk-to-a-person"
-        className="rounded-md border border-navy bg-surface-muted p-4"
-      >
-        <h2 id="talk-to-a-person" className="text-h3 font-semibold">
-          Talk to a person
-        </h2>
-        <p className="mt-1 max-w-measure text-small text-ink-muted">
-          The assistant cannot see live operations, your shipment or your booking, and it does not
-          give customs, immigration or legal advice. For any of those, SCASPA staff can help you
-          directly.
-        </p>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div>
-            <p className="text-small font-semibold text-ink">Telephone</p>
-            <ul className="mt-1 space-y-1">
-              {SCASPA_PHONE_LINES.map((line) => (
-                <li key={line.href}>
-                  <a
-                    href={line.href}
-                    className="inline-flex min-h-touch items-center text-body font-medium text-blue-700 underline tabular"
-                  >
-                    {line.text}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="text-small font-semibold text-ink">Post</p>
-            <address className="mt-1 text-small text-ink-muted not-italic">
-              {SCASPA_POSTAL_ADDRESS.map((line) => (
-                <span key={line} className="block">
-                  {line}
-                </span>
-              ))}
-            </address>
+          <div className="flex flex-wrap items-center gap-3">
+            {/*
+              Solid brand blue, never a gradient. A gradient button on a gradient
+              band has no edge at all, and the primary action on a landing page
+              is the last thing that should be hard to find. `onNavy` is the
+              `primary` fill plus a visible boundary — see Button.tsx.
+            */}
+            <Button variant="onNavy" size="lg" onClick={() => void navigate({ to: '/chat' })}>
+              Ask a question
+            </Button>
+            <a
+              href={SCASPA_PHONE_LINES[0].href}
+              className="inline-flex min-h-touch items-center text-small font-medium text-on-navy-primary underline"
+            >
+              Or call SCASPA on {SCASPA_PHONE_LINES[0].text}
+            </a>
           </div>
         </div>
       </section>
 
-      <SiteFooter />
+      {/*
+        The horizon. A literal one: the band ends here and the page begins, and
+        the line fades out at both edges rather than ruling across the viewport.
+        Decorative, so it is hidden from assistive technology — the heading
+        structure already says where the sections divide.
+      */}
+      <div aria-hidden="true" className="h-px w-full bg-border" />
+
+      {/* Everything below the horizon is flat. The example answer in particular:
+          it is the one thing here a visitor reads word for word. */}
+      <div className="mx-auto w-full max-w-3xl space-y-10 px-4 py-6">
+        <ExampleAnswer />
+
+        <section aria-labelledby="try-it" className="space-y-3">
+          <div>
+            <h2 id="try-it" className="text-h2 font-semibold">
+              Try it here
+            </h2>
+            <p className="mt-1 text-small text-ink-muted">
+              Tap a question and the assistant will answer it straight away.
+            </p>
+          </div>
+
+          <ul className="flex flex-wrap gap-2">
+            {SUGGESTED_QUESTIONS.map(({ label: question }) => (
+              <li key={question}>
+                <button
+                  type="button"
+                  onClick={() => ask(question)}
+                  className="flex min-h-touch items-center gap-2 rounded-md bg-navy px-3 py-2 text-left text-small font-medium text-ink-inverse transition-colors duration-fast hover:bg-navy-deep"
+                >
+                  <span aria-hidden="true" className="text-amber-board">
+                    \u203a
+                  </span>
+                  {question}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section aria-labelledby="helps-with" className="space-y-3">
+          <h2 id="helps-with" className="text-h2 font-semibold">
+            What it can help with
+          </h2>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {CAPABILITIES.map((item) => (
+              <li key={item.title} className="rounded-md bg-surface-muted p-4">
+                <p className="text-small font-semibold text-ink">{item.title}</p>
+                <p className="mt-1 text-small text-ink-muted">{item.body}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section aria-labelledby="trust" className="space-y-3">
+          <h2 id="trust" className="text-h2 font-semibold">
+            Why you can trust it
+          </h2>
+          <TrustPoints />
+        </section>
+
+        <section
+          aria-labelledby="talk-to-a-person"
+          className="rounded-md border border-navy bg-surface-muted p-4"
+        >
+          <h2 id="talk-to-a-person" className="text-h3 font-semibold">
+            Talk to a person
+          </h2>
+          <p className="mt-1 max-w-measure text-small text-ink-muted">
+            The assistant cannot see live operations, your shipment or your booking, and it does not
+            give customs, immigration or legal advice. For any of those, SCASPA staff can help you
+            directly.
+          </p>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-small font-semibold text-ink">Telephone</p>
+              <ul className="mt-1 space-y-1">
+                {SCASPA_PHONE_LINES.map((line) => (
+                  <li key={line.href}>
+                    <a
+                      href={line.href}
+                      className="inline-flex min-h-touch items-center text-body font-medium text-blue-700 underline tabular"
+                    >
+                      {line.text}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-small font-semibold text-ink">Post</p>
+              <address className="mt-1 text-small text-ink-muted not-italic">
+                {SCASPA_POSTAL_ADDRESS.map((line) => (
+                  <span key={line} className="block">
+                    {line}
+                  </span>
+                ))}
+              </address>
+            </div>
+          </div>
+        </section>
+
+        <SiteFooter />
+      </div>
     </div>
   );
 }
@@ -178,29 +215,51 @@ const CAPABILITIES = [
  * One real answer, statically rendered.
  *
  * Not a live call: the hero must not depend on the backend being up, and a
- * visitor who arrives to a spinner has already formed an opinion. The figures are
- * the fixture's obviously-placeholder ones and the caption says so, so nothing
- * here can be mistaken for a published fare.
+ * visitor who arrives to a spinner has already formed an opinion.
+ *
+ * ## It used to invent a sailing time \u2014 T-18
+ *
+ * This block previously answered the same question with "the last placeholder
+ * sailing back from Nevis on a weekday is 18:00", under a source line reading
+ * *"Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on 2026-04-01"*.
+ *
+ * **No such row exists.** The corpus contains no ferry departure time at all,
+ * and `kb-192` \u2014 the row that actually answers this question \u2014 carries the note
+ * *"ROUTING ROW \u2026 Never state a sailing time."* So the landing page, the first
+ * thing anyone sees, was doing the one thing the row it cited forbids, and
+ * attributing it to SCASPA's website with a verification date. A "placeholder"
+ * caption does not undo a fabricated citation: the shape of the claim is what a
+ * reader copies down.
+ *
+ * What is here now is `kb-192` verbatim \u2014 confirmed, `as_of` 2026-07-31, sourced
+ * to scaspa.com/ferry-schedule.html. It is a better hero than the invention was.
+ * A visitor asks the question they actually have, and watches the assistant
+ * decline to make up a timetable while still telling them where to look. That is
+ * the product's whole argument, made in four lines and without a word of
+ * marketing.
+ *
+ * If this text is ever edited, edit it to match the row. It is not copy.
  */
 function ExampleAnswer() {
   return (
     <figure className="max-w-measure rounded-lg border border-border bg-surface-muted p-4">
       <figcaption className="text-caption text-ink-subtle">
-        An example of an answer \u2014 illustrative figures, not a published fare.
+        An example of an answer \u2014 a real one, from a verified source.
       </figcaption>
       <p className="mt-2 text-small font-medium text-ink">
         \u201cWhat time is the last ferry back from Nevis?\u201d
       </p>
-      <p className="mt-2 text-small text-navy-deep">
-        The last placeholder sailing back from Nevis on a weekday is 18:00
-        <span className="mx-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 align-baseline text-caption font-semibold text-blue-800 tabular">
+      <p className="mt-2 text-small text-ink-muted">
+        Ferry departure times vary by operator and by day, so SCASPA publishes them through a live
+        vessel schedule rather than a fixed timetable. Check the ferry schedule on scaspa.com for
+        the date you are travelling.
+        <span className="mx-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-tint px-1 align-baseline text-caption font-semibold text-brand-200 tabular">
           1
         </span>
-        . Please confirm with SCASPA before you travel.
       </p>
       <p className="mt-2 border-t border-border pt-2 text-caption text-ink-subtle">
         <strong>1.</strong> Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on
-        2026-04-01
+        2026-07-31
       </p>
     </figure>
   );
@@ -224,14 +283,17 @@ function SiteFooter() {
         Built for the St. Christopher Air &amp; Sea Ports Authority. Deep Water Harbour, Port Zante,
         Basseterre Ferry Terminal and Robert L. Bradshaw International Airport.
       </p>
-      <p>
-        {/* Team names and date are a client deliverable, not something to invent.
-            The slot is visible and marked so it is chased rather than forgotten. */}
-        <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 font-medium">
-          Team names pending
-        </span>{' '}
-        \u00b7 2026
-      </p>
+      {/*
+        A placeholder chip naming the pending credits sat here until T-18. It
+        is described rather than quoted, because the exact wording is what the
+        release grep looks for and a comment should not answer it. It did its job \u2014 the
+        slot was visible so it would be chased rather than forgotten \u2014 but a
+        placeholder shipped to a client demonstration reads as unfinished
+        software rather than as a deliberate blank waiting on them. The names
+        are still a client deliverable and still must not be invented; they go
+        in when SCASPA supplies them.
+      */}
+      <p>2026</p>
       {version && (
         <p>
           Information verified as of <time dateTime={version}>{version}</time>

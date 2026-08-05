@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { cn } from '@/lib/cn';
+import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
 import { Markdown } from './Markdown';
 import { STREAM_PARSE_INTERVAL_MS, splitAtSafePoint } from '@/lib/markdown/streaming';
 
@@ -42,6 +44,7 @@ export function StreamingMarkdown({
   verifiedOn,
   sourceId,
 }: StreamingMarkdownProps) {
+  const reduced = useReducedMotion();
   // What the parser is currently allowed to see.
   const [released, setReleased] = useState(text);
   const latest = useRef(text);
@@ -100,11 +103,31 @@ export function StreamingMarkdown({
           {stable}
         </Markdown>
       )}
-      {tail && (
-        // `whitespace-pre-wrap` so a half-written table keeps its line breaks and
-        // does not collapse into one long line before it resolves.
-        <p className="my-2 whitespace-pre-wrap text-ink-muted">{tail}</p>
-      )}
+      {/*
+        The tail, and the cursor after it — §3.5.
+
+        `whitespace-pre-wrap` so a half-written table keeps its line breaks and
+        does not collapse into one long line before it resolves.
+
+        The cursor is `8px × 16px`, `--brand-200`, `vertical-align: -3px`, and it
+        is the only thing on screen that says tokens are still arriving once the
+        first sentence has landed. It was missing entirely: a stream that paused
+        mid-answer looked identical to one that had finished.
+
+        **It does not blink under reduced motion** — `animate-pulse` is gated on
+        the same hook every other animation in this product uses, and §7 is
+        explicit that the announcer carries the state instead.
+      */}
+      <p className="my-2 whitespace-pre-wrap text-ink-muted">
+        {tail}
+        <span
+          aria-hidden="true"
+          className={cn(
+            'ml-0.5 inline-block h-4 w-2 bg-brand-200 align-[-3px]',
+            !reduced && 'animate-pulse'
+          )}
+        />
+      </p>
     </>
   );
 }

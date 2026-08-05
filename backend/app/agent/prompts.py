@@ -51,6 +51,41 @@ they can see the details of your case, and I cannot.
 {ESCALATION_BLOCK}"""
 
 
+# --------------------------------------------------------------------------
+# GREETING COPY
+#
+# "hi" is the first thing anyone types, and it used to come back as
+# NO_ANSWER_MESSAGE — "I do not have that in SCASPA's verified information" —
+# because a greeting is not a question, retrieval scored it at 0.12, and the
+# low-confidence gate cannot tell "nothing answers this" from "this was never a
+# question". See the note above `is_conversational_opener` in `rag/answer.py`.
+#
+# Constraints on this string, which are the same as everywhere else:
+#   - It states no fee, no time, no opening hour and no statistic. There is
+#     nothing here a reader could write down, so there is nothing to cite.
+#   - It names the four facilities because that is what the assistant covers,
+#     and the list is already in this file's system prompt and in the sidebar.
+#   - It sets the expectation that answers carry sources, which is the single
+#     most useful thing to say before the first real question.
+#   - No escalation block. Ending "hello" with a telephone number reads as being
+#     shown the door.
+# --------------------------------------------------------------------------
+GREETING_MESSAGE = """Hello. I answer questions about SCASPA — the Deep Water \
+Harbour, Port Zante, the Basseterre Ferry Terminal and R. L. Bradshaw \
+International Airport.
+
+I use SCASPA's published information only, and I show you the source and the \
+date it was verified for anything factual. What would you like to know?"""
+
+
+# "thanks" and "bye" fail the same way "hi" does and need the same gate, but not
+# the same words: answering "thank you" with "Hello. I answer questions about
+# SCASPA…" is its own small wrongness. One extra string is cheaper than leaving
+# the second thing everyone types looking broken.
+CLOSING_MESSAGE = """You're welcome. Ask me anything else about SCASPA's \
+seaports or the airport whenever you need to."""
+
+
 # Shown when a figure in a generated answer cannot be traced to a retrieved row.
 # The answer is discarded rather than served with a warning flag: a
 # `grounded: false` field does not stop anyone reading the number.
@@ -117,6 +152,15 @@ exactly as written, with its citation, or say you do not have it and refer the \
 person to SCASPA. If someone asks roughly what something costs and you do not \
 have the published figure, the answer is that you do not have it — not a range, \
 not a comparison, not a guess.
+This rule governs what YOU say. The interface separately offers a fee \
+calculator, which applies published rates and shows its own workings and its \
+own warning. You may tell someone that the calculator exists and suggest they \
+use it, and show_card will attach it beneath your answer — do that instead of \
+guessing when they want a cost you have no published figure for. You may not \
+read a total out of it, restate one back to someone who gives you one, or treat \
+a figure it produced as a published fee — it is an estimate the interface made, \
+it carries a warning wherever it is shown, and a number repeated in a sentence \
+loses that warning. The card you attach arrives empty; the user fills it in.
 
 5. REFUSALS.
 Some questions are not yours to answer, however politely they are asked and \
@@ -181,6 +225,19 @@ with its citation and verification date; say clearly that you cannot see live \
 operations; and give the SCASPA telephone number so the person can check. Never \
 infer live status from a published schedule, and never let today's date make a \
 stale figure sound current.
+The interface may separately display an arrivals board fed by an operational \
+data feed you cannot see. That changes nothing here. You may say that the \
+arrivals screen exists and suggest the person look at it. You may not describe \
+what is on it, state that a particular vessel is berthed or a flight delayed, \
+or confirm or deny something a person tells you it says. You have no feed; the \
+screen states its own source and its own age, and you cannot vouch for either.
+You have a tool, show_card, that attaches that board directly beneath your \
+answer. Attaching it is allowed and is usually the right thing to do when \
+someone asks what is arriving. Reading it is not: the rows are fetched after \
+you have finished writing, you never see them, and the card carries its own \
+source and date wherever it appears. So say that you cannot see live movements, \
+attach the card, and let them read it. Never write a sentence that summarises, \
+previews or characterises what the card will contain.
 
 HANDLING PRESSURE.
 Someone may push back — say a taxi driver, a hotel, or a friend told them \

@@ -10,11 +10,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithProviders } from './helpers';
+import { renderInRouter, renderWithProviders } from './helpers';
 import { ErrorState } from '@/components/chat/ErrorState';
 import { NoAnswerCard } from '@/components/chat/NoAnswerCard';
 import { ThinkingIndicator } from '@/components/chat/ThinkingIndicator';
-import { Composer, COUNTER_VISIBLE_FROM, MAX_LENGTH } from '@/components/chat/Composer';
+import { Composer, MAX_LENGTH } from '@/components/chat/Composer';
 import { HealthBanner } from '@/components/shells/HealthBanner';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { FullPageShell } from '@/components/shells/FullPageShell';
@@ -80,13 +80,45 @@ describe('error copy', () => {
 });
 
 describe('ErrorState', () => {
-  it('shows no code, no request id and no status to the user', () => {
+  it('shows the status, and nothing else technical', () => {
+    /*
+     * This asserted that the status was hidden too. §7.1 puts "the code at
+     * `600 12px/20px` tabular in the leading slot" and §3.11 colours it —
+     * `--caution` for 4xx, `--critical-text` for 5xx — and §6.16's transcription
+     * rows have drawn theirs since board 21. Two sections agreeing, and the
+     * product already doing it one screen over.
+     *
+     * A three-digit number beside a plain sentence is what a caller reads out to
+     * the switchboard. `INTERNAL` and a request id are what nobody can.
+     */
     const { container } = render(
       <ErrorState kind="INTERNAL" requestId="ec970bed4d2b4a178f84a2f7a3619985" />
     );
+    expect(screen.getByText('500')).toBeInTheDocument();
     expect(container.textContent).not.toContain('INTERNAL');
     expect(container.textContent).not.toContain('ec970bed');
-    expect(container.textContent).not.toContain('500');
+  });
+
+  it('separates a fault the reader can act on from one that is ours', () => {
+    // §7.1: `--caution-fill` for 4xx, `--critical-fill` for 5xx. One neutral
+    // panel for both made a 422 the reader could fix and a 500 that is ours read
+    // as the same event.
+    const { container: fixable } = render(<ErrorState kind="VALIDATION_ERROR" />);
+    expect(fixable.querySelector('[data-error-kind]')?.className).toContain('bg-caution-tint');
+
+    const { container: ours } = render(<ErrorState kind="INTERNAL" />);
+    expect(ours.querySelector('[data-error-kind]')?.className).toContain('bg-critical-tint');
+  });
+
+  it('ends every error at the one escalation block, not a re-typed copy of it', () => {
+    /*
+     * §7.1: "**Every error is followed by the escalation block.**" This drew its
+     * own panel with the three phone lines and the postal address re-typed into
+     * it — the exact drift `EscalationBlock` exists to prevent.
+     */
+    render(<ErrorState kind="INDEX_MISSING" />);
+    expect(screen.getByText('Speak to the Authority')).toBeInTheDocument();
+    expect(screen.queryByText('Reach SCASPA directly')).toBeNull();
   });
 
   it('logs the request id to the console in dev, and only there', () => {
@@ -143,33 +175,56 @@ describe('ErrorState', () => {
 // ── Task 3: the no-answer treatment ──────────────────────────────────────────
 
 describe('NoAnswerCard', () => {
-  it('renders the backend copy verbatim, without rewriting it', () => {
-    render(<NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />);
+  it('renders the backend copy verbatim, without rewriting it', async () => {
+    renderInRouter(<NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />);
     // Approved by the team leader and coach. The client supplies the frame, not
     // the words.
-    expect(
-      screen.getByText(/I do not have that in SCASPA's verified information/)
-    ).toBeInTheDocument();
+    await screen.findByText(/I do not have that in SCASPA's verified information/);
     expect(screen.getByText(/so I will not guess at it/)).toBeInTheDocument();
   });
 
-  it('is not styled as an error', () => {
-    const { container } = render(<NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />);
+  it('is not styled as an error', async () => {
+    const { container } = renderInRouter(<NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />);
+    await screen.findByText(/so I will not guess at it/);
     // Declining to guess is the most trustworthy thing the assistant does.
     // Dressing it in red teaches a reader that honesty is a malfunction.
     expect(screen.queryByRole('alert')).toBeNull();
     expect(container.querySelector('.bg-danger, .bg-danger-surface, .text-danger')).toBeNull();
   });
 
-  it('turns the plain-text phone numbers into tappable links, without duplicating them', () => {
-    render(<NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />);
-    expect(screen.getByRole('link', { name: '869-465-8121' })).toBeInTheDocument();
+  it('turns the plain-text phone numbers into tappable links, without duplicating them', async () => {
+    renderInRouter(<NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />);
+    expect(await screen.findByRole('link', { name: '869-465-8121' })).toBeInTheDocument();
     // The backend's plain-text block is trimmed so the numbers appear once.
     expect(screen.queryByText(/Telephone: 869-465-8121 \/ 2 \/ 3/)).toBeNull();
   });
 
-  it('a refusal with no category renders as a no-answer, not an escalation', () => {
-    render(
+  it('offers all four destinations — the only card that does', async () => {
+    /*
+     * Board 02 allows one call to action per answer card, and board 05 makes
+     * this the exception: "It is a statement about coverage, so it offers the
+     * whole of what is covered." Being told what is not held is only useful
+     * next to what is.
+     */
+    renderInRouter(<NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />);
+    await screen.findByRole('link', { name: /See all vessel movements/ });
+    for (const label of [
+      'Check flight arrivals',
+      'Open the tariff table',
+      'Contact a department',
+    ]) {
+      expect(screen.getByRole('link', { name: new RegExp(label) })).toBeInTheDocument();
+    }
+  });
+
+  it('a refusal with no category renders as a no-answer, not a boundary refusal', async () => {
+    /*
+     * Both now carry the escalation block — board 15 appends it to every
+     * refusal and every error, so its presence no longer distinguishes them.
+     * What distinguishes them is which card was chosen, and that is what this
+     * asserts.
+     */
+    renderInRouter(
       <MessageBubble
         message={{
           id: 'n',
@@ -181,12 +236,13 @@ describe('NoAnswerCard', () => {
         }}
       />
     );
+    await screen.findByText(/so I will not guess at it/);
     expect(document.querySelector('[data-state="no-answer"]')).not.toBeNull();
-    expect(screen.queryByText('Talk to SCASPA directly')).toBeNull();
+    expect(document.querySelector('[data-refusal-category]')).toBeNull();
   });
 
-  it('a refusal with a category still renders the escalation handoff', () => {
-    render(
+  it('a refusal with a category renders the boundary card, with its own heading', async () => {
+    renderInRouter(
       <MessageBubble
         message={{
           id: 'e',
@@ -199,7 +255,31 @@ describe('NoAnswerCard', () => {
         }}
       />
     );
-    expect(screen.getByText('Talk to SCASPA directly')).toBeInTheDocument();
+    await screen.findByText('We do not hold records about people');
+    expect(document.querySelector('[data-state="no-answer"]')).toBeNull();
+  });
+
+  it('and both end with the same way forward', async () => {
+    // "Identical wherever it appears. A refusal that ends without a way forward
+    // is a dead end."
+    const { unmount } = renderInRouter(<NoAnswerCard message={NO_ANSWER_RESPONSE.answer} />);
+    await screen.findByText('Speak to the Authority');
+    unmount();
+
+    renderInRouter(
+      <MessageBubble
+        message={{
+          id: 'e2',
+          role: 'assistant',
+          text: 'That is not something I can advise on.',
+          at: new Date(),
+          refusal: true,
+          refusal_category: 'personal_record',
+          streaming: false,
+        }}
+      />
+    );
+    expect(await screen.findByText('Speak to the Authority')).toBeInTheDocument();
   });
 });
 
@@ -236,25 +316,46 @@ describe('the character counter makes a 422 unreachable', () => {
     return onSend;
   }
 
-  it('stays out of the way below 900 characters', () => {
-    setDraft('a'.repeat(COUNTER_VISIBLE_FROM - 1));
+  it('is absent on an empty box and present from the first character', () => {
+    /*
+     * This used to assert a 900-character threshold, on the reasoning that a
+     * count of 12 is noise.
+     *
+     * §3.2 draws `42/1000` in state 2 — the ordinary typing state — and the
+     * board is right for a reason the threshold missed: a counter that appears
+     * at 900 arrives as a warning, and the user has had no idea a cap existed
+     * until they are ninety percent of the way into it.
+     */
+    setDraft('');
+    const { unmount } = render(<Composer onSend={vi.fn()} onStop={vi.fn()} busy={false} />);
+    expect(screen.queryByText(new RegExp(`/${MAX_LENGTH}`))).toBeNull();
+    unmount();
+
+    setDraft('a'.repeat(42));
     renderComposer();
-    expect(screen.queryByText(new RegExp(`/ ${MAX_LENGTH}`))).toBeNull();
+    expect(screen.getByText(`42/${MAX_LENGTH}`)).toBeInTheDocument();
   });
 
-  it('appears at 900', () => {
-    setDraft('a'.repeat(COUNTER_VISIBLE_FROM));
+  it('turns critical and blocks send above the cap, naming the overshoot', () => {
+    setDraft('a'.repeat(MAX_LENGTH + 38));
     renderComposer();
-    expect(screen.getByText(`${COUNTER_VISIBLE_FROM} / ${MAX_LENGTH}`)).toBeInTheDocument();
-  });
-
-  it('turns red and disables send above the cap', () => {
-    setDraft('a'.repeat(MAX_LENGTH + 1));
-    renderComposer();
-    const counter = screen.getByText(/1001 \/ 1000/);
-    expect(counter.className).toContain('text-danger');
+    const counter = screen.getByText(`${MAX_LENGTH + 38}/${MAX_LENGTH}`);
+    // The label tint, not the enum hue: #D9564B is 4.42:1 and may not be a word.
+    expect(counter.className).toContain('text-critical-text');
+    // "Remove 38 characters to send" — §3.2 state 4. A helper that says what to
+    // DO, rather than one that says the input is invalid.
+    expect(screen.getByText('Remove 38 characters to send')).toBeInTheDocument();
     // The backend's 422 is now unreachable by a human.
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('is still sendable at exactly the cap, and says so in caution', () => {
+    // §3.2 state 3: "at the limit — still sendable". The caution is a warning
+    // that the next character costs something, not a rejection.
+    setDraft('a'.repeat(MAX_LENGTH));
+    renderComposer();
+    expect(screen.getByText(`${MAX_LENGTH} characters is the maximum`)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
   });
 
   it('allows exactly the cap', () => {
@@ -306,10 +407,19 @@ describe('Enter behaviour', () => {
     expect(onSend).toHaveBeenCalled();
   });
 
-  it('tells the user which idiom applies', () => {
+  it('keeps the control row free of a permanent instruction', () => {
+    /*
+     * This asserted a standing "Enter to send, Shift + Enter for a new line"
+     * hint. §3.2 enumerates the control row exhaustively — attach, spacer,
+     * counter, mic, send — and gives it a helper only in states 3, 4 and 7,
+     * each of which says something the user needs at that moment. A permanent
+     * instruction is read once and then occupies the row forever.
+     *
+     * The behaviour is unchanged and is asserted by the two tests above this
+     * one; only the caption went.
+     */
     render(<Composer onSend={vi.fn()} onStop={vi.fn()} busy={false} />);
-    // jsdom reports a fine pointer, so this is the keyboard hint.
-    expect(screen.getByText(/Enter to send, Shift \+ Enter for a new line/)).toBeInTheDocument();
+    expect(screen.queryByText(/Shift \+ Enter/)).toBeNull();
   });
 });
 
@@ -340,11 +450,20 @@ describe('degraded-service banner', () => {
     await waitFor(() => expect(document.querySelector('[data-health]')).toBeNull());
   });
 
-  it('warns and offers the phone number when degraded', async () => {
+  it('names the cause rather than saying "degraded", and offers the phone number', async () => {
+    /*
+     * Board 20: "Two causes, two messages. 'Degraded' alone tells a user
+     * nothing about whether the thing they came for still works."
+     *
+     * A missing index stops the ASSISTANT and nothing else — vessels, flights
+     * and tariffs are a separate path with no model and no index in it. Saying
+     * "the service is degraded" would send someone away from three screens that
+     * would have answered them.
+     */
     setScenario('degraded_health');
     renderWithProviders(<HealthBanner />);
-    const banner = await screen.findByText(/not working properly/);
-    expect(banner).toBeInTheDocument();
+    expect(await screen.findByText('Search is unavailable')).toBeInTheDocument();
+    expect(screen.getByText(/Vessels, flights and tariffs still work/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /call SCASPA/i })).toHaveAttribute(
       'href',
       'tel:+18694658121'
@@ -355,9 +474,9 @@ describe('degraded-service banner', () => {
     const user = userEvent.setup();
     setScenario('degraded_health');
     renderWithProviders(<HealthBanner />);
-    await screen.findByText(/not working properly/);
+    await screen.findByText('Search is unavailable');
     await user.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(screen.queryByText(/not working properly/)).toBeNull();
+    expect(screen.queryByText('Search is unavailable')).toBeNull();
   });
 
   it('notes a stale index quietly rather than as a warning', async () => {
@@ -368,13 +487,13 @@ describe('degraded-service banner', () => {
     // The information may be perfectly current. A date is a fact to weigh, not an
     // alarm to sound.
     expect(document.querySelector('[data-health="stale"]')).not.toBeNull();
-    expect(screen.queryByText(/not working properly/)).toBeNull();
+    expect(document.querySelector('[data-health="degraded"]')).toBeNull();
   });
 
   it('never shows the raw diagnostics', async () => {
     setScenario('degraded_health');
     const { container } = renderWithProviders(<HealthBanner />);
-    await screen.findByText(/not working properly/);
+    await screen.findByText('Search is unavailable');
     for (const leak of ['degraded', 'kb_rows', 'index_built_at', 'mock-chat-model']) {
       expect(container.textContent).not.toContain(leak);
     }
@@ -399,24 +518,30 @@ describe('degraded-service banner', () => {
 // ── Task 1: the empty state ──────────────────────────────────────────────────
 
 describe('the empty state', () => {
-  it('says what it covers, offers questions, and is honest about the method', async () => {
+  it('greets, sets the one-question-at-a-time expectation, and offers topics', async () => {
     renderWithProviders(<FullPageShell />);
 
     expect(
-      await screen.findByRole('heading', { name: /Ask about ports and travel/ })
+      await screen.findByRole('heading', { name: 'What do you need from the port today?' })
     ).toBeInTheDocument();
-    expect(screen.getByText(/Ferry and cruise schedules/)).toBeInTheDocument();
-    expect(screen.getByText(/cargo and import procedures/)).toBeInTheDocument();
-    expect(screen.getByText(/published seaport\s+tariffs/)).toBeInTheDocument();
-    expect(screen.getByText(/airport information/)).toBeInTheDocument();
-    // The one honest sentence. A description of the method, which is the reason
-    // to trust it — not a disclaimer.
+
+    /*
+     * The second sentence is required, not decorative.
+     *
+     * History is recorded and never fed back into the prompt, so a follow-up
+     * will not resolve pronouns. The copy has to set that expectation before
+     * the user forms the wrong one — which is why
+     * `08-blocked-and-forbidden.md` also forbids every UI that would imply
+     * otherwise.
+     */
+    expect(screen.getByText(/Ask one thing at a time/)).toBeInTheDocument();
+    expect(screen.getByText(/does not carry anything over from your last question/)).toBeVisible();
+
+    // Two wrapping rows of four.
     expect(
-      screen.getByText(/answers from verified SCASPA information and shows you where/)
+      screen.getByRole('button', { name: /Clearing cargo through customs/ })
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole('button', { name: /ferry|cruise|barrel|container/i }).length
-    ).toBeGreaterThanOrEqual(4);
+    expect(screen.getByRole('button', { name: /SCASPA's opening hours/ })).toBeInTheDocument();
   });
 
   it('has no robot illustration and no "powered by AI" badge', () => {
@@ -424,8 +549,23 @@ describe('the empty state', () => {
     // A visitor on a pier does not care what it is built from; they care whether
     // they will make the last ferry.
     expect(container.textContent).not.toMatch(/powered by ai|\bAI\b|robot|GPT|LLM/i);
-    expect(container.querySelector('img')).toBeNull();
-    expect(container.querySelector('svg')).toBeNull();
+
+    /*
+     * "No <img> at all" was the original assertion, and it was the right proxy
+     * while the shell had no imagery: any image would have been a mascot.
+     *
+     * The sidebar's SCASPA lockup is now a legitimate one, so the assertion
+     * moved to what it was always actually about — no *illustration*, and
+     * certainly no cartoon assistant. Every image here must be either the brand
+     * mark or decorative, and the brand mark is `aria-hidden` beside its own
+     * visible name.
+     */
+    for (const img of container.querySelectorAll('img')) {
+      const alt = img.getAttribute('alt') ?? '';
+      expect(alt).not.toMatch(/robot|assistant illustration|mascot|bot/i);
+      // Decorative, or the SCASPA mark. Nothing else belongs in this shell.
+      expect(alt === '' || alt === 'SCASPA Assistant').toBe(true);
+    }
   });
 });
 
@@ -436,7 +576,7 @@ describe('nothing writes to browser storage', () => {
     // turned off. A scroll offset is not message content — but rule 5 permits
     // only `conversation_id` there, and the rule is absolute.
     renderWithProviders(<FullPageShell />);
-    await screen.findByRole('heading', { name: /Ask about ports and travel/ });
+    await screen.findByRole('heading', { name: 'What do you need from the port today?' });
 
     const allowed = new Set(['conversation_id']);
     const sessionKeys = Object.keys(window.sessionStorage);

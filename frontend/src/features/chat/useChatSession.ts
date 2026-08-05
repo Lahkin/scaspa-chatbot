@@ -4,7 +4,7 @@ import { config } from '@/lib/config';
 import { NotAStream, streamMessage } from '@/lib/stream';
 import { clearConversationId, readConversationId, writeConversationId } from './conversation';
 import { setDraft } from './draft';
-import { OFFLINE, isNoAnswerCode, type FailureKind } from './errorCopy';
+import { BAD_REQUEST, OFFLINE, isNoAnswerCode, type FailureKind } from './errorCopy';
 import { chatReducer, initialMachineState, type Transport } from './reducer';
 import { logTurn, startTurn } from './telemetry';
 import type { ChatFailure } from './types';
@@ -103,7 +103,19 @@ export function useChatSession() {
         // signal above is therefore the primary one.
         !navigator.onLine
         ? OFFLINE
-        : (api?.code ?? 'INTERNAL');
+        : /*
+           * A 400 gets §3.11's own copy rather than the generic apology.
+           *
+           * `ErrorCode` is the wire contract and has no 400, so `statusToCode`
+           * cannot express it and falls through to `INTERNAL` — which tells the
+           * user the fault was ours when the request itself was malformed.
+           * Checked on the STATUS, and only when the body did not classify
+           * itself, so a backend that starts sending a real code for this keeps
+           * precedence.
+           */
+          api?.status === 400 && api.code === 'INTERNAL'
+          ? BAD_REQUEST
+          : (api?.code ?? 'INTERNAL');
 
     return {
       kind,
@@ -140,14 +152,31 @@ export function useChatSession() {
         );
       }
 
+      /*
+       * The non-streaming path has no `meta` event, so the sanitised question
+       * is patched here instead — same reducer case, so the two endpoints
+       * produce the same message state rather than two shapes that drift.
+       */
+      if (answer.question_sanitised) {
+        dispatch({
+          type: 'META',
+          conversationId: answer.conversation_id,
+          questionSanitised: answer.question_sanitised,
+        });
+      }
       dispatch({
         type: 'FALLBACK_ANSWER',
         text: answer.answer,
         citations: answer.citations,
         chart: answer.chart,
+        card: answer.card,
         grounded: answer.grounded,
         refusal: answer.refusal,
         refusalCategory: answer.refusal_category ?? null,
+        answerReplaced: answer.answer_replaced,
+        stepLimitReached: answer.step_limit_reached,
+        // What the server measured, for §3.14's "Answer time".
+        latencyMs: answer.meta.latency_ms,
         toolCalls: answer.tool_calls,
         conversationId: answer.conversation_id,
       });
@@ -238,7 +267,11 @@ export function useChatSession() {
           {
             onMeta: (data) => {
               writeConversationId(data.conversation_id);
-              dispatch({ type: 'META', conversationId: data.conversation_id });
+              dispatch({
+                type: 'META',
+                conversationId: data.conversation_id,
+                questionSanitised: data.question_sanitised ?? null,
+              });
               // The stream is alive; switch to the longer inter-event deadline.
               arm(config.streamTimeoutMs);
             },
@@ -259,10 +292,19 @@ export function useChatSession() {
             },
             onCitations: (data) => dispatch({ type: 'CITATIONS', citations: data.citations }),
             onChart: (data) => dispatch({ type: 'CHART', chart: data }),
+            onCard: (data) => dispatch({ type: 'CARD', card: data }),
             onReplace: (data) => dispatch({ type: 'REPLACE', text: data.text }),
             onDone: (data) => {
               disarm();
-              dispatch({ type: 'DONE', grounded: data.grounded, refusal: data.refusal });
+              dispatch({
+                type: 'DONE',
+                grounded: data.grounded,
+                refusal: data.refusal,
+                refusalCategory: data.refusal_category ?? null,
+                answerReplaced: data.answer_replaced,
+                stepLimitReached: data.step_limit_reached,
+                latencyMs: data.latency_ms,
+              });
               logTurn(turn.finish('stream', tools, answerChars));
             },
             onError: (data) => {
@@ -316,9 +358,25 @@ export function useChatSession() {
             text: thrown.message,
             citations: [],
             chart: null,
+            card: null,
             grounded: false,
             refusal: true,
             refusalCategory: null,
+            /*
+             * Both false, and both for the same reason: this branch is a 503
+             * from the retrieval layer, so no draft was ever written and no
+             * tool budget was ever spent. Neither the correction notice nor the
+             * "ask something simpler" copy applies — the index is empty, and
+             * simplifying the question cannot help.
+             */
+            answerReplaced: false,
+            stepLimitReached: false,
+            /*
+             * Zero, and the diagnostics panel reads it as "no answer time to
+             * report" rather than an instant answer: nothing was generated on
+             * this branch, so there is no server measurement to quote.
+             */
+            latencyMs: 0,
             toolCalls: [],
             conversationId: readConversationId() ?? '',
           });

@@ -14,11 +14,19 @@
  * — it turns bytes into validated events and hands them to callbacks.
  */
 
-import { normaliseError, ApiError } from './api';
+import { normaliseError, ApiError, chatBody } from './api';
 import { config } from './config';
 import { SseParser, parseFrameData } from './sse';
 import { isKnownStreamEvent, streamPayloadSchemas } from './schemas';
-import type { ApiErrorBody, ChartSpec, Citation, ToolName } from './types';
+import type {
+  ApiErrorBody,
+  AssistantCard,
+  Category,
+  ChartSpec,
+  Citation,
+  RefusalCategory,
+  ToolName,
+} from './types';
 
 /**
  * One callback per event the contract defines.
@@ -29,13 +37,21 @@ import type { ApiErrorBody, ChartSpec, Citation, ToolName } from './types';
  */
 export interface StreamHandlers {
   /** Always first, before any token. Adopt `conversation_id` immediately. */
-  onMeta?: (data: { conversation_id: string }) => void;
+  onMeta?: (data: { conversation_id: string; question_sanitised?: string | null }) => void;
   onToken?: (data: { text: string }) => void;
   onToolStart?: (data: { name: ToolName; summary: string }) => void;
   onToolEnd?: (data: { name: ToolName; summary: string; ms: number }) => void;
   /** After the last token — validation needs the finished text. */
   onCitations?: (data: { citations: Citation[] }) => void;
   onChart?: (data: ChartSpec) => void;
+  /**
+   * A populated card, after `citations` and before `done`.
+   *
+   * The payload is identical to the `card` field on `POST /api/chat` — the
+   * backend fills the rows from the feed and re-emits, so a client cannot end up
+   * with a different card depending on which endpoint answered.
+   */
+  onCard?: (data: AssistantCard) => void;
   /**
    * The tool-call cap was hit. Everything streamed so far was an internal
    * message, not an answer: discard it and render this instead.
@@ -45,7 +61,17 @@ export interface StreamHandlers {
     latency_ms: number;
     grounded: boolean;
     refusal: boolean;
-    kb_version: string;
+    /** Absent on a plain no-answer; present when a specific refusal gate fired. */
+    refusal_category?: RefusalCategory;
+    /**
+     * The draft was discarded as ungrounded and rewritten from published
+     * figures. Defaulted to `false` by the schema, so a backend that predates
+     * the field behaves as it did before it existed.
+     */
+    answer_replaced: boolean;
+    /** The agent ran out of tool calls. Not the same as "not in our data". */
+    step_limit_reached: boolean;
+    kb_version: string | null;
   }) => void;
   /** Once headers are sent the status is fixed at 200, so a failure arrives here. */
   onError?: (data: ApiErrorBody) => void;
@@ -54,6 +80,8 @@ export interface StreamHandlers {
 export interface StreamRequest {
   message: string;
   conversationId?: string | null;
+  /** Optional retrieval filter. Omitted from the body when absent. */
+  category?: Category | null | undefined;
 }
 
 /** Thrown when the response was not a stream at all. */
@@ -101,10 +129,13 @@ export async function streamMessage(
       },
       // No Authorization header and no cookie: there is no auth and no session
       // token — CLAUDE.md rule 2.
-      body: JSON.stringify({
-        message: request.message,
-        conversation_id: request.conversationId ?? null,
-      }),
+      //
+      // Body built by the same function `POST /api/chat` uses. The two endpoints
+      // promise identical content for the same question, and they cannot keep
+      // that promise if they can drift on what they send.
+      body: JSON.stringify(
+        chatBody(request.message, request.conversationId ?? null, request.category)
+      ),
       ...(signal ? { signal } : {}),
     });
   } catch (thrown) {
@@ -253,7 +284,9 @@ function dispatch(
     case 'meta':
       // Adopted immediately, before any token, so the conversation is correct
       // even if the user navigates away mid-answer.
-      handlers.onMeta?.(parsed.data as { conversation_id: string });
+      handlers.onMeta?.(
+        parsed.data as { conversation_id: string; question_sanitised?: string | null }
+      );
       return false;
     case 'token':
       handlers.onToken?.(parsed.data as { text: string });
@@ -270,6 +303,9 @@ function dispatch(
     case 'chart':
       handlers.onChart?.(parsed.data as ChartSpec);
       return false;
+    case 'card':
+      handlers.onCard?.(parsed.data as AssistantCard);
+      return false;
     case 'replace':
       handlers.onReplace?.(parsed.data as { text: string });
       return false;
@@ -280,7 +316,10 @@ function dispatch(
           latency_ms: number;
           grounded: boolean;
           refusal: boolean;
-          kb_version: string;
+          refusal_category?: RefusalCategory;
+          answer_replaced: boolean;
+          step_limit_reached: boolean;
+          kb_version: string | null;
         }
       );
       return false;

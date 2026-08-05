@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { reconcile, type CitationEntry } from './citations';
+import { groundingOf, reconcile, type CitationEntry, type Grounding } from './citations';
 import { useChatSession } from './useChatSession';
 import type { ChatMachineState } from './reducer';
 
@@ -38,6 +38,8 @@ interface ChatSessionValue {
 
   /** Sources for the most recent assistant answer. */
   entries: CitationEntry[];
+  /** How well the newest answer is sourced — §3.8. Undefined while streaming. */
+  grounding: Grounding | undefined;
   /** kb id highlighted by hover or focus, in either direction. */
   highlighted: string | null;
   setHighlighted: (id: string | null) => void;
@@ -102,9 +104,25 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     [session.state.messages]
   );
 
-  const entries = useMemo(() => {
-    if (!latest || latest.streaming) return [];
-    return reconcile(latest.text, latest.citations ?? null, latest.grounded ?? true).entries;
+  /*
+   * The panel's entries, and how well the answer above them is sourced.
+   *
+   * Reconciled once and read twice: §3.8's grounding badge is derived from the
+   * SAME pass that numbers the chips, so the badge and the chips can never
+   * disagree about which markers matched.
+   */
+  const { entries, grounding } = useMemo<{
+    entries: CitationEntry[];
+    grounding: Grounding | undefined;
+  }>(() => {
+    if (!latest || latest.streaming) return { entries: [], grounding: undefined };
+    const citations = latest.citations ?? null;
+    const grounded = latest.grounded ?? true;
+    const reconciliation = reconcile(latest.text, citations, grounded);
+    return {
+      entries: reconciliation.entries,
+      grounding: groundingOf(reconciliation, citations, grounded),
+    };
   }, [latest]);
 
   // The generic indicator gives way the moment there is something specific to
@@ -128,6 +146,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       busy: session.state.status === 'thinking' || session.state.status === 'streaming',
       offline: !online,
       entries,
+      grounding,
       highlighted,
       setHighlighted,
       scrollTo,
@@ -136,7 +155,17 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       openSource,
       thinkingSince,
     }),
-    [session, online, entries, highlighted, scrollTo, panelOpen, openSource, thinkingSince]
+    [
+      session,
+      online,
+      entries,
+      grounding,
+      highlighted,
+      scrollTo,
+      panelOpen,
+      openSource,
+      thinkingSince,
+    ]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

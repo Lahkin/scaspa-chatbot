@@ -1,4 +1,4 @@
-# SCASPA Assistant — Backend
+# SCASPA Assistant
 
 An AI assistant for the **St. Christopher Air & Sea Ports Authority**, the
 statutory body running the Deep Water Harbour (cargo), Port Zante (cruise), the
@@ -8,14 +8,27 @@ cites a source for every factual claim, and is built so that it **cannot state a
 fee, time or phone number that does not appear in a retrieved source** — if a
 figure cannot be traced, the answer is discarded rather than shown with a warning.
 
-This repository is the **backend only**. The React frontend is owned by a separate
-team. The contract for them is [docs/api-contract.md](docs/api-contract.md).
+Both halves live here:
+
+| | | |
+| --- | --- | --- |
+| `backend/` | FastAPI, Python 3.11+ | retrieval, the agent, grounding, voice |
+| `frontend/` | React 19, TypeScript, Vite | the chat surface, the embeddable widget |
+
+The agreement between them is [docs/api-contract.md](docs/api-contract.md), and
+it is not just prose: `backend/tests/test_contract.py` asserts what that file
+promises, and `frontend/scripts/integration-check.mjs` walks it against a running
+server. If the two sides drift, one of those fails.
+
+Most of this README is the backend. The frontend has its own
+[README-equivalent in its docs](frontend/docs/), and
+[running both together](#run-both-halves) is below.
 
 ---
 
 ## Contents
 
-- [Quick start](#quick-start-under-10-minutes) · [Environment](#environment-variables)
+- [Quick start](#quick-start-under-10-minutes) · [Run both halves](#run-both-halves) · [Environment](#environment-variables)
 - [Build the index](#build-the-index) · [Run](#run-the-server) · [Evaluate](#run-the-evaluation)
 - [Deploy](#deploy) · [Keep warm](#keep-warm) · [Before a demo](#before-a-demo)
 - [Architecture](#architecture) · [Project structure](#project-structure)
@@ -46,7 +59,7 @@ cd scaspa-chatbot/backend
 uv sync --group dev            # creates .venv, installs pinned deps (~2 min first time)
 
 cp ../.env.example .env        # then open .env and paste your OPENAI_API_KEY
-uv run pytest                  # 482 tests, no API key needed — should be all green
+uv run pytest                  # 505 tests, no API key needed — should be all green
 uv run uvicorn app.main:app --reload
 ```
 
@@ -84,13 +97,60 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 > which this project exists to prevent. Replace it with a real researcher export
 > (`scaspa_kb_YYYY-MM-DD.csv`) first.
 
+> ### An index built without a key is worse than no index
+>
+> `build_index.py` needs a real key. If the embeddings in Chroma were written by
+> anything else — a test fake, a different embedding model — every real query
+> scores **0.0** against them, the low-confidence short-circuit fires, and the
+> assistant answers "I do not have that" to everything while `/api/health`
+> cheerfully reports `"ready": true`. Nothing is broken and nothing works.
+>
+> If that is what you are seeing, rebuild with `--force`.
+
+---
+
+## Run both halves
+
+Two terminals. The backend must be up first, or the frontend's health banner will
+tell you so on load — which is the banner working.
+
+```bash
+# terminal 1 — the API on :8000
+cd backend && uv run uvicorn app.main:app --reload
+
+# terminal 2 — the UI on :5173
+cd frontend && npm install && npm run dev
+```
+
+Open <http://localhost:5173>. No frontend configuration is needed for a local
+run: `VITE_API_BASE_URL` defaults to `http://127.0.0.1:8000` and the backend
+allows both `localhost:5173` and `127.0.0.1:5173` by default.
+
+**The frontend talks to the real backend by default.** MSW fixtures are opt-in
+via `VITE_ENABLE_MOCKS=true`, for working on the UI with no backend running or
+for driving a state the real one will not produce on demand — a 429, a stalled
+stream, a degraded index. When they are on, the browser console says so on every
+load.
+
+Check the two halves agree, with the backend running:
+
+```bash
+cd frontend && npm run check:integration
+```
+
+That walks `docs/api-contract.md` against the live server — shapes, event order,
+error envelopes, exposed headers, the lot — and exits non-zero on a mismatch. Run
+it after any change to either side of the contract.
+
 ---
 
 ## Environment variables
 
-`.env` lives in `backend/` and is gitignored. Only `.env.example` is committed,
-with every key documented inline. In production, set these in the platform
-dashboard — never in the repo.
+`.env` lives in `backend/` and is gitignored. A repository-root `.env` is read
+too, at lower priority, because that is where people put it. Only `.env.example`
+is committed, with every key documented inline — **never edit that one to add
+your key**, the name is one character away from the file you want and it is
+tracked. In production, set these in the platform dashboard, never in the repo.
 
 **Required**
 
@@ -110,8 +170,10 @@ dashboard — never in the repo.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `OPENAI_CHAT_MODEL` | `gpt-5.6-terra` | Model ids from [the OpenAI models page](https://developers.openai.com/api/docs/models) |
-| `RATE_LIMIT_PER_MINUTE` | `15` | Voice endpoints get a third of this |
+| `OPENAI_CHAT_MODEL` | `gpt-5.6-terra` | Model ids from [the OpenAI models page](https://developers.openai.com/api/docs/models). Check your project has access — a key good for chat may have no speech models, which shows up as a 503 from `/api/stt` and `/api/tts` only |
+| `OPENAI_REASONING_EFFORT` | `none` | Compatibility, not preference: OpenAI refuses **function tools with reasoning** on `/v1/chat/completions`, and this assistant is an agent. Use `omit` for a model that rejects the parameter |
+| `RATE_LIMIT_PER_MINUTE` | `15` | The chat budget. Voice gets a third of it; reading vessels/flights/tariffs gets four times it |
+| `OPS_DATA_SOURCE` | `none` | `none` serves an honest empty state; `fixture` serves obviously-fake sample data for development and is **refused at boot when `ENV=prod`** |
 | `PRICE_*_PER_MTOK` | `0.0` | Set from current pricing so the spend estimate means something |
 | `DAILY_SPEND_WARN_USD` | `5.0` | Logs a warning past this |
 
@@ -278,6 +340,39 @@ question, both voice endpoints, and that rate limiting is active.
 for someone nervous and in front of an audience: numbered steps, exact commands,
 no prose.
 
+### Browser checks
+
+`npm test` runs in jsdom, which does no layout: "nothing overflows at 320px" is
+not a claim it can make. These drive a real headless browser against the
+production build, and are separate from `npm test` because CI has no browser.
+
+```bash
+cd frontend
+npm i -D --no-save playwright@1.56.1 && npx playwright install chromium webkit firefox
+npm run build
+npm run check:responsive   # overflow, touch targets, the 100dvh composer bug
+npm run check:a11y         # axe, plus the manual-equivalent live-region checks
+npm run check:browsers     # WebKit and Firefox, and the embed script in a frame
+npm run check:slow         # Slow 3G: first content, layout shift
+```
+
+Playwright is deliberately not a saved dependency — `npm ci` should not download
+300MB of browsers. Note that `--no-save` packages are pruned by any later
+`npm install`, so re-run the first line if the check reports it is missing.
+
+**The `/ops/*` routes need a backend that allows the check's origin**, or the
+tables render empty and the width checks pass on a page with nothing on it. That
+is not hypothetical: it hid a real overflow bug until the origin was added
+([decision 0024](docs/decisions.md)). `check:responsive` now fails loudly with
+the exact variables to set instead of passing quietly.
+
+```bash
+cd backend
+OPS_DATA_SOURCE=fixture \
+ALLOWED_ORIGINS="http://localhost:5173,http://localhost:4319" \
+  uv run uvicorn app.main:app --port 8000
+```
+
 ---
 
 ## Architecture
@@ -324,7 +419,7 @@ scaspa-chatbot/
 │   ├── scraped/           crawl output + flagged_for_client.md
 │   └── chroma/            the built index (gitignored)
 ├── docs/
-│   ├── api-contract.md    hand this to the frontend team
+│   ├── api-contract.md    the agreement between backend/ and frontend/
 │   ├── architecture.md    the system, and its limitations
 │   ├── decisions.md       every significant decision and why
 │   ├── deploy.md · runbook.md · privacy.md
@@ -346,7 +441,7 @@ scaspa-chatbot/
     ├── scripts/           build_index · evaluate · preflight · crawl_site ·
     │                      search · chat_repl · stream_demo · voice_smoke ·
     │                      reconcile · export_questions · pdf_bakeoff
-    └── tests/             482 tests, none needing an API key
+    └── tests/             505 tests, none needing an API key
 ```
 
 ---
@@ -368,9 +463,9 @@ Deliberately out of scope. Each was considered and declined.
 - **No general tourism.** Hotels, restaurants, tours and beaches are redirected.
 - **No user accounts, no analytics, no tracking.** See
   [docs/privacy.md](docs/privacy.md).
-- **No frontend.** Owned by another team.
 - **No horizontal scaling.** One instance, one worker, on purpose — see the
-  architecture doc.
+  architecture doc. This is also why the conversation store is per-process and
+  history is best-effort.
 
 ---
 
@@ -378,7 +473,7 @@ Deliberately out of scope. Each was considered and declined.
 
 | Document | For |
 | --- | --- |
-| [docs/api-contract.md](docs/api-contract.md) | The frontend team |
+| [docs/api-contract.md](docs/api-contract.md) | Anyone touching either side of the wire |
 | [docs/architecture.md](docs/architecture.md) | How it works, and its limits |
 | [docs/decisions.md](docs/decisions.md) | Every decision, the alternatives, the reasons |
 | [docs/runbook.md](docs/runbook.md) | When something breaks mid-demo |

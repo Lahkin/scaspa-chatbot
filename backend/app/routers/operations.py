@@ -1,0 +1,346 @@
+"""Vessel, flight and tariff endpoints.
+
+Thin: validate, call a service, return — CLAUDE.md rule 7. Every decision about
+what the data means lives in `app/ops/`.
+
+**No model is called from this module.** These endpoints are the non-LLM data
+path described in `app/ops/__init__.py`, which is what lets a panel show a
+berth status while the assistant continues to refuse to claim one.
+"""
+
+import logging
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Request
+
+from app.ops.source import (
+    OpsSource,
+    filter_flights,
+    filter_tariffs,
+    filter_vessels,
+    get_ops_source,
+    paginate,
+)
+from app.ops.tariffs import build_quote, total_of
+from app.ratelimit import RateLimiter, get_rate_limiter
+from app.schemas import (
+    ErrorEnvelope,
+    FlightSchedulesResponse,
+    GateMapResponse,
+    MarineAdvisoriesResponse,
+    OperatorProfileResponse,
+    TariffQuote,
+    TariffQuoteRequest,
+    TariffTableResponse,
+    VesselArrivalsResponse,
+    VesselPositionsResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["operations"])
+
+DEFAULT_LIMIT = 25
+MAX_LIMIT = 100
+
+
+def _request_id(request: Request) -> str:
+    return getattr(request.state, "request_id", "-")
+
+
+@router.get(
+    "/vessels",
+    response_model=VesselArrivalsResponse,
+    summary="Vessel arrivals and berth occupancy",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_vessels(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    q: Annotated[str | None, Query(max_length=100, description="Vessel name or IMO")] = None,
+    vessel_type: Annotated[str | None, Query(max_length=40)] = None,
+    berth: Annotated[str | None, Query(max_length=40)] = None,
+    status: Annotated[str | None, Query(max_length=20)] = None,
+    facility: Annotated[
+        str | None,
+        Query(max_length=40, description="deep_water_harbour, port_zante, …"),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> VesselArrivalsResponse:
+    """Vessel movements from the configured feed.
+
+    **200 with an empty list when no feed is configured**, not an error. Nothing
+    is broken in that case: SCASPA has not published one. `source.notice` says
+    so in words the client renders directly.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    matched = filter_vessels(source.vessels(), q, vessel_type, berth, status, facility)
+    return VesselArrivalsResponse(
+        source=source.describe(),
+        vessels=paginate(matched, limit, offset),
+        metrics=source.vessel_metrics(),
+        total=len(matched),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/flights",
+    response_model=FlightSchedulesResponse,
+    summary="Flight arrivals and departures at RLB International",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_flights(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    q: Annotated[str | None, Query(max_length=100, description="Flight number or port")] = None,
+    airline: Annotated[str | None, Query(max_length=60)] = None,
+    status: Annotated[str | None, Query(max_length=20)] = None,
+    direction: Annotated[str | None, Query(max_length=10)] = None,
+    facility: Annotated[
+        str | None,
+        Query(
+            max_length=40, description="rlb_airport — the SCASPA site, not the route's other end"
+        ),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> FlightSchedulesResponse:
+    """Flight movements from the configured feed. Same empty-not-error rule."""
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    matched = filter_flights(source.flights(), q, airline, status, direction, facility)
+    return FlightSchedulesResponse(
+        source=source.describe(),
+        flights=paginate(matched, limit, offset),
+        metrics=source.flight_metrics(),
+        advisory=source.advisory(),
+        total=len(matched),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/ops/positions",
+    response_model=VesselPositionsResponse,
+    summary="Vessel positions for the map panel",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_positions(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> VesselPositionsResponse:
+    """Where vessels are, according to whoever reported it.
+
+    Empty on every source that has no AIS, which is a fact rather than a fault —
+    the panel says so. Each position carries `reported_by`, because a
+    transponder, a harbour master and an estimate are three different claims.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    rows = source.positions()
+    return VesselPositionsResponse(
+        source=source.describe(),
+        positions=rows,
+        total=len(rows),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/ops/gates",
+    response_model=GateMapResponse,
+    summary="Gate and stand occupancy",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_gates(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> GateMapResponse:
+    """The apron.
+
+    `active` and `total` are counted here rather than by the client, so the gate
+    map and the flight screen's "8 / 12" tile cannot disagree about what active
+    means. A closed stand is not active; a free one is not either.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    gates = source.gates()
+    active = sum(1 for gate in gates if gate.status in ("occupied", "boarding"))
+    return GateMapResponse(
+        source=source.describe(),
+        gates=gates,
+        active=active,
+        total=len(gates),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/ops/advisories",
+    response_model=MarineAdvisoriesResponse,
+    summary="Published notices to mariners",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_marine_advisories(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> MarineAdvisoriesResponse:
+    """Marine notices, passed through verbatim.
+
+    This service does not produce marine weather and no advisory here is
+    inferred from anything. An empty list means no notice was published to this
+    assistant — it does **not** mean conditions are fine, and the panel is
+    written so a reader cannot take it that way.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    rows = source.marine_advisories()
+    return MarineAdvisoriesResponse(
+        source=source.describe(),
+        advisories=rows,
+        total=len(rows),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/ops/profile",
+    response_model=OperatorProfileResponse,
+    summary="Console identity card (demo only — there is no sign-in)",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_operator_profile(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> OperatorProfileResponse:
+    """The design's `profile_settings` card.
+
+    **Null on every source except the fixture one**, and `main.py` refuses to
+    boot with fixtures when ENV=prod. There is no authentication in this product
+    and this endpoint does not add any: it reads nothing from the request, has
+    no notion of a caller, and returns the same invented card to everyone.
+
+    It exists so the screen can be built and reviewed. See `OperatorProfile`.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    return OperatorProfileResponse(
+        source=source.describe(),
+        profile=source.operator_profile(),
+        request_id=_request_id(request),
+    )
+
+
+@router.get(
+    "/tariffs",
+    response_model=TariffTableResponse,
+    summary="Published schedule of port charges",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_tariffs(
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    category: Annotated[str | None, Query(max_length=20)] = None,
+    facility: Annotated[
+        str | None,
+        Query(max_length=40, description="deep_water_harbour, port_zante, …"),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = MAX_LIMIT,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> TariffTableResponse:
+    """The published rate table, filtered by the category chips and the search box."""
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    rows = source.tariffs()
+    matched = filter_tariffs(rows, q, category, facility)
+    # Chips come from the whole table, not the filtered slice — otherwise
+    # selecting a category removes every other chip and there is no way back.
+    categories = sorted({row.category for row in rows})
+    return TariffTableResponse(
+        source=source.describe(),
+        tariffs=paginate(matched, limit, offset),
+        categories=categories,
+        total=len(matched),
+        request_id=_request_id(request),
+    )
+
+
+@router.post(
+    "/tariffs/quote",
+    response_model=TariffQuote,
+    summary="Estimate port charges from published rates",
+    responses={
+        422: {"model": ErrorEnvelope, "description": "Unusable inputs"},
+        429: {"model": ErrorEnvelope, "description": "Too many requests"},
+    },
+)
+async def post_tariff_quote(
+    payload: TariffQuoteRequest,
+    request: Request,
+    source: Annotated[OpsSource, Depends(get_ops_source)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> TariffQuote:
+    """Apply published rates to the details given and total them.
+
+    The total is **derived** — it appears in no published source. It is computed
+    here in code, never by a model, from rates that are each shown with their
+    own line so the arithmetic can be checked by hand. `disclaimer` is mandatory
+    and names what the figure is not: not an invoice, not a customs assessment,
+    not a valuation. See `app/ops/tariffs.py` and docs/decisions.md 0020.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+
+    lines, unpriced = build_quote(payload, source)
+    subtotal = total_of(lines)
+
+    logger.info(
+        "tariff_quote category=%s lines=%d unpriced=%d total=%.2f",
+        payload.category,
+        len(lines),
+        len(unpriced),
+        subtotal,
+    )
+
+    return TariffQuote(
+        line_items=lines,
+        # The codes that applied and had no published rate. `build_quote` has
+        # always computed these and they were logged and then dropped, which
+        # left the client a clean-looking total that was short by a whole
+        # charge — the one outcome this calculator must not produce.
+        unpriced=unpriced,
+        subtotal=subtotal,
+        # Equal today. Separate fields because a real tariff schedule grows a
+        # surcharge or a rebate on top of the subtotal, and a client that
+        # rendered one number would have to be rebuilt rather than re-pointed.
+        total=subtotal,
+        currency="XCD",
+        source=source.describe(),
+        request_id=_request_id(request),
+    )

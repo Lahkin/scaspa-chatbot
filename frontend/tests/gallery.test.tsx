@@ -23,7 +23,21 @@ async function renderGallery() {
     history: createMemoryHistory({ initialEntries: ['/dev/gallery'] }),
   });
   render(<RouterProvider router={router as never} />);
-  return screen.findByRole('heading', { name: 'Component gallery', level: 1 });
+  /*
+   * Five seconds, not the 1000ms default.
+   *
+   * The gallery is behind `lazy(() => import('@/dev/Gallery'))`, so this waits on
+   * Vite transforming that module *and its whole import graph* — every primitive,
+   * every chat component, the mock fixtures. That grew past a second when the
+   * sidebar and the About panel were added, and the suite started failing about
+   * one run in three at **1044ms**: right on the default.
+   *
+   * Raised rather than worked around, because the number was measuring the test
+   * runner's cold transform, not anything a user experiences — the gallery is
+   * dev-only and `tests/mocks-not-in-production.test.ts` proves it is not in the
+   * shipped bundle. A flaky assertion is worse than a slow one.
+   */
+  return screen.findByRole('heading', { name: 'Component gallery', level: 1 }, { timeout: 5000 });
 }
 
 describe('component gallery', () => {
@@ -64,7 +78,7 @@ describe('component gallery', () => {
 
   it('shows every IconButton variant plus disabled and loading', async () => {
     await renderGallery();
-    for (const variant of ['primary', 'secondary', 'ghost', 'danger']) {
+    for (const variant of ['bordered', 'ghost', 'primary', 'danger']) {
       expect(screen.getByRole('button', { name: `Send (${variant})` })).toBeInTheDocument();
     }
     expect(screen.getByRole('button', { name: 'Disabled send' })).toBeDisabled();

@@ -10,11 +10,21 @@ dumped, and the counter itself expires within a minute.
 That is the whole reason this is defensible: the limiter needs to distinguish
 clients, and it does not need to know who they are.
 
-## Voice gets a stricter cap
+## Each scope is budgeted by what it costs
 
-Transcription and synthesis are billed per second and per character, and one
-recording costs far more than one question. So the voice endpoints get their own,
-lower limit rather than sharing the chat budget.
+Three scopes, and the split is by expense rather than by tidiness:
+
+* **chat** — a model call plus embeddings. The expensive one, and the base limit.
+* **voice** — billed per second and per character; one recording costs several
+  text turns, so it gets a *lower* cap.
+* **ops** — reading vessels, flights or tariffs. No model, no embedding, just a
+  dictionary lookup, so it gets a *higher* cap.
+
+The ops split is not a nicety. Browsing an arrivals board is a handful of
+requests — a search, a filter, a refresh — and if those came out of the chat
+budget then paging through vessel arrivals would leave a traveller unable to ask
+a question, having spent their allowance on page views they never thought of as
+requests.
 """
 
 import hashlib
@@ -33,6 +43,11 @@ WINDOW_SECONDS = 60
 # Voice costs several times a text turn, so it gets its own tighter budget.
 VOICE_LIMIT_DIVISOR = 3
 MIN_VOICE_LIMIT = 3
+
+# Reading a data feed costs a dictionary lookup. Browsing a board is naturally
+# several requests, and they must not come out of the budget for asking a
+# question.
+OPS_LIMIT_MULTIPLIER = 4
 
 # Random per process. Rotating on restart means a hashed key cannot be matched
 # against one from an earlier run.
@@ -77,6 +92,8 @@ class RateLimiter:
         base = self._settings.RATE_LIMIT_PER_MINUTE
         if scope == "voice":
             return max(MIN_VOICE_LIMIT, base // VOICE_LIMIT_DIVISOR)
+        if scope == "ops":
+            return base * OPS_LIMIT_MULTIPLIER
         return base
 
     def check(self, ip: str | None, scope: str = "chat") -> Decision:

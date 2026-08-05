@@ -7,8 +7,16 @@
 3. Never use `new EventSource(...)`. It cannot POST. Use fetch + ReadableStream.
 4. Never call `dangerouslySetInnerHTML`. Markdown renders through react-markdown
    with raw HTML disabled. Do not add rehype-raw.
-5. Never write message content to localStorage, sessionStorage or IndexedDB.
-   Only `conversation_id` may go to sessionStorage.
+5. Never write message content to localStorage, sessionStorage or IndexedDB —
+   not a question, not an answer, not a half-typed draft. Two exceptions, and
+   only these two:
+   - `conversation_id` in sessionStorage (ends with the tab, so a shared kiosk
+     does not hand on the last person's conversation);
+   - non-message UI preferences in localStorage under the single key
+     `scaspa.prefs` (currently the interface language, and nothing else).
+   A third key needs a decision record, not a commit. Adding one to hold
+   anything a user typed is still forbidden outright — see `features/chat/draft.ts`,
+   which refuses storage entirely for exactly this reason.
 6. Never render a citation the backend did not send in the `citations` payload.
    An unmatched inline marker is stripped, not guessed at.
 7. Every fetch lives in lib/api.ts. No component calls fetch directly.

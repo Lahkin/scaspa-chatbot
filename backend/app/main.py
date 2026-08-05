@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import Settings, get_settings
 from app.errors import AppError, ErrorCode, RateLimitedError, log_app_error
 from app.observability import JsonFormatter
-from app.routers import admin, chat, health, voice
+from app.routers import admin, chat, health, operations, support, voice
 from app.schemas import ErrorDetail, ErrorEnvelope
 
 APP_VERSION = "0.1.0"
@@ -36,6 +36,23 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_METHODS = ["GET", "POST", "OPTIONS"]
 ALLOWED_HEADERS = ["Content-Type", "Accept", REQUEST_ID_HEADER]
+
+# Response headers a cross-origin browser client is allowed to read.
+#
+# Only `Cache-Control`, `Content-Language`, `Content-Length`, `Content-Type`,
+# `Expires`, `Last-Modified` and `Pragma` are CORS-safelisted; everything else is
+# invisible to JavaScript unless it is named here. That is not a formality:
+#
+# * `Retry-After` carries the real rate-limit wait. Without it the client counts
+#   down from its own conservative guess, which looks exactly like a working
+#   countdown while inviting the user to retry early and collect another 429.
+# * `X-TTS-Cache` is documented as something the client may read, so it has to be
+#   readable.
+#
+# None of this shows up in server-side testing — Node does not enforce CORS, so
+# `npm run check:integration` reads these headers happily either way. It only
+# appears in a browser.
+EXPOSED_HEADERS = [REQUEST_ID_HEADER, "Retry-After", "X-TTS-Cache"]
 
 
 class RequestIDLogFilter(logging.Filter):
@@ -134,6 +151,11 @@ def _friendly_validation_message(exc: RequestValidationError) -> str:
     settings = get_settings()
     for error in exc.errors():
         field = error.get("loc", ())
+        if "category" in field:
+            # A client bug rather than a user's mistake, so the sentence is aimed
+            # at whoever is integrating. It never reaches a traveller: the UI
+            # picks the category, the user never types one.
+            return "That request used an unknown category filter."
         if "message" in field:
             kind = error.get("type", "")
             if kind == "string_too_long":
@@ -168,13 +190,28 @@ def create_app() -> FastAPI:
         # user's browser. Fail at boot rather than serve unsafely.
         raise ValueError("ALLOWED_ORIGINS must not contain '*' when ENV=prod")
 
+    if settings.ENV == "prod" and settings.OPS_DATA_SOURCE.strip().lower() == "fixture":
+        # Sample vessel and flight data in production would put an invented
+        # arrivals board in front of someone who came to check a real sailing —
+        # CLAUDE.md rule 5, and the most consequential way to break it, because
+        # an operations table is believed on sight.
+        #
+        # Refused at boot, like the wildcard origin above, rather than checked
+        # per request: a guard that runs once cannot be bypassed by a route
+        # someone adds later. The safe setting is `none`, which serves an honest
+        # empty state.
+        raise ValueError(
+            "OPS_DATA_SOURCE must not be 'fixture' when ENV=prod — it serves invented "
+            "vessel and flight data. Use 'none' until a real feed is configured."
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=ALLOWED_METHODS,
         allow_headers=ALLOWED_HEADERS,
-        expose_headers=[REQUEST_ID_HEADER],
+        expose_headers=EXPOSED_HEADERS,
     )
 
     @app.middleware("http")
@@ -197,6 +234,8 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
     app.include_router(voice.router, prefix="/api")
+    app.include_router(operations.router, prefix="/api")
+    app.include_router(support.router, prefix="/api")
 
     # The admin route does not exist unless a secret is configured. An
     # unauthenticated operator endpoint is worse than none, so absence is the

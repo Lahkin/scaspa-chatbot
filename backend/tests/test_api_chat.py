@@ -12,7 +12,7 @@ from langchain_core.language_models import BaseChatModel
 
 from app.agent import graph as graph_module
 from app.agent.memory import ConversationStore, get_conversation_store
-from app.agent.prompts import NO_ANSWER_MESSAGE, REFUSAL_MESSAGE
+from app.agent.prompts import GREETING_MESSAGE, NO_ANSWER_MESSAGE, REFUSAL_MESSAGE
 from app.config import get_settings
 from app.main import create_app
 from app.rag import answer as answer_module
@@ -383,3 +383,37 @@ def test_mid_stream_rate_limit_uses_the_upstream_code(api, monkeypatch) -> None:
     # carries a message a user can act on.
     assert error["code"] in {"INTERNAL", "UPSTREAM_RATE_LIMITED"}
     assert "869-465-8121" in error["message"]
+
+
+def test_a_greeting_is_answered_on_the_streaming_path_too(api) -> None:
+    """The path the browser actually uses.
+
+    Both endpoints run the same gates in the same order, and a greeting fixed
+    only in `answer_question` would pass a synchronous test while every real
+    user — who streams — still got "I do not have that in SCASPA's verified
+    information" for the word "hi".
+    """
+    events = read_events(api.post("/api/chat/stream", json={"message": "hi"}))
+    names = [name for name, _ in events]
+    text = "".join(data.get("text", "") for name, data in events if name == "token")
+
+    assert names[0] == "meta"
+    assert names[-1] == "done"
+    assert text.strip() == GREETING_MESSAGE.strip()
+
+    done = next(data for name, data in events if name == "done")
+    # Not a refusal on this path either — the two must agree.
+    assert done["refusal"] is False
+    # Grounded, so the client draws no "could not fully verify" notice.
+    assert done["grounded"] is True
+    assert [data for name, data in events if name == "citations"] == [{"citations": []}]
+
+
+def test_both_endpoints_answer_a_greeting_identically(api) -> None:
+    """`answer_question` and `astream_answer` must not drift apart."""
+    posted = api.post("/api/chat", json={"message": "hello"}).json()
+    streamed = read_events(api.post("/api/chat/stream", json={"message": "hello"}))
+    streamed_text = "".join(d.get("text", "") for n, d in streamed if n == "token")
+
+    assert posted["answer"].strip() == streamed_text.strip()
+    assert posted["refusal"] is False

@@ -40,8 +40,10 @@ from pydantic import BaseModel, Field
 
 from app.agent.graph import AgentTurnResult, arun_agent, best_available_score, run_agent
 from app.agent.prompts import (
+    CLOSING_MESSAGE,
     CONTEXT_CHUNK_TEMPLATE,
     ESCALATION_BLOCK,
+    GREETING_MESSAGE,
     NO_ANSWER_MESSAGE,
     REFUSAL_MESSAGE,
     UNGROUNDED_NUMBER_MESSAGE,
@@ -50,7 +52,7 @@ from app.agent.prompts import (
 from app.config import Settings, get_settings
 from app.rag.grounding import check_numbers
 from app.rag.retriever import RetrievedChunk
-from app.schemas import ChartSpec
+from app.schemas import CardRequest, ChartSpec
 from app.upstream import call_with_retry
 
 logger = logging.getLogger(__name__)
@@ -86,6 +88,9 @@ class Citation(BaseModel):
     source_type: str = ""
     as_of: str = ""
     confidence: str = ""
+    volatility: str | None = None
+    label: str | None = None
+    snippet: str | None = None
 
 
 class ToolCallInfo(BaseModel):
@@ -130,6 +135,10 @@ class AnswerResult(BaseModel):
     hit_tool_limit: bool = False
     chart: ChartSpec | None = Field(
         default=None, description="Validated chart spec, or None. Never built from model text"
+    )
+    card: CardRequest | None = Field(
+        default=None,
+        description="The card the model asked for, unpopulated. Rows come from the feed",
     )
     best_score: float = 0.0
     model: str | None = None
@@ -235,6 +244,77 @@ def match_refusal_category(query: str) -> str | None:
     return None
 
 
+# A greeting is not a question, and the pipeline had nowhere to put one.
+#
+# Before this gate existed there were exactly two pre-model outcomes: refuse a
+# boundary question, or report that nothing in the corpus answers it. "hi" is
+# neither. It fell through to the retrieval probe, embedded to a best score of
+# 0.12, and came back as NO_ANSWER_MESSAGE — "I do not have that in SCASPA's
+# verified information, so I will not guess at it" — followed by a telephone
+# number. The first word anyone types, answered as a failed lookup.
+#
+# **Anchored end to end, and that is the whole safety argument.** The pattern
+# matches only when the entire message is a pleasantry, so anything carrying a
+# question rides straight past it into the normal path:
+#
+#     "hi"                          -> greeting
+#     "hi there"                    -> greeting
+#     "hi, how much is a container" -> NOT a greeting; retrieved and answered
+#     "good morning"                -> greeting
+#     "what are your opening hours" -> NOT a greeting
+#
+# The failure mode to avoid is a greeting gate that swallows a real question
+# because it happened to start politely, which would be a far worse defect than
+# the one being fixed: it would silently stop answering.
+#
+# Closings are here for the same reason openings are. "thanks" is the second
+# thing people type, and it failed identically.
+_GREETING_WORDS = (
+    r"hi|hii+|hey+|hello|hiya|howdy|yo|greetings|"
+    r"good\s+(?:morning|afternoon|evening|day)|"
+    r"how\s+are\s+you|how(?:'s|\s+is)\s+it\s+going|what's\s+up"
+)
+_CLOSING_WORDS = r"thanks?|thank\s+you|thanks\s+a\s+lot|cheers|bye|goodbye|good\s?bye|see\s+you"
+
+
+def _anchored(words: str) -> re.Pattern[str]:
+    return re.compile(
+        rf"^[\s!.,]*(?:{words})"
+        # Trailing address or filler only — "hi there", "hello again". Anything
+        # else, including any question, means this is not merely a pleasantry.
+        r"(?:\s+(?:there|again|all|team|folks|everyone|so\s+much|a\s+lot))?"
+        r"[\s!.,?]*$",
+        re.IGNORECASE,
+    )
+
+
+GREETING_PATTERN = _anchored(_GREETING_WORDS)
+CLOSING_PATTERN = _anchored(_CLOSING_WORDS)
+
+
+def is_conversational_opener(query: str) -> bool:
+    """True when the message is a pleasantry and nothing else.
+
+    Deliberately conservative: a message containing a question is never an
+    opener, however politely it begins.
+    """
+    return bool(GREETING_PATTERN.match(query) or CLOSING_PATTERN.match(query))
+
+
+def conversational_reply(query: str) -> str | None:
+    """The reply for a pleasantry, or `None` if this is a real question.
+
+    Greetings and closings are split because they are the same routing problem
+    and different words: answering "thank you" with "Hello. I answer questions
+    about SCASPA…" is its own small wrongness.
+    """
+    if CLOSING_PATTERN.match(query):
+        return CLOSING_MESSAGE
+    if GREETING_PATTERN.match(query):
+        return GREETING_MESSAGE
+    return None
+
+
 def find_unverified_figures(text: str, chunks: list[RetrievedChunk]) -> list[str]:
     """Money and time values in `text` that appear in no retrieved chunk.
 
@@ -270,6 +350,58 @@ def _appears_verbatim(value: str, haystack: str) -> bool:
     return bool(pattern.search(haystack))
 
 
+# The `label` and `snippet` on a citation come from the chunk's own text rather
+# than from its Chroma metadata. `app.rag.chunking.build_kb_text` writes every
+# row in this fixed shape, so the two lines below are exactly the row's stored
+# `question` and `answer` — no less verbatim than a metadata copy would be, and
+# available against an index that was built before these fields existed. A
+# scraped web chunk has no such structure and simply yields None for both.
+_KB_QUESTION_LINE = re.compile(r"^Question:[ \t]*(.+)$", re.MULTILINE)
+_KB_ANSWER_BLOCK = re.compile(
+    r"^Answer:[ \t]*(.*?)(?=\n(?:Also known as:)|\Z)", re.MULTILINE | re.DOTALL
+)
+
+# Long enough to tell two fare rows apart, short enough not to reprint the answer
+# underneath the answer.
+SNIPPET_MAX_CHARS = 180
+
+
+def truncate_on_word(text: str, limit: int = SNIPPET_MAX_CHARS) -> str:
+    """Shorten `text` to `limit` characters, cutting only at whitespace.
+
+    The whitespace rule is not cosmetic. A mid-token cut would turn `XCD 44.44`
+    into `XCD 44.4` — a figure that is wrong, looks deliberate, and appears
+    directly under an answer the reader has been asked to trust. Cutting between
+    tokens can only ever drop a whole word.
+    """
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    head = collapsed[:limit]
+    cut = head.rfind(" ")
+    # A single token longer than the limit has no safe cut, so drop the snippet
+    # rather than publish a fragment of it.
+    if cut <= 0:
+        return ""
+    return f"{head[:cut].rstrip()}…"
+
+
+def kb_label_and_snippet(chunk: RetrievedChunk) -> tuple[str | None, str | None]:
+    """A human-readable label for this source, and a short excerpt of it.
+
+    For a knowledge-base row that is the stored `question` and `answer`. A
+    scraped page has neither, so it falls back to its `title` metadata and
+    carries no excerpt — an arbitrary 180 characters of a PDF is not an excerpt,
+    it is a fragment, and it would read as though someone chose it.
+    """
+    question = _KB_QUESTION_LINE.search(chunk.text)
+    answer = _KB_ANSWER_BLOCK.search(chunk.text)
+
+    label = question.group(1).strip() if question else chunk.metadata.get("title", "").strip()
+    snippet = truncate_on_word(answer.group(1)) if answer else ""
+    return (label or None), (snippet or None)
+
+
 def build_citations(chunks: list[RetrievedChunk], cited_ids: list[str]) -> list[Citation]:
     """Build the citations array from stored metadata only.
 
@@ -287,6 +419,7 @@ def build_citations(chunks: list[RetrievedChunk], cited_ids: list[str]) -> list[
             logger.warning("hallucinated_citation id=%s reason=not_in_retrieved_set", kb_id)
             continue
         meta = chunk.metadata
+        label, snippet = kb_label_and_snippet(chunk)
         citations.append(
             Citation(
                 kb_id=kb_id,
@@ -296,6 +429,12 @@ def build_citations(chunks: list[RetrievedChunk], cited_ids: list[str]) -> list[
                 source_type=meta.get("source_type", ""),
                 as_of=meta.get("as_of", ""),
                 confidence=meta.get("confidence", ""),
+                # Null, never a guess. A client is told to treat an unknown
+                # volatility as the cautious case; inventing "low" here would
+                # quietly downgrade a schedule that nobody has classified.
+                volatility=meta.get("volatility") or None,
+                label=label,
+                snippet=snippet,
             )
         )
     return citations
@@ -307,6 +446,10 @@ def build_chat_model(settings: Settings | None = None) -> BaseChatModel:
     Model id and temperature always come from settings — CLAUDE.md rule 2.
     """
     settings = settings or get_settings()
+    # `omit` means send no reasoning_effort at all, for a model that does not
+    # accept the parameter. See the setting's comment for why the default is
+    # `none` — it is what lets a reasoning model use function tools.
+    effort = settings.OPENAI_REASONING_EFFORT.strip().lower()
     return ChatOpenAI(
         model=settings.OPENAI_CHAT_MODEL,
         temperature=settings.CHAT_TEMPERATURE,
@@ -316,6 +459,7 @@ def build_chat_model(settings: Settings | None = None) -> BaseChatModel:
         # Retries are handled by app.upstream so the policy is ours, uniform
         # across chat and embeddings, and testable.
         max_retries=0,
+        **({} if effort in {"", "omit"} else {"reasoning_effort": effort}),
     )
 
 
@@ -339,6 +483,41 @@ def _refusal_result(category: str, elapsed_ms: int) -> AnswerResult:
         grounded=False,
         refusal=True,
         refusal_category=category,
+        best_score=0.0,
+        model=None,
+        latency_ms=elapsed_ms,
+    )
+
+
+def _greeting_result(message: str, elapsed_ms: int) -> AnswerResult:
+    """The conversational reply, identical on both paths.
+
+    `refusal` is **False**: nothing was refused and nothing failed. Filing every
+    "hello" as a refusal would make the refusal rate meaningless.
+
+    `grounded` is **True**, which reads oddly next to `citations: []` and is the
+    correct answer to the question the field actually asks. Its definition is
+    *"every id and figure traces to a retrieved row"* — and this message contains
+    no id and no figure, so every one of them traces, vacuously.
+
+    It was `False` first, on the reasoning that nothing had been retrieved. That
+    is a different question, and answering it here had a visible consequence:
+    `MessageBubble` renders `UngroundedNotice` — *"I could not fully verify this
+    — please confirm with SCASPA"* — on any assistant turn that is not grounded.
+    So "hi" was answered warmly and then undercut by an amber warning about a
+    claim it had not made, on the interaction `docs/demo-day.md` opens with.
+
+    Setting it True is safe in one direction only, and that is the direction
+    that matters: `grounded` is **never used to add confidence** — there is no
+    "verified" badge anywhere in this product, by design — so the only effect is
+    that nothing is withdrawn from a message with nothing to withdraw.
+    """
+    return AnswerResult(
+        answer=message,
+        grounded=True,
+        refusal=False,
+        citations=[],
+        retrieved=[],
         best_score=0.0,
         model=None,
         latency_ms=elapsed_ms,
@@ -482,6 +661,13 @@ def answer_question(
         )
         return _refusal_result(refusal_category, elapsed)
 
+    # --- Not a question: answer it as one and skip retrieval entirely ---
+    pleasantry = conversational_reply(query)
+    if pleasantry is not None:
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info("greeting question=%r latency_ms=%d", query, elapsed)
+        return _greeting_result(pleasantry, elapsed)
+
     # --- Pre-flight probe: nothing can answer this, so skip the agent entirely ---
     best_score = best_available_score(query, settings, embeddings)
     if best_score < settings.RETRIEVAL_MIN_SCORE:
@@ -504,6 +690,7 @@ def answer_question(
             chat_model=chat_model,
             embeddings=embeddings,
             today=today,
+            category=category,
         ),
         settings=settings,
     )
@@ -543,6 +730,7 @@ def _from_turn(
     result.prompt_tokens = turn.prompt_tokens
     result.completion_tokens = turn.completion_tokens
     result.chart = turn.chart
+    result.card = turn.card
     return result
 
 
@@ -601,6 +789,22 @@ async def astream_answer(
         yield "done", _done_payload(result, settings)
         return
 
+    # --- Not a question. Same gate as `answer_question`, same order. ---
+    #
+    # This must exist on BOTH paths or the browser never sees it: the UI streams,
+    # so a greeting fixed only in `answer_question` would still arrive as
+    # NO_ANSWER_MESSAGE for every user while passing a test written against the
+    # synchronous endpoint.
+    pleasantry = conversational_reply(query)
+    if pleasantry is not None:
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info("greeting question=%r latency_ms=%d", query, elapsed)
+        result = _greeting_result(pleasantry, elapsed)
+        yield "token", {"text": result.answer}
+        yield "citations", {"citations": []}
+        yield "done", _done_payload(result, settings)
+        return
+
     best_score = best_available_score(query, settings, embeddings)
     if best_score < settings.RETRIEVAL_MIN_SCORE:
         elapsed = int((time.perf_counter() - started) * 1000)
@@ -624,6 +828,7 @@ async def astream_answer(
         chat_model=chat_model,
         embeddings=embeddings,
         today=today,
+        category=category,
     ):
         if await disconnected():
             logger.info("client_disconnected question=%r", query)
@@ -649,11 +854,28 @@ async def astream_answer(
     # render it in the same frame as the finished answer.
     if result.chart is not None:
         yield "chart", result.chart.model_dump()
+    # The card request, not the card. The router populates the rows from the feed
+    # and re-emits — the streaming layer has no business reading an ops source.
+    if result.card is not None:
+        yield "_card_request", {"request": result.card.model_dump()}
     yield "done", _done_payload(result, settings)
 
 
 def _done_payload(result: AnswerResult, settings: Settings) -> dict:
-    """The `done` frame. Deliberately excludes the model name — see errors.py."""
+    """The `done` frame. Deliberately excludes the model name — see errors.py.
+
+    `refusal_category` is here so a *streamed* refusal can pick the same specific
+    copy the non-streaming endpoint allows. Without it a boundary refusal ("I
+    cannot look up your container") and a plain no-answer arrive
+    indistinguishable, and the client has to frame both as the latter.
+
+    `answer_replaced` and `step_limit_reached` are here for the same reason and
+    were the same omission. Both are computed on every turn and both were
+    dropped at the wire boundary, so a client could see that *an* answer came
+    back but not that it had been rewritten, nor that it stopped early. The
+    stream carries exactly what `POST /api/chat` carries, so a surface does not
+    lose a distinction by choosing to stream.
+    """
     from app.rag.ingest import read_index_meta
 
     meta = read_index_meta(settings)
@@ -661,6 +883,9 @@ def _done_payload(result: AnswerResult, settings: Settings) -> dict:
         "latency_ms": result.latency_ms,
         "grounded": result.grounded,
         "refusal": result.refusal,
+        "refusal_category": result.refusal_category,
+        "answer_replaced": result.answer_replaced,
+        "step_limit_reached": result.hit_tool_limit,
         "kb_version": meta.kb_version if meta else None,
     }
 

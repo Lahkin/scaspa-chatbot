@@ -12,8 +12,22 @@
 > add them to.
 
 Walked row by row against a **locally running backend** on 2026-07-30, with the
-index built and no `OPENAI_API_KEY` set. Automated rows are re-checkable with
-`npm run check:integration` (64 assertions).
+index built. Re-walked the same day against a real `OPENAI_API_KEY` and a real
+index, and again on 2026-07-31 in three real browsers — see "Standing
+limitation" at the foot.
+
+Re-checkable with, in order:
+
+```bash
+npm run check:integration   # 126 assertions — the contract, against a live backend
+npm run check:responsive    # 135 checks   — 12 routes × 5 widths
+npm run check:a11y          #   0 axe violations, 12 routes × 2 viewports
+npm run check:browsers      #  49 checks   — Chromium, WebKit, Firefox, iPhone 13
+npm run check:slow          #  Slow 3G, first content and layout shift
+```
+
+The last four need Playwright and `check:a11y` needs the backend on an allowed
+origin — `frontend/scripts/preflight-frontend.md` has the exact commands.
 
 Legend: ✅ verified · ⚠️ deviation, documented · ⏭️ cannot verify here, and why.
 
@@ -36,36 +50,36 @@ Legend: ✅ verified · ⚠️ deviation, documented · ⏭️ cannot verify her
 
 ## Errors
 
-| #   | Row                                                  | Status | Evidence                                                                                                                                          |
-| --- | ---------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 11  | Whitespace-only message → 422 `VALIDATION_ERROR`     | ✅     | verified                                                                                                                                          |
-| 12  | Over 1000 characters → 422 `VALIDATION_ERROR`        | ✅     | verified                                                                                                                                          |
-| 13  | Unknown route → 404 with an envelope                 | ✅     | verified                                                                                                                                          |
-| 14  | No stack trace, path or model name in any error body | ✅     | asserted across three failures                                                                                                                    |
-| 15  | Rate limit returns 429 with `Retry-After`            | ✅     | `retry-after: 45`                                                                                                                                 |
-| 15a | `Retry-After` is **readable by the browser**         | ⚠️     | **No.** Not in `Access-Control-Expose-Headers`, so the countdown falls back to a guess. `backend-issues.md` #5 — invisible to server-side testing |
-| 16  | The rate-limit **code** matches the contract         | ⚠️     | **Backend sends `RATE_LIMITED`; the contract documents only `UPSTREAM_RATE_LIMITED`.** See `backend-issues.md` #1                                 |
-| 17  | Validation happens before streaming starts           | ✅     | 422 with `application/json`, not an error event                                                                                                   |
+| #   | Row                                                  | Status | Evidence                                                                                                                                    |
+| --- | ---------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 11  | Whitespace-only message → 422 `VALIDATION_ERROR`     | ✅     | verified                                                                                                                                    |
+| 12  | Over 1000 characters → 422 `VALIDATION_ERROR`        | ✅     | verified                                                                                                                                    |
+| 13  | Unknown route → 404 with an envelope                 | ✅     | verified                                                                                                                                    |
+| 14  | No stack trace, path or model name in any error body | ✅     | asserted across three failures                                                                                                              |
+| 15  | Rate limit returns 429 with `Retry-After`            | ✅     | `retry-after: 45`                                                                                                                           |
+| 15a | `Retry-After` is **readable by the browser**         | ✅     | Now in `Access-Control-Expose-Headers` with `X-TTS-Cache`. Asserted on the advertisement, not the read — Node cannot see the bug. #5 closed |
+| 16  | The rate-limit **code** matches the contract         | ✅     | `RATE_LIMITED` is in the contract's table; `test_contract.py` pins the whole code set against it. #1 closed                                 |
+| 17  | Validation happens before streaming starts           | ✅     | 422 with `application/json`, not an error event                                                                                             |
 
 ## Conversation
 
-| #   | Row                                            | Status | Evidence                                                                                                  |
-| --- | ---------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------- |
-| 18  | A known `conversation_id` is echoed back       | ✅     | verified                                                                                                  |
-| 19  | An unknown id does not error                   | ✅     | 200                                                                                                       |
-| 20  | An expired id is replaced with a fresh one     | ⚠️     | **It is adopted, not replaced** — `payload.conversation_id or store.new_id()`. See `backend-issues.md` #4 |
-| 21  | Only `conversation_id` is stored on the device | ✅     | asserted in tests; `sessionStorage` holds exactly one key in a browser run                                |
+| #   | Row                                            | Status | Evidence                                                                                                                                                                                 |
+| --- | ---------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 18  | A known `conversation_id` is echoed back       | ✅     | verified                                                                                                                                                                                 |
+| 19  | An unknown id does not error                   | ✅     | 200                                                                                                                                                                                      |
+| 20  | A malformed id is replaced with a fresh one    | ✅     | `adopt_or_mint` mints unless the id is a well-formed UUID. An unknown-but-valid id is still adopted, deliberately — the store is per-worker, so membership cannot be the test. #4 closed |
+| 21  | Only `conversation_id` is stored on the device | ✅     | asserted in tests; `sessionStorage` holds exactly one key in a browser run                                                                                                               |
 
 ## Citations and safety
 
-| #   | Row                                                                                                       | Status | Evidence                                                                                 |
-| --- | --------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------- |
-| 22  | Every `[kb-xxx]` in the answer has a matching citation                                                    | ✅     | asserted against the live backend                                                        |
-| 23  | A citation carries `kb_id`, `category`, `subcategory`, `source_url`, `source_type`, `as_of`, `confidence` | ✅     | verified                                                                                 |
-| 24  | A citation carries `volatility`                                                                           | ⚠️     | **Absent.** Frontend defaults to `high`. `backend-issues.md` #2                          |
-| 25  | A citation carries `label` and `snippet`                                                                  | ⚠️     | **Absent.** Label derived from category+subcategory; snippet omitted, never invented. #2 |
-| 26  | `refusal_category` is available on both endpoints                                                         | ⚠️     | **Missing from the stream's `done`.** `backend-issues.md` #3                             |
-| 27  | An unmatched marker never reaches the user                                                                | ✅     | client-side reconciliation, mutation-tested                                              |
+| #   | Row                                                                                                       | Status | Evidence                                                                                                               |
+| --- | --------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 22  | Every `[kb-xxx]` in the answer has a matching citation                                                    | ✅     | asserted against the live backend                                                                                      |
+| 23  | A citation carries `kb_id`, `category`, `subcategory`, `source_url`, `source_type`, `as_of`, `confidence` | ✅     | verified                                                                                                               |
+| 24  | A citation carries `volatility`                                                                           | ✅     | Sent, and `null` rather than guessed when a row has none. Frontend still defaults an absent value to `high`. #2 closed |
+| 25  | A citation carries `label` and `snippet`                                                                  | ✅     | Sent. Snippet truncated only at whitespace, so a figure cannot be cut in half. #2 closed                               |
+| 26  | `refusal_category` is available on both endpoints                                                         | ✅     | On `done` now, and both endpoints asserted to agree. #3 closed                                                         |
+| 27  | An unmatched marker never reaches the user                                                                | ✅     | client-side reconciliation, mutation-tested                                                                            |
 
 ## Frontend standing rules (`CLAUDE.md`)
 
@@ -86,16 +100,20 @@ Legend: ✅ verified · ⚠️ deviation, documented · ⏭️ cannot verify her
 
 ## Resilience
 
-| #   | Row                                         | Status | Evidence                                                                    |
-| --- | ------------------------------------------- | ------ | --------------------------------------------------------------------------- |
-| 40  | Usable on Slow 3G                           | ✅     | first content 5.3s (`/`) and 6.2s (`/chat`), CLS 0.0000, no overflow        |
-| 41  | 429 shows a countdown and blocks sending    | ✅     | tested at the composer and at the hook                                      |
-| 42  | A 429 is never auto-retried                 | ✅     | mutation-tested                                                             |
-| 43  | A double tap fires one request              | ✅     | mutation-tested — the disabled button alone fires two                       |
-| 44  | A thrown render never leaves a white screen | ✅     | boundary per route, recovery resets the chat                                |
-| 45  | Offline is detected and stated honestly     | ✅     | verified with mocks off, both `navigator.onLine` false and a rejected fetch |
-| 46  | The stream falls back when it stalls        | ✅     | measured: recovered in 3.35s with the full answer                           |
-| 47  | No horizontal overflow at 320–1440px        | ✅     | `npm run check:responsive`                                                  |
+| #   | Row                                               | Status | Evidence                                                                                             |
+| --- | ------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| 40  | Usable on Slow 3G                                 | ✅     | re-measured 2026-07-31: first content 5.40s (`/`) and 6.41s (`/chat`), CLS 0.0000, no overflow       |
+| 41  | 429 shows a countdown and blocks sending          | ✅     | tested at the composer and at the hook                                                               |
+| 42  | A 429 is never auto-retried                       | ✅     | mutation-tested                                                                                      |
+| 43  | A double tap fires one request                    | ✅     | mutation-tested — the disabled button alone fires two                                                |
+| 44  | A thrown render never leaves a white screen       | ✅     | boundary per route, recovery resets the chat                                                         |
+| 45  | Offline is detected and stated honestly           | ✅     | verified with mocks off, both `navigator.onLine` false and a rejected fetch                          |
+| 46  | The stream falls back when it stalls              | ✅     | measured: recovered in 3.35s with the full answer                                                    |
+| 47  | No horizontal overflow at 320–1440px              | ✅     | `npm run check:responsive` — 135 checks, 12 routes × 5 widths                                        |
+| 48  | Every interactive control clears 44×44            | ✅     | same run. Found four undersized targets, incl. two that predated this work                           |
+| 49  | No axe violation on any route                     | ✅     | `npm run check:a11y` — 0 across 12 routes × 2 viewports, 5 manual checks                             |
+| 50  | It works in WebKit and Firefox, not just Chromium | ✅     | `npm run check:browsers` — 49 checks; **all three engines streamed a real model answer**, ~193 chars |
+| 51  | The embed works in all three engines              | ✅     | same run: one launcher, opens, mic permission passed to the iframe, Escape closes, focus returns     |
 
 ---
 
@@ -103,24 +121,64 @@ Legend: ✅ verified · ⚠️ deviation, documented · ⏭️ cannot verify her
 
 Stated rather than quietly ticked.
 
-- **Row 10 — identical content from both endpoints.** Both were exercised and both
-  return the documented shape, but with no `OPENAI_API_KEY` the backend
-  short-circuits to a no-answer refusal, so the two were compared on identical
-  _refusals_, not on identical generated answers. The contract's central promise
-  is unverified against real generation.
-- **Voice (`/api/stt`, `/api/tts`).** `/api/stt` correctly rejects an empty upload
-  with a 422. `/api/tts` returns 500 without an API key, so the audio path and its
-  sanitisation are unverified end to end.
+- **Row 10 — identical content from both endpoints.** Both were exercised against
+  real generation and both return the documented shape, and the two now provably
+  agree on `refusal_category` for the same question. They have **not** been
+  compared token-for-token on the same generated answer: the model is
+  non-deterministic across two separate calls even at temperature 0, so equality
+  of text is not a property that can be asserted this way. What is asserted is
+  that both funnel through one `finalise_answer`, which is where the promise
+  actually lives.
+- **Voice (`/api/stt`, `/api/tts`).** Still unverified end to end, and now for a
+  different reason. A key is configured, but the OpenAI project behind it has no
+  access to any speech model — `/api/tts` returns a clean 503 with the text path
+  entirely unaffected, which is the designed behaviour and is itself worth having
+  seen. The audio path and its sanitisation remain unexercised against a real
+  provider. `/api/tts/preview` **is** verified: it needs no provider, and its
+  output is correct including the phone-number expansion.
 - ~~Real rate-limit copy in the UI.~~ **Now proven.** A browser run against the
   live backend tripped the real per-IP limiter: the Send button showed a
   countdown, ticked 30 → 28, stayed disabled, the composer stayed typable, and no
   code or status leaked. It also found #5 — the countdown was a guess, because
   `Retry-After` is not exposed cross-origin.
+- ~~**Only Chromium had ever run the app.**~~ **Now closed.** WebKit and Firefox
+  both render, both stream a real model answer, and both run the embed correctly
+  — 49 checks in `npm run check:browsers`. Until 2026-07-31 none of the browser
+  checks had ever been executed at all: Playwright was not installed, and every
+  one of them skips loudly rather than passing vacuously, so the whole suite had
+  been sitting green-by-absence. Running them found six real defects — see
+  `docs/decisions.md` 0021.
 - **A physical device.** Slow 3G is Chromium's emulation and the touch behaviour
   was checked on an emulated iPhone 13. No real phone, and no real venue wifi.
+  This is now the only unverified surface left besides voice.
 
-## Standing limitation
+## Standing limitation — lifted
 
-There is still **no `OPENAI_API_KEY`**. Every shape in this ledger is verified;
-no real model call has been made by any prompt in this project. That has been the
-position since the backend was built and it has not changed.
+**This no longer applies, and the change is large enough to record rather than
+edit away.** For every prompt up to this one the position was: no
+`OPENAI_API_KEY`, so every shape verified and no real model call ever made.
+
+A key is now configured, the index has been rebuilt with real embeddings —
+retrieval scored 0.0 against it until then, because the vectors had been written
+by the test fake — and the assistant answers from the knowledge base end to end:
+real embeddings, real agent, real tool calls, a grounded citation, and the
+verification chain doing its job on real output.
+
+Two things only that first real call could have found, both now fixed:
+
+- The configured chat model is a reasoning model, and OpenAI refuses **function
+  tools with reasoning** on `/v1/chat/completions`. Every request 500'd. No fake
+  model could have surfaced this, because the fakes never talk to OpenAI.
+- The request's `category` filter lost to the category the model passes itself,
+  so an explicit filter silently did nothing. The unit test passed either way —
+  the fake model sends no category, and the real one always does.
+
+A third thing only a browser could find, added 2026-07-31 when the browser
+checks were run for the first time: **every operations route was rendering
+inside the marketing chrome**, giving each page two `<main>` landmarks and
+capping a 1440px console at `max-w-3xl`. jsdom has no layout, so no unit test
+could see it, and it looks correct in the source.
+
+What remains unverified: **voice against a real provider**, and the deployed
+build on a physical device over real venue wifi. Everything else in this ledger
+has now been measured in a real browser — three of them.

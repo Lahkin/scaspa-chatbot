@@ -1,58 +1,60 @@
-import { SCASPA_PHONE_LINES, SCASPA_POSTAL_ADDRESS } from '@/features/chat/contact';
+import { Icon } from '@/components/ui/Icon';
+import { CardFooterLink } from './CardFooterLink';
+import { ALL_DESTINATIONS } from './cardDestinations';
+import { EscalationBlock } from './EscalationBlock';
 
 /**
- * "I don't have that."
+ * "We don't hold that information" — spec board 05, and card 3 of board 15.
  *
- * A distinct, calm treatment — **not an error colour and not an apology stack**.
- * The assistant declining to guess is the single most trustworthy thing it does,
- * and dressing it in red teaches a reader that honesty is a malfunction.
+ * ## A no-answer is the most trustworthy thing the assistant does
  *
- * ### The copy is the backend's
+ * It is a successful `200` with `refusal: true`, not an error, and it must not
+ * be styled as one. The whole product exists to say this rather than guess, so
+ * the card is calm: a search glyph, a plain heading, and the coverage
+ * statement. No red, no alert role, no apology.
  *
- * `NO_ANSWER_MESSAGE` is approved by the team leader and coach. It is rendered
- * exactly as sent and **never rewritten client-side** — this component supplies
- * the frame, not the words. The one thing added is the contact route as tappable
- * links, because the backend can only send a phone number as text and a phone
- * number you cannot tap is a phone number you have to write down.
+ * ## The only card that carries all four destinations
  *
- * The backend's text already contains those numbers in its escalation block, so
- * the plain-text tail is trimmed to avoid printing them twice.
+ * Board 02 allows one call to action per answer card, and the board's own note
+ * explains why this is the exception: *"It is a statement about coverage, so it
+ * offers the whole of what is covered."* Being told what is not held is only
+ * useful next to what is.
  */
 
-/** The escalation block the backend appends. Split on it rather than reflowing the copy. */
+/** The escalation block the backend appends in plain text. Split, don't reflow. */
 const ESCALATION_MARKER = /\n\s*You can reach SCASPA directly:/;
 
 export function NoAnswerCard({ message }: { message: string }) {
-  // Keep the approved sentence, drop the duplicated plain-text contact block.
+  // Keep the approved sentence; the contact block is rendered as a component
+  // below rather than twice, once as prose and once as controls.
   const [explanation] = message.split(ESCALATION_MARKER);
 
   return (
-    <div className="rounded-lg border border-border bg-surface-muted p-4" data-state="no-answer">
-      <p className="text-caption font-semibold tracking-wide text-ink-muted uppercase">
-        No verified answer
-      </p>
-
-      {/* The backend's words, unaltered. */}
-      <p className="mt-2 whitespace-pre-wrap text-body text-ink">{explanation?.trim()}</p>
-
-      <div className="mt-3 border-t border-border pt-3">
-        <p className="text-small font-semibold text-ink">Ask SCASPA directly</p>
-        <ul className="mt-1 flex flex-wrap gap-x-4">
-          {SCASPA_PHONE_LINES.map((line) => (
-            <li key={line.href}>
-              <a
-                href={line.href}
-                className="inline-flex min-h-touch items-center text-small font-medium text-blue-700 underline tabular"
-              >
-                {line.text}
-              </a>
-            </li>
-          ))}
-        </ul>
-        <address className="mt-1 text-caption text-ink-subtle not-italic">
-          {SCASPA_POSTAL_ADDRESS.join(', ')}
-        </address>
+    <section
+      aria-labelledby="no-answer-heading"
+      data-state="no-answer"
+      className="flex flex-col gap-4 rounded-panel border border-border bg-surface p-5"
+    >
+      <div className="flex flex-col gap-3">
+        <h3
+          id="no-answer-heading"
+          className="flex items-center gap-2.5 text-section font-semibold text-ink"
+        >
+          <Icon name="search" size={16} className="text-brand-300" />
+          We don&rsquo;t hold that information
+        </h3>
+        {/* The backend's words, unaltered. */}
+        <p className="whitespace-pre-wrap text-body text-ink-muted">{explanation?.trim()}</p>
       </div>
-    </div>
+
+      {/* What we do hold. Four rows, each its own destination. */}
+      <div className="flex flex-col">
+        {ALL_DESTINATIONS.map((destination) => (
+          <CardFooterLink key={destination} to={destination} />
+        ))}
+      </div>
+
+      <EscalationBlock />
+    </section>
   );
 }

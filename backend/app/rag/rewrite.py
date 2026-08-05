@@ -73,7 +73,39 @@ CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
         "consignment",
     ),
     "airport": ("airport", "flight", "flights", "rlb", "bradshaw", "check-in", "departure lounge"),
-    "general": ("contact", "phone number", "email", "vacancy", "vacancies", "careers"),
+    # `vacancy`/`vacancies`/`careers` moved to `jobs` below — they were sitting
+    # here when `jobs` was not a category, and leaving them would mean the one
+    # category that is unambiguously about them could never be selected.
+    "general": ("contact", "phone number", "email"),
+    # ── The five added with the researchers' export ──────────────────────────
+    # Same rule as above: decisive only. A term that could belong to two
+    # categories is left out, because filtering on a wrong guess hides the
+    # correct row entirely — worse than not filtering at all.
+    "marine": (
+        "pilot",
+        "pilotage",
+        "tug",
+        "tugs",
+        "vhf",
+        "marsec",
+        "anchorage",
+        "port control",
+        "notice to mariners",
+    ),
+    # Multi-word only. A bare "pay" is how someone asks what a ferry ticket
+    # costs, which is a `ferry` question about a fare, not a `payments` question
+    # about the portal.
+    "payments": ("pay online", "online payment", "payment portal", "decal", "decals"),
+    "access": ("access badge", "port pass", "security pass", "port worker"),
+    "jobs": ("vacancy", "vacancies", "careers", "job application", "recruitment"),
+    "corporate": (
+        "board of directors",
+        "chief executive",
+        "annual report",
+        "audited financial",
+        "mission statement",
+        "leadership team",
+    ),
 }
 
 # Words that look decisive but are not. "port" is the handbook's collision case:

@@ -32,11 +32,22 @@ from app.errors import (
     log_app_error,
 )
 from app.observability import TurnLog, append_question_log, log_turn
+from app.ops.cards import build_card
+from app.ops.source import OpsSource, get_ops_source
 from app.rag.answer import AnswerResult, answer_question, astream_answer
 from app.rag.ingest import read_index_meta
 from app.ratelimit import RateLimiter, get_rate_limiter
 from app.safety import InputRejected, sanitise_user_input
-from app.schemas import ChatRequest, ChatResponse, Citation, ErrorEnvelope, ResponseMeta, ToolCall
+from app.schemas import (
+    AssistantCard,
+    CardRequest,
+    ChatRequest,
+    ChatResponse,
+    Citation,
+    ErrorEnvelope,
+    ResponseMeta,
+    ToolCall,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,21 +99,38 @@ def _require_index(settings: Settings) -> str | None:
     return meta.kb_version
 
 
+def _card_for(result: AnswerResult, source: OpsSource) -> AssistantCard | None:
+    """Populate the card the model asked for, if it asked for one.
+
+    The request holds a kind and a filter; every row comes from `source`. That
+    separation is the whole safety property — see `app/ops/cards.py`.
+    """
+    if result.card is None:
+        return None
+    return build_card(result.card, source)
+
+
 def _to_response(
     result: AnswerResult,
     conversation_id: str,
     request_id: str,
     kb_version: str | None,
+    card: AssistantCard | None = None,
+    question_sanitised: str | None = None,
 ) -> ChatResponse:
     """Map the service result onto the wire shape."""
     return ChatResponse(
         answer=result.answer,
         conversation_id=conversation_id,
+        question_sanitised=question_sanitised,
         grounded=result.grounded,
         refusal=result.refusal,
         refusal_category=result.refusal_category,
+        answer_replaced=result.answer_replaced,
+        step_limit_reached=result.hit_tool_limit,
         citations=[Citation(**c.model_dump()) for c in result.citations],
         chart=result.chart,
+        card=card,
         tool_calls=[ToolCall(name=t.name, summary=t.summary, ms=t.ms) for t in result.tool_calls],
         meta=ResponseMeta(
             request_id=request_id,
@@ -134,12 +162,13 @@ async def post_chat(
     store: Annotated[ConversationStore, Depends(get_conversation_store)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
     tracker: Annotated[SpendTracker, Depends(get_spend_tracker)],
+    source: Annotated[OpsSource, Depends(get_ops_source)],
 ) -> ChatResponse:
     """Answer one question from the verified knowledge base."""
     enforce_rate_limit(request, limiter, scope="chat")
     message, injections = clean_message(payload, settings)
     kb_version = _require_index(settings)
-    conversation_id = payload.conversation_id or store.new_id()
+    conversation_id = store.adopt_or_mint(payload.conversation_id)
     request_id = getattr(request.state, "request_id", "-")
 
     if injections:
@@ -176,7 +205,17 @@ async def post_chat(
     # measurable change.
     store.append(conversation_id, message, result.answer)
 
-    return _to_response(result, conversation_id, request_id, kb_version)
+    return _to_response(
+        result,
+        conversation_id,
+        request_id,
+        kb_version,
+        _card_for(result, source),
+        # Only when safety actually changed the question. Echoing it back
+        # unchanged would make every client compare two identical strings to
+        # decide whether to show a notice.
+        question_sanitised=message if message != payload.message else None,
+    )
 
 
 def sse(event: str, data: dict) -> str:
@@ -195,6 +234,7 @@ async def post_chat_stream(
     settings: Annotated[Settings, Depends(get_settings)],
     store: Annotated[ConversationStore, Depends(get_conversation_store)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    source: Annotated[OpsSource, Depends(get_ops_source)],
 ) -> StreamingResponse:
     """Stream an answer.
 
@@ -206,14 +246,30 @@ async def post_chat_stream(
     inline and reconciles against `citations` when it arrives.
     """
     enforce_rate_limit(request, limiter, scope="chat")
-    message, _injections = clean_message(payload, settings)
+    message, injections = clean_message(payload, settings)
+    if injections:
+        # Logged on both routes now. The stream used to discard the result of its
+        # own safety pass, so a neutralised question was invisible in the logs
+        # and invisible to the client.
+        logger.warning("injection_neutralised route=/api/chat/stream count=%d", len(injections))
     kb_version = _require_index(settings)
-    conversation_id = payload.conversation_id or store.new_id()
+    conversation_id = store.adopt_or_mint(payload.conversation_id)
     request_id = getattr(request.state, "request_id", "-")
 
     async def generate() -> AsyncIterator[str]:
         # Sent before any token so the client can attach state immediately.
-        yield sse("meta", {"conversation_id": conversation_id})
+        #
+        # `question_sanitised` rides on `meta` rather than on `done` because it
+        # describes what was SENT, not what came back — the user's own words
+        # changed on screen and the correction belongs there before the answer
+        # starts arriving, not after it has finished.
+        yield sse(
+            "meta",
+            {
+                "conversation_id": conversation_id,
+                "question_sanitised": message if message != payload.message else None,
+            },
+        )
 
         pieces: list[str] = []
         try:
@@ -236,6 +292,15 @@ async def post_chat_stream(
                 )
             ) as stream:
                 async for event, data in stream:
+                    # The answer chain yields a card *request*; the rows are
+                    # filled in here, from the feed. The internal event never
+                    # reaches the client — it is renamed to `card` and carries a
+                    # fully populated payload, identical to the field on
+                    # `POST /api/chat`, so the two endpoints agree.
+                    if event == "_card_request":
+                        request_model = CardRequest.model_validate(data["request"])
+                        yield sse("card", build_card(request_model, source).model_dump(mode="json"))
+                        continue
                     if event == "token":
                         pieces.append(data["text"])
                     elif event == "done":

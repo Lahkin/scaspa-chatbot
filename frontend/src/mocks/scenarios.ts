@@ -33,7 +33,11 @@ export type ScenarioId =
   | 'refusal'
   | 'ungrounded'
   | 'empty_citations'
-  | 'stream_stall';
+  | 'stream_stall'
+  | 'ops_unavailable'
+  | 'card_vessels'
+  | 'card_tariff'
+  | 'card_ticket';
 
 export interface ScenarioDescription {
   id: ScenarioId;
@@ -147,6 +151,35 @@ export const SCENARIOS: ScenarioDescription[] = [
     id: 'stream_stall',
     label: 'Stream stalls after 2 tokens',
     expected: 'No done, no error, no close. The client timeout is the only way out.',
+  },
+  {
+    id: 'card_vessels',
+    label: 'Answer with an arrivals card',
+    expected:
+      'The prose says it cannot see live movements; the card shows the feed with its own ' +
+      'source notice. Both are true at once — that is the whole design.',
+  },
+  {
+    id: 'card_tariff',
+    label: 'Answer with the fee calculator',
+    expected:
+      'An empty calculator. No figure until the user asks for one, and the total arrives ' +
+      'with its mandatory disclaimer.',
+  },
+  {
+    id: 'card_ticket',
+    label: 'Answer with a ticket form',
+    expected:
+      'Offered after a weak answer. No name or email field; the receipt says nobody will ' +
+      'make contact first.',
+  },
+  {
+    id: 'ops_unavailable',
+    label: 'No operational feed configured',
+    expected:
+      'GET /api/vessels answers 200 with an empty list, null metrics and a notice — ' +
+      'not an error. This is the production default, so the empty board is the one ' +
+      'most people will actually see.',
   },
 ];
 

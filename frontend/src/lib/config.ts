@@ -95,10 +95,17 @@ export const config = {
    * Serve the API from MSW instead of a real backend. Dev only — the flag is
    * ignored in a production build, where the mock code is not even bundled.
    *
-   * Defaults on, because for most of this project's life there was no backend to
-   * point at. Set `VITE_ENABLE_MOCKS=false` to develop against a running server.
+   * **Defaults off.** It defaulted on for most of this project's life, because
+   * there was no backend to point at. There is one now, and a default that
+   * quietly serves fixtures means `npm run dev` shows a working assistant while
+   * the two halves are not connected at all — the failure mode being defaulted
+   * into is "everything looks fine", which is the one worth avoiding.
+   *
+   * Set `VITE_ENABLE_MOCKS=true` to work on the UI with no backend running, or
+   * to drive a scenario the real one cannot produce on demand (a 429, a stalled
+   * stream, a degraded index). `src/mocks/scenarios.ts` lists them.
    */
-  useMocks: env.DEV && readBoolean(env.VITE_ENABLE_MOCKS, true),
+  useMocks: env.DEV && readBoolean(env.VITE_ENABLE_MOCKS, false),
 
   isDev: env.DEV,
   isProd: env.PROD,

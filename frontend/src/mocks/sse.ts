@@ -22,7 +22,7 @@
  * cruise terminal's wifi.
  */
 
-import type { ChartSpec, Citation, StreamEvent } from '@/lib/types';
+import type { AssistantCard, ChartSpec, Citation, RefusalCategory, StreamEvent } from '@/lib/types';
 import { ANSWER, CITATIONS, CONVERSATION_ID, KB_VERSION, REQUEST_ID, TOOL_CALLS } from './fixtures';
 import { sleep } from './scenarios';
 
@@ -103,10 +103,19 @@ export interface StreamOptions {
   answer?: string;
   /** Skip tool events (a refusal never reaches a tool). */
   skipTools?: boolean;
+  /**
+   * Reported on `done`, so a streamed refusal can pick its specific copy.
+   *
+   * Null for a plain no-answer — the backend sends the key either way, and a mock
+   * that omits it would hide a client that reads it wrongly.
+   */
+  refusalCategory?: RefusalCategory;
   /** Override the citations payload — used by the volatility scenario. */
   citations?: Citation[];
   /** Emit a `chart` event after citations and before done, as the contract requires. */
   chart?: ChartSpec;
+  /** Emit a populated `card` event, after any chart and always before done. */
+  card?: AssistantCard;
 }
 
 /**
@@ -123,8 +132,10 @@ export function chatStream(options: StreamOptions = {}): ReadableStream<Uint8Arr
     grounded = true,
     answer = ANSWER,
     skipTools = false,
+    refusalCategory = null,
     citations = CITATIONS,
     chart,
+    card,
   } = options;
 
   let cancelled = false;
@@ -203,11 +214,17 @@ export function chatStream(options: StreamOptions = {}): ReadableStream<Uint8Arr
           enqueue(frame('chart', chart));
         }
 
+        if (card) {
+          await sleep(20);
+          enqueue(frame('card', card));
+        }
+
         enqueue(
           frame('done', {
             latency_ms: 1284,
             grounded,
             refusal: skipTools,
+            refusal_category: refusalCategory ?? null,
             kb_version: KB_VERSION,
           })
         );

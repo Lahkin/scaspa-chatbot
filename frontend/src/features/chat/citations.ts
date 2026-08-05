@@ -77,6 +77,38 @@ export interface Reconciliation {
   unverified: string[];
 }
 
+/**
+ * The four grounding states of §3.8, rendered at the head of the source list as
+ * a Family A provenance badge.
+ *
+ * `unchecked` is the state before the `citations` event lands — genuinely "not
+ * checked yet" rather than "nothing found", and the difference matters because
+ * one is a wait and the other is a verdict.
+ */
+export type Grounding = 'all' | 'partial' | 'none' | 'unchecked';
+
+/**
+ * What the reconciliation says about how well the prose is sourced.
+ *
+ * Derived rather than sent: the backend's `grounded` boolean is one bit, and
+ * §3.8 needs four states. `partial` is the one that only reconciliation can
+ * know — some markers matched a retrieved row and some did not, which is
+ * exactly the case a single boolean flattens.
+ *
+ * **`grounded: false` is `none` regardless of what matched.** The backend has
+ * said it could not stand behind the figures; a chip count cannot overrule that.
+ */
+export function groundingOf(
+  reconciliation: Reconciliation,
+  citations: readonly Citation[] | null,
+  grounded: boolean
+): Grounding {
+  if (citations === null) return 'unchecked';
+  if (!grounded) return 'none';
+  if (reconciliation.unverified.length > 0) return 'partial';
+  return reconciliation.entries.some((entry) => entry.index !== null) ? 'all' : 'none';
+}
+
 export interface CitationEntry {
   citation: Citation;
   /**
@@ -200,13 +232,43 @@ function titleCase(value: string): string {
 /**
  * How much emphasis the "verified on" date gets.
  *
- * **A citation with no `volatility` is treated as `high`.** The field is not in
- * the contract yet, and the failure that matters is a stale ferry departure shown
- * quietly — so the default is the cautious one. Downgrading an unknown row to a
- * quiet date would be choosing the harm.
+ * **A citation with no `volatility` renders as `medium` — "changes often".**
+ *
+ * ── THIS CHANGED, AND IT IS THE ONE PLACE THE HANDOFF LOWERS A CAUTION ───────
+ *
+ * It used to be `high`, on the reasoning that a stale ferry departure shown
+ * quietly is the failure that matters, so the unknown case should be the
+ * strictest one. `docs/api-contract.md` still said "treat an absent or
+ * unrecognised value as `high`".
+ *
+ * The design handoff is explicit and says otherwise, twice — §1.2 Family A:
+ * "**`volatility: null` renders as the cautious case — 'changes often' — never
+ * as static or low.** It carries the extra ring so a reviewer can see the
+ * fallback fired." And §3.7: "Renders the cautious case — CHANGES OFTEN — with
+ * the extra ring. Never static, never low."
+ *
+ * So the two agree on the direction and disagree by one rung, and the handoff
+ * is the source of truth for what appears on screen. What survives from the old
+ * reasoning is the part that actually protects the reader: `needsConfirmation`
+ * is true for `medium` as well as `high`, so a row with no volatility on record
+ * still carries the confirm-before-you-travel line. The difference is the badge
+ * label and the ring beside it, and the ring is a stronger signal than the word
+ * was — it says the value was defaulted rather than reported, which "check
+ * before use" on its own never did.
  */
 export function volatilityOf(citation: Citation): 'low' | 'medium' | 'high' {
-  return citation.volatility ?? 'high';
+  return citation.volatility ?? 'medium';
+}
+
+/**
+ * Whether the volatility on screen was reported or supplied by the fallback.
+ *
+ * Only this tells the two apart. A badge reading "changes often" looks like a
+ * measurement either way, and the handoff rings the defaulted case precisely so
+ * a reviewer can see which it is.
+ */
+export function volatilityIsDefaulted(citation: Citation): boolean {
+  return citation.volatility == null;
 }
 
 /**

@@ -71,6 +71,29 @@ class ConversationStore:
         """Mint an opaque conversation id. Random; carries no information."""
         return str(uuid.uuid4())
 
+    def adopt_or_mint(self, offered: str | None) -> str:
+        """The id to use for this turn: the client's, if it is one we could have minted.
+
+        The store is not shared between workers, so an id this process has never
+        seen is still legitimate — it may belong to a sibling. Membership
+        therefore cannot be the test, and the shape is: anything that is not a
+        well-formed UUID was never minted here, so it is replaced rather than
+        adopted.
+
+        This is a tidiness guarantee, not a security one. A conversation holds
+        only question and answer text and is keyed by a random value, so there is
+        nothing to take over — but a server that echoes back whatever arbitrary
+        string it is handed invites someone to conclude otherwise.
+        """
+        if offered is None:
+            return self.new_id()
+        try:
+            uuid.UUID(offered)
+        except ValueError:
+            logger.info("conversation_id_replaced reason=not_a_uuid")
+            return self.new_id()
+        return offered
+
     def _purge_expired(self, now: datetime) -> None:
         """Drop conversations idle beyond the TTL. Caller holds the lock."""
         expired = [

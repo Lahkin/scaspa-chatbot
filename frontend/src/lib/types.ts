@@ -18,8 +18,27 @@
 
 // ── Requests ─────────────────────────────────────────────────────────────────
 
-/** Optional retrieval filter. The contract lists exactly these five. */
-export type Category = 'ferry' | 'cargo' | 'cruise' | 'airport' | 'general';
+/**
+ * Optional retrieval filter. The contract's list, mirrored exactly.
+ *
+ * Ten, not the five this was for most of the project's life. The five are the
+ * ones the 12-row fixture used; the researchers' delivered corpus adds `marine`,
+ * `payments`, `access`, `jobs` and `corporate`, which between them cover 47
+ * confirmed rows. Sending one the backend does not know is a **422**, not a
+ * silent empty result, so this union and `CATEGORIES` in `app/schemas.py` have
+ * to move together.
+ */
+export type Category =
+  | 'ferry'
+  | 'cargo'
+  | 'cruise'
+  | 'airport'
+  | 'general'
+  | 'marine'
+  | 'payments'
+  | 'access'
+  | 'jobs'
+  | 'corporate';
 
 export interface ChatRequest {
   /** 1–1000 characters. Whitespace-only is rejected with VALIDATION_ERROR. */
@@ -38,11 +57,10 @@ export type SourceType =
 /**
  * How fast this fact goes stale. `high` is a schedule; `low` is "there is Wi-Fi".
  *
- * ⚠️ **Not currently sent by the API.** It is a column on every knowledge-base row
- * (`backend/app/rag/models.py`) but is not part of the `Citation` payload in
- * `docs/api-contract.md`. Raised with the backend team — see `docs/decisions.md`
- * F005. Until it arrives, a citation without it is treated as **high**, because
- * the failure that matters is a stale ferry time shown quietly.
+ * Sent on every citation. It arrives as `null` — never as a guess — for a row
+ * with no volatility on record, and `volatilityOf` then applies **medium**
+ * while `volatilityIsDefaulted` marks it as supplied rather than measured. The
+ * handoff draws that case with a ring around the badge for exactly that reason.
  */
 export type Volatility = 'low' | 'medium' | 'high';
 
@@ -61,17 +79,21 @@ export interface Citation {
   as_of: string;
   confidence: string;
 
-  // ── Not in the contract yet ────────────────────────────────────────────────
-  // All three exist on the knowledge-base row and none is exposed on the
-  // Citation. Typed optional so the UI lights up the moment the backend sends
-  // them, and degrades honestly until it does. Never fabricated client-side.
+  // ── Sent, but nullable ─────────────────────────────────────────────────────
+  // All three come from the indexed row, and the backend sends null rather than
+  // a guess when a row has none. Null and absent are handled identically, and
+  // neither is ever filled in client-side.
 
-  /** KB `volatility`. Absent → treated as `high`. */
-  volatility?: Volatility | undefined;
-  /** KB `question` — a human label for the row. Absent → derived from category. */
-  label?: string | undefined;
-  /** An excerpt of the KB `answer`. Absent → the excerpt slot is omitted, not invented. */
-  snippet?: string | undefined;
+  /** KB `volatility`. Null or absent → treated as `high`, the cautious default. */
+  volatility?: Volatility | null | undefined;
+  /** KB `question` — a human label for the row. Null → derived from category. */
+  label?: string | null | undefined;
+  /**
+   * An excerpt of the KB `answer`, truncated server-side on a word boundary so a
+   * figure can never be cut in half. Null → the excerpt slot is omitted, not
+   * invented. A scraped page has no curated answer and so has no snippet.
+   */
+  snippet?: string | null | undefined;
 }
 
 // ── Charts ───────────────────────────────────────────────────────────────────
@@ -112,12 +134,23 @@ export interface ChartSpec {
 // ── Tools ────────────────────────────────────────────────────────────────────
 
 /** The five tools, so a client can pick an icon per name. */
-export type ToolName =
+export type KnownToolName =
   | 'search_scaspa_knowledge'
   | 'search_site_content'
   | 'make_chart'
   | 'calculate'
-  | 'escalate_to_human';
+  | 'escalate_to_human'
+  | 'show_card';
+
+/**
+ * A tool name as it arrives.
+ *
+ * The union with `string` is deliberate and it is not laziness: it keeps
+ * autocomplete on the five known names while making it a *type error* to write a
+ * `switch` over them without a default. A sixth tool must degrade to a generic
+ * icon, not throw away the answer it was reporting progress on.
+ */
+export type ToolName = KnownToolName | (string & {});
 
 export interface ToolCall {
   name: ToolName;
@@ -137,7 +170,8 @@ export interface ResponseMeta {
   cited_ids: string[];
   hallucinated_citations: string[];
   unverified_figures: string[];
-  kb_version: string;
+  /** Null when the index carries no version. Never read a missing version as "0". */
+  kb_version: string | null;
 }
 
 /** `vessel_or_aircraft_operations` | `personal_record` | null, per the contract. */
@@ -162,9 +196,42 @@ export interface ChatResponse {
    * possibly-absent here so a missing key cannot throw.
    */
   refusal_category?: RefusalCategory;
+  /**
+   * The drafted answer carried figures that could not be matched to a retrieved
+   * row, so it was discarded and rewritten from the published values.
+   *
+   * The client shows a correction notice when this is true. It must not show one
+   * on every answer — that would be a lie — and it must not show one on none,
+   * which hides the fact that what the user is reading is not what was written.
+   */
+  answer_replaced: boolean;
+  /**
+   * The question as actually sent, when input safety changed it — null
+   * otherwise. Instruction-like phrasing is replaced in place with a marker, so
+   * the position in the sentence survives and the user can see what went.
+   */
+  question_sanitised?: string | null;
+  /**
+   * The agent ran out of tool calls before it could finish.
+   *
+   * Deliberately distinct from a plain no-answer. "Ask for one thing at a time"
+   * is good advice for a question that took too many steps and useless advice
+   * for a question about something the knowledge base does not hold — sending
+   * the second group round in circles is exactly what one shared code did.
+   */
+  step_limit_reached: boolean;
   citations: Citation[];
   /** Usually null. */
   chart: ChartSpec | null;
+  /**
+   * An interactive card to render below the answer, or null.
+   *
+   * **Its rows never came from the model.** The assistant names a kind; the
+   * backend fills the rows from the operational feed and stamps the feed's
+   * `DataSource` on. That is what lets a card show a berth status in the same
+   * answer where the assistant declines to state one — see `AssistantCard`.
+   */
+  card: AssistantCard | null;
   /** Tools the agent used this turn, in order. */
   tool_calls: ToolCall[];
   meta: ResponseMeta;
@@ -213,11 +280,10 @@ export interface HealthResponse {
 /** Switch on `code`, never on `message`. */
 export type ErrorCode =
   /**
-   * ⚠️ **Not in `docs/api-contract.md`.** The backend emits it (429, per-IP client
-   * rate limiting, `app/errors.py`) and the contract documents only
-   * `UPSTREAM_RATE_LIMITED`, which is a different thing — the model provider
-   * throttling *us*, on a 503. Verified against the running backend; see
-   * `docs/backend-issues.md` #1.
+   * 429, per-IP client rate limiting. A different thing from
+   * `UPSTREAM_RATE_LIMITED`, which is the model provider throttling *us* on a
+   * 503 — different cause, different copy, different retry advice. Both are in
+   * the contract's error table; `backend/tests/test_contract.py` pins the set.
    */
   | 'RATE_LIMITED'
   | 'VALIDATION_ERROR'
@@ -288,7 +354,17 @@ export interface TtsPreviewResponse {
  */
 export interface StreamMetaEvent {
   event: 'meta';
-  data: { conversation_id: string };
+  data: {
+    conversation_id: string;
+    /**
+     * The question as it was actually sent, when input safety changed it.
+     *
+     * Carried on `meta` rather than `done` because it describes what was SENT:
+     * the correction belongs on screen before the answer starts arriving, not
+     * after it has finished.
+     */
+    question_sanitised?: string | null;
+  };
 }
 
 export interface StreamTokenEvent {
@@ -318,6 +394,16 @@ export interface StreamChartEvent {
 }
 
 /**
+ * Payload is a complete, populated `AssistantCard` — the same shape as the
+ * `card` field on `POST /api/chat`, so the two endpoints cannot drift. Arrives
+ * after `citations` and always before `done`.
+ */
+export interface StreamCardEvent {
+  event: 'card';
+  data: AssistantCard;
+}
+
+/**
  * Rare, and not in the list this prompt asked for — but it is in the contract, so
  * it is here.
  *
@@ -340,7 +426,12 @@ export interface StreamDoneEvent {
     latency_ms: number;
     grounded: boolean;
     refusal: boolean;
-    kb_version: string;
+    /** Lets a streamed refusal pick the same specific copy the JSON endpoint can. */
+    refusal_category?: RefusalCategory;
+    /** As on `ChatResponse`. The stream loses no distinction by streaming. */
+    answer_replaced: boolean;
+    step_limit_reached: boolean;
+    kb_version: string | null;
   };
 }
 
@@ -360,9 +451,487 @@ export type StreamEvent =
   | StreamToolEndEvent
   | StreamCitationsEvent
   | StreamChartEvent
+  | StreamCardEvent
   | StreamReplaceEvent
   | StreamDoneEvent
   | StreamErrorEvent;
 
 /** The `event:` names, useful for parsing and for exhaustiveness checks. */
 export type StreamEventName = StreamEvent['event'];
+
+// ── Operations: vessels, flights, tariffs ────────────────────────────────────
+//
+// From `GET /api/vessels`, `/api/flights` and `/api/tariffs`, which are a
+// **separate, non-LLM path**. The assistant cannot see live operations and is
+// forbidden from claiming it can (`app/agent/prompts.py` rule 10); these
+// endpoints serve a feed and state where it came from. A panel may therefore
+// show a berth status that the assistant will not put in a sentence.
+
+/** Where a set of records came from, and how much to trust it. */
+export type SourceKind = 'live' | 'fixture' | 'unavailable';
+
+export interface DataSource {
+  kind: SourceKind;
+  /** Human-readable origin, safe to render as-is. */
+  label: string;
+  /** ISO timestamp. Null when the source did not say. */
+  as_of: string | null;
+  /**
+   * **Render this whenever it is present.**
+   *
+   * Non-null for every `fixture` and `unavailable` source — the backend's schema
+   * refuses to build one without it. A table of vessel arrivals is believed on
+   * sight, and nothing in the rows tells a reader they are looking at sample
+   * data. This string is the only thing that does.
+   */
+  notice: string | null;
+}
+
+/**
+ * The four facilities SCASPA operates.
+ *
+ * On every record that belongs to one, and **nullable on all of them**: null
+ * means the feed did not say, which is a real state. Nothing infers a facility
+ * from a berth name or a gate letter — that was the situation this replaces,
+ * where Deep Water Harbour and Port Zante were told apart only by whether the
+ * sample data said "Berth 1" or "Pier 1".
+ */
+export type Facility =
+  'deep_water_harbour' | 'port_zante' | 'basseterre_ferry_terminal' | 'rlb_airport';
+
+export type VesselStatus = 'at_berth' | 'en_route' | 'scheduled' | 'departed' | 'unknown';
+
+export interface VesselArrival {
+  id: string;
+  name: string;
+  imo: string | null;
+  vessel_type: string;
+  agent: string;
+  berth: string;
+  /** Null when the feed did not say. Never inferred from `berth`. */
+  facility: Facility | null;
+  status: VesselStatus;
+  /**
+   * `eta` is a prediction; `ata` is a record of something that happened. Two
+   * fields rather than one timestamp plus a flag, precisely so a UI cannot
+   * present a guess as a fact by losing the distinction.
+   */
+  eta: string | null;
+  ata: string | null;
+}
+
+/** Every field nullable: unknown is `null`, never `0`. */
+export interface VesselMetrics {
+  vessels_at_berth: number | null;
+  berth_capacity: number | null;
+  arrivals_next_24h: number | null;
+  daily_cargo_teu: number | null;
+  /**
+   * A calendar day — which `arrivals_next_24h` is not, and the two diverge every
+   * evening. "Expected today" reads this; it read the rolling window before,
+   * because that was the nearest figure on the wire.
+   */
+  arrivals_today: number | null;
+}
+
+export interface VesselArrivalsResponse {
+  source: DataSource;
+  vessels: VesselArrival[];
+  metrics: VesselMetrics;
+  /** Matching records before paging, so pagination can be rendered. */
+  total: number;
+  request_id: string;
+}
+
+export type FlightStatus = 'on_time' | 'delayed' | 'landed' | 'arrived' | 'boarding' | 'cancelled';
+
+export type FlightDirection = 'arrival' | 'departure';
+
+export interface Flight {
+  id: string;
+  flight_no: string;
+  airline: string;
+  airline_code: string;
+  direction: FlightDirection;
+  /** The other end of the route: origin for an arrival, destination for a departure. */
+  port: string;
+  port_code: string;
+  /**
+   * Which SCASPA airport the movement is at — **not** `port` above, which is
+   * the far end of the route. `rlb_airport` throughout today.
+   */
+  facility: Facility | null;
+  gate: string | null;
+  status: FlightStatus;
+  scheduled_time: string | null;
+  /** Only present when it differs from scheduled — the revised time for a delay. */
+  estimated_time: string | null;
+}
+
+export interface FlightMetrics {
+  total_flights: number | null;
+  on_time_percent: number | null;
+  gates_active: number | null;
+  gates_total: number | null;
+  /**
+   * The three tiles the design draws above the flights table. None of the four
+   * fields above is one of them — `total_flights` counts both directions across
+   * the whole feed, so under an "Arrivals today" label it reported four arrivals
+   * where the feed held three.
+   */
+  arrivals_today: number | null;
+  departures_today: number | null;
+  delayed: number | null;
+}
+
+export interface OperationalAdvisory {
+  headline: string;
+  detail: string;
+  temperature_c: number | null;
+  systems_status: string;
+}
+
+export interface FlightSchedulesResponse {
+  source: DataSource;
+  flights: Flight[];
+  metrics: FlightMetrics;
+  advisory: OperationalAdvisory | null;
+  total: number;
+  request_id: string;
+}
+
+/** Who says where a vessel is. An AIS fix and a typed-in position differ. */
+export type VesselPositionSource = 'ais' | 'manual' | 'estimated';
+
+export interface VesselPosition {
+  /** Matches `VesselArrival.id`, so the map and the table agree. */
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  heading_degrees: number | null;
+  /** Null means not reported. It does not mean stationary. */
+  speed_knots: number | null;
+  reported_by: VesselPositionSource;
+  reported_at: string | null;
+}
+
+export interface VesselPositionsResponse {
+  source: DataSource;
+  positions: VesselPosition[];
+  total: number;
+  request_id: string;
+}
+
+export type GateStatus = 'occupied' | 'boarding' | 'free' | 'closed';
+
+export interface GateAssignment {
+  gate: string;
+  status: GateStatus;
+  flight_number: string | null;
+  airline: string;
+  scheduled_at: string | null;
+  /** Every stand is at RLB today. Stated on the record rather than assumed. */
+  facility: Facility | null;
+}
+
+export interface GateMapResponse {
+  source: DataSource;
+  gates: GateAssignment[];
+  /** Counted by the backend. Do not recompute — see the schema note. */
+  active: number;
+  total: number;
+  request_id: string;
+}
+
+export type AdvisorySeverity = 'low' | 'moderate' | 'high';
+
+/**
+ * A notice to mariners, passed through verbatim.
+ *
+ * Distinct from `OperationalAdvisory`, which is the airport's. An empty list
+ * means nothing was published to this assistant — it does **not** mean
+ * conditions are fine, and the panel must not let it read that way.
+ */
+export interface MarineAdvisory {
+  id: string;
+  port: string;
+  headline: string;
+  detail: string;
+  severity: AdvisorySeverity;
+  issued_at: string | null;
+}
+
+export interface MarineAdvisoriesResponse {
+  source: DataSource;
+  advisories: MarineAdvisory[];
+  total: number;
+  request_id: string;
+}
+
+/**
+ * The console identity card — a demo, never a user.
+ *
+ * This product has no sign-in and never learns who is asking. The endpoint
+ * behind this reads nothing about the caller and returns the same invented card
+ * to everyone; it is null unless the backend is running the fixture feed, which
+ * it refuses to do in production.
+ */
+export interface OperatorProfile {
+  is_demo: true;
+  display_name: string;
+  division: string;
+  agent_id: string;
+  jurisdiction: string;
+  role: string;
+  last_sync: string | null;
+  active: boolean;
+  verified: boolean;
+  /** Rendered as prominently as the card itself. Never empty. */
+  notice: string;
+}
+
+export interface OperatorProfileResponse {
+  source: DataSource;
+  profile: OperatorProfile | null;
+  request_id: string;
+}
+
+/**
+ * The category chips over the published schedule — §5.9's five, plus `aviation`.
+ *
+ * `vessel_dues` was `maritime`. The rename is toward accuracy: that calculator
+ * prices dockage, pilotage and harbour dues, which is what vessel dues are, and
+ * the chip has always been labelled that way in the design. `categoryLabel`
+ * renders the wire value and never renames it, so a chip reading "Vessel dues"
+ * requires the wire to say `vessel_dues`.
+ *
+ * `aviation` is the sixth and is not in §5.9, whose five are seaport
+ * categories. Dropping it to match exactly would leave R. L. Bradshaw with no
+ * fees in the table at all.
+ */
+export type TariffCategory =
+  'cargo' | 'vessel_dues' | 'storage' | 'passenger' | 'security' | 'aviation';
+
+export interface TariffRow {
+  code: string;
+  service: string;
+  /** The unit the rate applies to, e.g. "per ft per 24h". */
+  basis: string;
+  amount: number;
+  currency: string;
+  category: TariffCategory;
+  /**
+   * Null means the charge applies across SCASPA rather than at one facility,
+   * which is true of most of the published schedule. A facility filter keeps
+   * these: a port-wide charge applies at the facility being asked about, and
+   * dropping it would understate what a caller owes.
+   */
+  facility: Facility | null;
+  /** The knowledge-base row this rate was published in, when it is indexed. */
+  kb_id: string | null;
+  as_of: string;
+}
+
+export interface TariffTableResponse {
+  source: DataSource;
+  tariffs: TariffRow[];
+  /** Category chips. Derived from the whole table, not the filtered slice. */
+  categories: string[];
+  total: number;
+  request_id: string;
+}
+
+// ── The fee calculator ───────────────────────────────────────────────────────
+
+export interface TariffQuoteRequest {
+  category: TariffCategory;
+  vessel_type?: string | null;
+  length_ft?: number | null;
+  stay_days?: number | null;
+  container_size?: '20ft' | '40ft' | null;
+  units?: number | null;
+  storage_days?: number | null;
+  /** XCD only. Converting a published fee applies a rate nobody published. */
+  currency?: 'XCD';
+}
+
+export interface TariffLineItem {
+  code: string;
+  label: string;
+  basis: string;
+  /** The published rate, exactly as published. */
+  rate: number;
+  quantity: number;
+  quantity_label: string;
+  /** `rate × quantity`, rounded — so the printed lines add up to the printed total. */
+  amount: number;
+  kb_id: string | null;
+}
+
+export interface TariffQuote {
+  line_items: TariffLineItem[];
+  /**
+   * Charges that applied to this movement and have no published rate.
+   *
+   * **A non-empty array means `total` is short by a whole charge.** Those codes
+   * are in no line item and in no figure, so nothing else in this object shows
+   * that anything is missing — a quote with a dropped charge otherwise looks
+   * exactly like a complete one. When it is non-empty the heading reads "Total
+   * so far", the gap is named, and the standard disclaimer is not treated as
+   * covering it: "confirmed on invoice" is about rounding, not about a charge
+   * that was never counted.
+   */
+  unpriced: string[];
+  subtotal: number;
+  total: number;
+  currency: string;
+  /**
+   * Always `true`, and typed as the literal so it cannot be read as optional.
+   *
+   * The total appears in no published source. Every `rate` above it is published
+   * and cited; the arithmetic on top is the tool's own.
+   */
+  derived: true;
+  /**
+   * **Mandatory to display with the total. Never collapse or truncate it.**
+   *
+   * It names what the figure is not — not an invoice, not an official customs
+   * assessment, not a valuation. A total shown without it is the product making
+   * exactly the claim it was built not to make.
+   */
+  disclaimer: string;
+  source: DataSource;
+  request_id: string;
+}
+
+// ── Support ──────────────────────────────────────────────────────────────────
+
+export interface ContactPoint {
+  label: string;
+  value: string;
+  kind: 'phone' | 'email' | 'post' | 'extension' | 'web';
+}
+
+export interface ContactLocation {
+  name: string;
+  address: string;
+  status: string;
+  contacts: ContactPoint[];
+}
+
+export interface SupportDirectory {
+  source: DataSource;
+  locations: ContactLocation[];
+  emergency: string | null;
+  /** The values the ticket form's department select may send. */
+  departments: string[];
+  request_id: string;
+}
+
+/**
+ * `POST /api/support/ticket`.
+ *
+ * **There is no name, email, phone or attachment field, and adding one here
+ * would not help** — the backend does not accept them. `docs/privacy.md` states
+ * that nothing in this service can link a conversation to a person, and a ticket
+ * carrying an email address would make that false.
+ *
+ * The exchange is inverted instead: describe the problem, get a reference, quote
+ * it when you contact SCASPA. `SupportTicketResponse.next_step` says so.
+ */
+export interface SupportTicketRequest {
+  department: string;
+  subject: string;
+  details: string;
+  /** Off by default. A transcript is the user's own words and goes only when asked. */
+  include_transcript?: boolean;
+  conversation_id?: string | null;
+}
+
+export interface SupportTicketResponse {
+  reference: string;
+  department: string;
+  expected_response: string;
+  /**
+   * **Always render this.** Nobody will make contact first, because no contact
+   * detail was taken. A receipt that omits it reads as "we'll be in touch".
+   */
+  next_step: string;
+  transcript_included: boolean;
+  request_id: string;
+}
+
+// ── Assistant cards ──────────────────────────────────────────────────────────
+//
+// A structured card rendered beneath an answer: an arrivals board, the fee
+// calculator, a ticket form.
+//
+// ## The model requests a card and never fills one in
+//
+// Exactly the `ChartSpec` bargain. `make_chart` lets the model describe a chart
+// and then checks every figure against a retrieved row; a card goes further —
+// the model supplies no figures at all, because `show_card` has no parameter
+// that could carry one. The rows come from the feed, server-side, after the
+// answer is written.
+//
+// So a `vessel_arrivals` card is not the assistant claiming a berth is
+// occupied. It is the interface showing a feed, with the feed's own provenance
+// attached, in the same breath as the assistant declining to describe it.
+
+export type CardKind =
+  'vessel_arrivals' | 'flight_schedules' | 'tariff_calculator' | 'support_ticket';
+
+export interface VesselArrivalsCard {
+  kind: 'vessel_arrivals';
+  title: string;
+  /** **Render the notice.** Same obligation as the standalone panels. */
+  source: DataSource;
+  vessels: VesselArrival[];
+  /** Matching records in the feed. The card shows the first few. */
+  total: number;
+  /** Where "see all" goes. */
+  href: string;
+}
+
+export interface FlightSchedulesCard {
+  kind: 'flight_schedules';
+  title: string;
+  source: DataSource;
+  flights: Flight[];
+  total: number;
+  href: string;
+}
+
+/**
+ * The calculator, offered inline.
+ *
+ * Carries **no figures** — not even a prefilled quantity. It is an empty form
+ * the user drives, and the total comes back from `POST /api/tariffs/quote` with
+ * its mandatory disclaimer. A pre-totalled card would be the model producing an
+ * estimate, which its own rules forbid outright.
+ */
+export interface TariffCalculatorCard {
+  kind: 'tariff_calculator';
+  title: string;
+  category: TariffCategory;
+  href: string;
+}
+
+/**
+ * The escalation form, offered inline.
+ *
+ * `subject` is the model's one-line summary of the user's own question — model
+ * text about the conversation, not a claim about SCASPA, and the user edits it
+ * before sending. Length-capped server-side.
+ */
+export interface SupportTicketCard {
+  kind: 'support_ticket';
+  title: string;
+  department: string;
+  subject: string;
+  href: string;
+}
+
+export type AssistantCard =
+  VesselArrivalsCard | FlightSchedulesCard | TariffCalculatorCard | SupportTicketCard;

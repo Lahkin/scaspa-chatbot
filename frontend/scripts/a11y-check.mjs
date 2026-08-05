@@ -11,17 +11,32 @@
 import { createServer } from 'vite';
 
 /**
- * Playwright is deliberately NOT a saved dependency: CI has no browsers and
- * `npm ci` should not download 300MB of them. It is installed on demand, and a
- * bare "Cannot find package" is a confusing way to say so.
+ * Playwright IS a saved devDependency now. It was `--no-save` for most of this
+ * project's life, on the reasoning that `npm ci` should not download 300MB of
+ * browsers — and that reasoning was half right.
+ *
+ * What it missed: **the npm package downloads no browsers.** `playwright` ships
+ * no install scripts, and `@axe-core/playwright`'s `prepare` runs only for git
+ * and local installs, never for a registry tarball. The 300MB is behind an
+ * explicit `npx playwright install`, which is still explicit. Saving both costs
+ * CI about 26MB and nothing else, and cannot touch the bundle: they are
+ * devDependencies and no file under `src/` imports them.
+ *
+ * What it cost: the dependency vanished three times in a single working
+ * session, and each time the accessibility gate went from "green" to
+ * "unrunnable" without anything failing. A gate you have to remember to
+ * reinstall before every use is a gate that is not there during a rehearsal.
+ *
+ * The guard below stays as defence — a bare "Cannot find package" is still a
+ * confusing way to report a missing browser driver.
  */
 async function requirePlaywright() {
   try {
     return await import('playwright');
   } catch {
     console.error(
-      '\nThis check needs Playwright, which is not a saved dependency.\n' +
-        '  npm i -D --no-save playwright@1.56.1\n' +
+      '\nThis check needs Playwright. It is a saved devDependency, so:\n' +
+        '  npm install\n' +
         '  npx playwright install chromium webkit firefox\n'
     );
     process.exit(2);
@@ -33,8 +48,7 @@ async function requireAxe() {
     return (await import('@axe-core/playwright')).default;
   } catch {
     console.error(
-      '\nThis check also needs @axe-core/playwright.\n' +
-        '  npm i -D --no-save @axe-core/playwright@4.11.0\n'
+      '\nThis check also needs @axe-core/playwright, a saved devDependency.\n' + '  npm install\n'
     );
     process.exit(2);
   }
@@ -44,7 +58,25 @@ const { chromium } = await requirePlaywright();
 const AxeBuilder = await requireAxe();
 
 const PORT = 4400;
-const ROUTES = ['/', '/about', '/privacy', '/chat', '/widget'];
+// Every route a user can reach. The operations surfaces are the ones with
+// tables, status chips and a scrolling region — the components most likely to
+// carry a landmark, contrast or name-role-value violation, and the ones axe is
+// best at catching.
+const ROUTES = [
+  '/',
+  '/about',
+  '/privacy',
+  '/chat',
+  '/widget',
+  '/vessels',
+  '/flights',
+  '/tariffs',
+  '/support',
+  '/settings',
+  '/ops/vessels',
+  '/ops/flights',
+  '/about-scaspa',
+];
 const VIEWPORTS = [
   { name: 'mobile', width: 390, height: 800 },
   { name: 'desktop', width: 1280, height: 900 },

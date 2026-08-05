@@ -71,7 +71,7 @@ export function MockControls() {
           onClick={() => setOpen(true)}
           className={
             failing
-              ? 'min-h-touch rounded-md bg-danger px-3 text-small font-medium text-ink-inverse shadow-popover'
+              ? 'min-h-touch rounded-md bg-danger-fill px-3 text-small font-medium text-ink-on-bright shadow-popover'
               : 'min-h-touch rounded-md border border-border-strong bg-surface px-3 text-small font-medium text-ink-muted shadow-card'
           }
         >

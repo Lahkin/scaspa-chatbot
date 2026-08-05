@@ -9,6 +9,21 @@ Embedding costs real money, so a rebuild is skipped when the source CSV is
 byte-for-byte unchanged. The decision is made on a SHA-256 of the file recorded
 in `data/index_meta.json`, not on mtime, which changes on every re-export even
 when the content does not.
+
+## Blocklisted links are redacted here, before anything is embedded
+
+CLAUDE.md rule 3 forbids linking to `pay.scaspa.com`. The researchers' export
+carries five confirmed rows whose `source_url` **is** that portal, and
+`source_url` travels the whole way: row -> chunk metadata -> `Citation` ->
+`SourceEntry`, which renders it as an `href`. Indexing those rows unchanged
+would put a live, clickable payment link in front of a user.
+
+The existing `SCRAPER_BLOCKLIST` guard only stops the crawler *fetching* the
+host; nothing filtered *content*. `redact_blocked_links` closes that, reusing
+the same setting so the host stays configured in one place. The rows themselves
+stay indexed and answerable — the question of whether the assistant should route
+someone to a payment portal is SCASPA's policy decision, not a side effect of a
+CSV field.
 """
 
 import hashlib
@@ -16,6 +31,7 @@ import re
 from collections.abc import Callable, Iterator
 from datetime import UTC, date, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -121,6 +137,75 @@ def derive_kb_version(csv_path: Path, rows: list[KBRow], sha256: str) -> str:
     return sha256[:12]
 
 
+def _host_of(url: str) -> str:
+    """The lowercase hostname of `url`, with or without a scheme.
+
+    A `source_url` is normally `https://host/path`, but a researcher may type a
+    bare `host/path`. `urlparse` puts a scheme-less string entirely in `path` and
+    reports no hostname at all, so a bare host would slip past the blocklist —
+    which is the one thing this must not do.
+    """
+    raw = url.strip()
+    parsed = urlparse(raw if "//" in raw else f"//{raw}", scheme="https")
+    return (parsed.hostname or "").lower()
+
+
+def _blocked_host(url: str, blocklist: set[str]) -> str | None:
+    """The blocklisted host this URL points at, or None.
+
+    Subdomains match too: blocking `scaspa.com` would block `pay.scaspa.com`.
+    Scheme, port, path and case are all ignored.
+    """
+    host = _host_of(url)
+    if not host:
+        return None
+    for blocked in blocklist:
+        if host == blocked or host.endswith(f".{blocked}"):
+            return blocked
+    return None
+
+
+def redact_blocked_links(
+    rows: list[KBRow],
+    settings: Settings,
+    echo: Echo = print,
+) -> tuple[list[KBRow], list[str]]:
+    """Blank `source_url` on every row pointing at a blocklisted host.
+
+    Returns the rows and the ids that were redacted. See the module docstring for
+    why this exists; the short version is CLAUDE.md rule 3 and the fact that
+    `source_url` is rendered as an `href`.
+
+    The row is kept and stays answerable. Only the link goes.
+    """
+    blocklist = settings.scraper_blocklist_set
+    if not blocklist:
+        return rows, []
+
+    kept: list[KBRow] = []
+    redacted: list[str] = []
+
+    for row in rows:
+        blocked = _blocked_host(row.source_url, blocklist)
+        if blocked is None:
+            kept.append(row)
+            continue
+        redacted.append(row.id)
+        # `model_copy`, not a re-validated construct: `source_url` carries a
+        # non-empty validator whose job is to reject a researcher row that has no
+        # source at all. This is not that — it is a deliberate redaction of a row
+        # that validated fine, and "" is exactly the value `SourceEntry` already
+        # draws as "no link recorded".
+        kept.append(row.model_copy(update={"source_url": ""}))
+
+    if redacted:
+        echo("")
+        echo(f"  Redacted source_url on {len(redacted)} row(s) — blocklisted host (rule 3)")
+        echo(f"    {', '.join(redacted)}")
+
+    return kept, redacted
+
+
 def _batched(documents: list[Document], size: int) -> Iterator[list[Document]]:
     for start in range(0, len(documents), size):
         yield documents[start : start + size]
@@ -150,6 +235,9 @@ def build_kb_index(
         echo(f"  resolved {raw_path.name} -> {resolved.name}")
 
     valid, rejected = load_kb_csv(resolved)
+    # Before the summary, and long before anything is embedded: a blocklisted
+    # link must not reach the index, the metadata or the report.
+    valid, _redacted = redact_blocked_links(valid, settings, echo)
     summary = summarise(valid, rejected, resolved)
     echo(summary)
 

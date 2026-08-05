@@ -7,12 +7,17 @@ backend on 2026-07-30.
 Each entry says which **layer** is wrong, because the rule is to fix that layer
 rather than to patch the frontend around it.
 
+**All five are now closed**, and the entries are kept rather than deleted: the
+reasoning is why the fixes look the way they do, and a closed issue with its
+evidence intact is the cheapest way to stop the same thing being reintroduced.
+Each carries a **Resolved** note naming what changed.
+
 ---
 
-## #1 — `RATE_LIMITED` is emitted but not documented
+## #1 — `RATE_LIMITED` is emitted but not documented — ✅ resolved
 
 **Layer at fault: the contract.** The backend's behaviour is correct and its
-message is better than a generic one. `docs/api-contract.md` is incomplete.
+message is better than a generic one. `docs/api-contract.md` was incomplete.
 
 ### Request
 
@@ -35,13 +40,13 @@ content-type: application/json
 {"error":{"code":"RATE_LIMITED","message":"You have sent a lot of questions in a short time. Please wait a moment and try again. If you need an answer now, call SCASPA on 869-465-8121 / 2 / 3.","request_id":"266e41c7c5664c3f822960593a8a0c7f"}}
 ```
 
-### Expected, per `docs/api-contract.md`
+### The problem
 
-The contract's error table lists seven codes and **`RATE_LIMITED` is not among
-them**. The nearest is `UPSTREAM_RATE_LIMITED`, documented as _"The model provider
-is throttling us"_ on a **503** — a different cause entirely. `app/errors.py`
-defines both, so the two are deliberately distinct in the backend and only one
-reached the contract.
+The contract's error table listed seven codes and **`RATE_LIMITED` was not among
+them**. The nearest was `UPSTREAM_RATE_LIMITED`, documented as _"The model
+provider is throttling us"_ on a **503** — a different cause entirely.
+`app/errors.py` defines both, so the two are deliberately distinct in the backend
+and only one reached the contract.
 
 ### Impact, before the fix
 
@@ -51,53 +56,35 @@ wrong reaching SCASPA" for what is a completely ordinary, expected condition. Th
 429 status still mapped to a sensible kind, so the failure was silent, which is
 what made it worth finding.
 
-The frontend now recognises the code and renders **its own** approved copy for it
-("One moment — a lot of questions have come from this connection just now"),
-which is deliberate: the client knows the countdown is on the Send button and can
-say so, where the backend cannot. The backend's sentence remains the fallback for
-any code the frontend does not know.
+### Resolved
 
-### Asked for
+`docs/api-contract.md` now lists `RATE_LIMITED` (429) in the error table and
+states plainly why it is not the same thing as `UPSTREAM_RATE_LIMITED`.
+`backend/tests/test_contract.py` asserts the code set matches the documented one,
+so a code added to `ErrorCode` without a contract entry now fails a test rather
+than a user's answer.
 
-Add to the contract's error table:
-
-| `code`         | HTTP | Meaning                                     | Suggested client behaviour                                                      |
-| -------------- | ---- | ------------------------------------------- | ------------------------------------------------------------------------------- |
-| `RATE_LIMITED` | 429  | This client (IP) has sent too many requests | Show the message, count down `Retry-After`, disable send. **Never auto-retry.** |
-
-No backend change requested.
-
-### Frontend, meanwhile
-
-`RATE_LIMITED` is accepted in `lib/types.ts` and `lib/schemas.ts`, has its own
-approved copy (the cause is different from provider throttling, so the sentence
-is too), sets the composer cooldown, and is on the never-retry list. Marked in
-`types.ts` as not-yet-in-the-contract so it is not mistaken for a transcription.
+The frontend keeps its **own** approved copy for it ("One moment — a lot of
+questions have come from this connection just now"), which remains deliberate:
+the client knows the countdown is on the Send button and can say so, where the
+backend cannot.
 
 ---
 
-## #2 — the `Citation` payload omits `volatility`, `label` and `snippet`
-
-Raised in `docs/decisions.md` F005 and still open. All three are columns on every
-knowledge-base row (`app/rag/models.py`, `data/knowledge/sample_kb.csv`) and none
-is exposed on the citation.
+## #2 — the `Citation` payload omits `volatility`, `label` and `snippet` — ✅ resolved
 
 **Layer at fault: the contract and the backend response builder.**
 
-`volatility` is the one that matters: it decides whether a source shows
+All three are columns on every knowledge-base row (`app/rag/models.py`) and none
+was exposed on the citation.
+
+`volatility` was the one that mattered: it decides whether a source shows
 "confirm with SCASPA before you travel" prominently or shows its date quietly,
-which is the handbook's schedule rule made visible. Without it the frontend treats
-every citation as **high** — the cautious default — so every source currently
-carries the confirmation treatment.
+which is the handbook's schedule rule made visible. Without it the frontend
+treated every citation as **high** — the cautious default — so every source
+carried the confirmation treatment and the distinction was dead code.
 
-### Request
-
-```
-POST /api/chat
-{"message": "How much is a ferry ticket?"}
-```
-
-### Actual (a citation, abridged)
+### Was
 
 ```json
 {
@@ -111,7 +98,7 @@ POST /api/chat
 }
 ```
 
-### Expected
+### Now
 
 ```json
 {
@@ -119,109 +106,112 @@ POST /api/chat
   "…": "…",
   "volatility": "medium",
   "label": "How much is a ferry ticket?",
-  "snippet": "The placeholder one-way adult fare is XCD 44.44…"
+  "snippet": "SAMPLE DATA — not a real fare. Placeholder one-way fare is XCD 44.44…"
 }
 ```
 
-All three are typed optional in the frontend, so no frontend change is needed the
-day they arrive.
+### Resolved, and two decisions worth knowing
+
+`build_citations` in `app/rag/answer.py` now fills all three from the retrieved
+chunk. No frontend change was needed: all three were already typed optional and
+already rendered.
+
+- **`volatility` is `null`, never guessed.** A row with nothing on record arrives
+  as null and the client applies `high` itself. Defaulting server-side to `low`
+  would have quietly downgraded a schedule nobody had classified.
+- **`snippet` is cut only at whitespace.** Truncating `XCD 44.44` to `XCD 44.4`
+  would put a wrong fare directly beneath an answer the reader has been asked to
+  trust — the same class of failure as CLAUDE.md rule 10, one layer down. A
+  scraped page carries no snippet at all rather than an arbitrary slice of
+  itself.
+
+`label` and `snippet` are read from the chunk text rather than from Chroma
+metadata, which is why this needed no re-index: `build_kb_text` writes every row
+in a fixed shape, so the two lines parsed back out are exactly the row's stored
+`question` and `answer`.
 
 ---
 
-## #3 — `refusal_category` is absent from the stream's `done` event
+## #3 — `refusal_category` is absent from the stream's `done` event — ✅ resolved
 
-**Layer at fault: the contract, or the stream serialiser — the team's call.**
+**Layer at fault: the stream serialiser.**
 
-`POST /api/chat` returns `refusal_category`; the stream's `done` event carries
+`POST /api/chat` returned `refusal_category`; the stream's `done` event carried
 `latency_ms`, `grounded`, `refusal` and `kb_version` but not the category.
 
-Consequence: a _streamed_ refusal cannot pick its specific explanation, so a
-boundary refusal ("I cannot look up your container") renders with the generic
-no-answer framing. Both show the backend's own approved text and the contact
-route, so the degradation is in framing only — but the two are meant to look
+Consequence: a _streamed_ refusal could not pick its specific explanation, so a
+boundary refusal ("I cannot look up your container") rendered with the generic
+no-answer framing. Both showed the backend's own approved text and the contact
+route, so the degradation was in framing only — but the two are meant to look
 different.
 
-### Asked for
+### Resolved
 
-Add `refusal_category` to the `done` payload, or state in the contract that a
-streaming client cannot distinguish the two and should not try.
-
----
-
-## #4 — the backend adopts a client-supplied `conversation_id`
-
-**Layer at fault: probably nothing — raised for confirmation.**
-
-`app/routers/chat.py:142` is `conversation_id = payload.conversation_id or store.new_id()`.
-Sending `00000000-0000-4000-8000-000000000000` returns that same id rather than a
-freshly minted one.
-
-Harmless as far as anyone can tell — a conversation holds only question and answer
-text, no identity, and the ids are random UUIDs — but it means an expired id is
-reused rather than rotated, which is not what the prompt this was built against
-assumed. The frontend validates that the stored value is a UUID before sending, so
-it never contributes a malformed one, and it overwrites its stored value with
-whatever comes back regardless.
-
-**Question for the team:** is adopting an arbitrary well-formed id intended?
+`_done_payload` now includes `refusal_category`. The frontend carries it from
+`onDone` into the reducer's `DONE` action, and the action field is **required**
+so a transport cannot quietly forget to pass it.
+`backend/tests/test_contract.py` asserts both endpoints report the same category
+for the same question, and `npm run check:integration` asserts it against a
+running server.
 
 ---
 
-## #5 — `Retry-After` is not exposed to cross-origin JavaScript
+## #4 — the backend adopts a client-supplied `conversation_id` — ✅ resolved
+
+**Layer at fault: mild, and mostly a question.**
+
+`app/routers/chat.py` was `conversation_id = payload.conversation_id or store.new_id()`.
+Sending `../../etc/passwd` returned that same string.
+
+Harmless as far as anyone could tell — a conversation holds only question and
+answer text, no identity — but a server that echoes back any string it is handed
+invites someone to conclude otherwise.
+
+### Resolved
+
+`ConversationStore.adopt_or_mint` replaces anything that is not a well-formed
+UUID with a fresh id.
+
+**Membership is deliberately not the test.** The store is per-process, so an id
+this worker has never seen may belong to a sibling; rejecting unknown ids would
+break history behind more than one uvicorn worker. Shape is the only check that
+is correct at both ends, and it is stated as a tidiness guarantee rather than a
+security one, because that is what it is.
+
+---
+
+## #5 — `Retry-After` is not exposed to cross-origin JavaScript — ✅ resolved
 
 **Layer at fault: the backend.** One line of CORS configuration.
 
-`Retry-After` is **not** a CORS-safelisted response header. A browser will not let
-JavaScript read it unless the server names it in `Access-Control-Expose-Headers`.
-The backend currently exposes only `X-Request-ID`.
+`Retry-After` is **not** a CORS-safelisted response header. A browser will not
+let JavaScript read it unless the server names it in
+`Access-Control-Expose-Headers`. The backend exposed only `X-Request-ID`.
 
-### Request
+### Impact, measured
 
-```
-POST http://127.0.0.1:8000/api/chat
-Origin: http://localhost:5173
-Content-Type: application/json
+The server sent `Retry-After: 45` and the UI counted down from **30**, which is
+the frontend's fallback when the header is unreadable. The countdown looks
+completely normal while being a guess, so a user was invited to retry 15 seconds
+early and collect another 429.
 
-{"message": "x"}
-```
+**This was invisible to server-side testing.** `npm run check:integration` read
+the header without trouble because Node does not enforce CORS — the same trap
+recorded in `decisions.md` F007. It only appeared in a browser, cross-origin.
 
-(after the per-IP limiter has tripped)
+### Resolved
 
-### Actual response headers
+`EXPOSED_HEADERS` in `app/main.py` is now
+`X-Request-ID, Retry-After, X-TTS-Cache`. `X-TTS-Cache` went in at the same time:
+the contract documents it as something a client may read, and it was not exposed
+either.
 
-```
-HTTP/1.1 429 Too Many Requests
-retry-after: 11
-access-control-allow-origin: http://localhost:5173
-access-control-allow-credentials: true
-access-control-expose-headers: X-Request-ID
-```
+Because the underlying bug cannot be reproduced from Node, both checks assert the
+**advertisement** rather than the read —
+`test_cors_actually_advertises_the_exposed_headers` in the backend suite, and a
+`CORS exposed headers` block in the integration script. Neither would have caught
+the original; both will catch its return.
 
-### Expected
-
-```
-access-control-expose-headers: X-Request-ID, Retry-After
-```
-
-### Impact
-
-Measured in a browser against the live backend: the server sent `Retry-After: 45`
-and the UI counted down from **30**, which is the frontend's fallback when the
-header is unreadable. The countdown looks completely normal while being a guess,
-so a user is invited to retry 15 seconds early and collect another 429.
-
-**This is invisible to server-side testing.** `npm run check:integration` reads the
-header without trouble because Node does not enforce CORS — the same trap recorded
-in `decisions.md` F007. It only appears in a browser, cross-origin.
-
-### Not worked around
-
-The frontend keeps its conservative 30-second default and now emits a dev-console
-warning naming the cause when a 429 arrives with no readable `Retry-After`.
-Guessing a better number would hide the bug; the fix belongs in the backend.
-
-### Also worth exposing
-
-`X-TTS-Cache` is documented in the contract as something the client may read, and
-it is not in the expose list either. It is not currently used, so this is a
-heads-up rather than a defect.
+The frontend keeps its conservative 30-second default and its dev-console warning
+for the case where the header is still unreadable, since a proxy in front of the
+API can reintroduce exactly this.

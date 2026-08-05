@@ -104,3 +104,50 @@ def test_no_answer_message_does_not_guess() -> None:
     lowered = NO_ANSWER_MESSAGE.lower()
     assert "guess" in lowered or "verified" in lowered
     assert "probably" not in lowered
+
+
+# ── The new surfaces must not contradict the rules they sit beside ───────────
+#
+# The interface now shows a fee calculator and an arrivals board. Both produce
+# exactly what rules 4 and 10 forbid the assistant from producing. The prompt has
+# to draw that line explicitly, or the model will read the screen as permission.
+
+
+def test_the_calculator_exception_is_stated_and_bounded() -> None:
+    """The assistant may point at the calculator. It may not read a total out of it."""
+    lowered = SYSTEM_PROMPT.lower()
+    assert "calculator" in lowered
+    assert "may not read a total out of it" in lowered
+    # And the original prohibition survives intact next to it.
+    assert "never estimate one" in lowered
+
+
+def test_the_arrivals_board_exception_is_stated_and_bounded() -> None:
+    """The assistant may point at the board. It may not describe what is on it."""
+    lowered = SYSTEM_PROMPT.lower()
+    assert "arrivals" in lowered
+    assert "you may not describe what is on it" in lowered
+    # A user quoting the screen back must not be able to get a confirmation.
+    assert "confirm or deny" in lowered
+    assert "never infer live status from a published schedule" in lowered
+
+
+def test_the_card_tool_may_attach_but_not_read() -> None:
+    """show_card widens what the assistant can *offer*, not what it can claim.
+
+    The boundary has to be explicit or the model reads "there is a board" as
+    permission to say what is on it.
+    """
+    lowered = SYSTEM_PROMPT.lower()
+    assert "show_card" in lowered
+    assert "attaching it is allowed" in lowered
+    assert "reading it is not" in lowered
+    assert "never write a sentence that summarises, previews or characterises" in lowered
+    # And the prohibitions it sits beside are untouched.
+    assert "you may not describe what is on it" in lowered
+    assert "never estimate one" in lowered
+
+
+def test_the_calculator_card_arrives_empty() -> None:
+    """A pre-totalled card would be the model producing an estimate."""
+    assert "the card you attach arrives empty" in SYSTEM_PROMPT.lower()

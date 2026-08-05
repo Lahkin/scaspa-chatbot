@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui';
 import { SourceList } from '@/components/chat/SourceList';
+import type { Grounding } from '@/features/chat/citations';
 import type { CitationEntry } from '@/features/chat/citations';
 
 /**
@@ -17,6 +18,7 @@ import type { CitationEntry } from '@/features/chat/citations';
 export function SourcePanel({
   headed = true,
   entries = [],
+  grounding,
   highlighted,
   onHighlight,
   scrollTo,
@@ -30,6 +32,8 @@ export function SourcePanel({
    */
   headed?: boolean;
   entries?: CitationEntry[];
+  /** How well the answer is sourced — §3.8, shown at the head of the list. */
+  grounding?: Grounding | undefined;
   highlighted?: string | null | undefined;
   onHighlight?: ((id: string | null) => void) | undefined;
   scrollTo?: string | null | undefined;
@@ -59,6 +63,7 @@ export function SourcePanel({
       ) : (
         <SourceList
           entries={entries}
+          grounding={grounding}
           highlighted={highlighted}
           onHighlight={onHighlight}
           scrollTo={scrollTo}
