@@ -42,7 +42,7 @@ export const REHEARSED_MESSAGES: Message[] = [
       {
         id: 'search_scaspa_knowledge-0',
         name: 'search_scaspa_knowledge',
-        summary: 'Searching SCASPA knowledge base \u2014 ferry schedule',
+        summary: 'Searching SCASPA knowledge base — ferry schedule',
         ms: 148,
         done: true,
       },
@@ -73,7 +73,7 @@ export const REHEARSED_MESSAGES: Message[] = [
       {
         id: 'search_scaspa_knowledge-0',
         name: 'search_scaspa_knowledge',
-        summary: 'Searching SCASPA knowledge base \u2014 container tariff',
+        summary: 'Searching SCASPA knowledge base — container tariff',
         ms: 162,
         done: true,
       },
@@ -97,7 +97,7 @@ export const REHEARSED_MESSAGES: Message[] = [
       {
         id: 'make_chart-0',
         name: 'make_chart',
-        summary: 'Building a chart \u2014 cruise passengers by month',
+        summary: 'Building a chart — cruise passengers by month',
         ms: 41,
         done: true,
       },
@@ -111,7 +111,7 @@ export const REHEARSED_MESSAGES: Message[] = [
     text:
       'That is not something I can advise on. Questions about customs, immigration, tax ' +
       'or legal matters, about a specific shipment, booking or payment, or about vessel, ' +
-      'aircraft or vehicle operations need to go to SCASPA staff directly \u2014 they can see ' +
+      'aircraft or vehicle operations need to go to SCASPA staff directly — they can see ' +
       'the details of your case, and I cannot.',
     at: AT(3),
     streaming: false,

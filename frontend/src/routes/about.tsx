@@ -13,7 +13,7 @@ function About() {
       <div className="space-y-2">
         <h1 className="text-h1 font-semibold">About this assistant</h1>
         <p className="text-ink-muted">
-          It answers questions about SCASPA\u2019s facilities: the Deep Water Harbour for cargo,
+          It answers questions about SCASPA’s facilities: the Deep Water Harbour for cargo,
           Port Zante for cruise ships, the Basseterre Ferry Terminal, and Robert L. Bradshaw
           International Airport.
         </p>
@@ -22,8 +22,8 @@ function About() {
       <section className="space-y-2">
         <h2 className="text-h3 font-semibold">How it answers</h2>
         <p className="text-ink-muted">
-          SCASPA staff and our researchers built a set of confirmed facts \u2014 sailing times,
-          published charges, opening hours, procedures \u2014 and recorded where each one came from
+          SCASPA staff and our researchers built a set of confirmed facts — sailing times,
+          published charges, opening hours, procedures — and recorded where each one came from
           and the date it was checked.
         </p>
         <p className="text-ink-muted">
@@ -32,7 +32,7 @@ function About() {
           entry it came from, which is what the small numbered marks in an answer are.
         </p>
         <p className="text-ink-muted">
-          If it cannot find a confirmed answer, it says so and gives you SCASPA\u2019s phone number.
+          If it cannot find a confirmed answer, it says so and gives you SCASPA’s phone number.
           It is not allowed to fill the gap with something that sounds right.
         </p>
       </section>
@@ -41,7 +41,7 @@ function About() {
         <h2 className="text-h3 font-semibold">What it cannot do</h2>
         <ul className="list-outside list-disc space-y-1 pl-5 text-ink-muted">
           <li>
-            It cannot see live operations \u2014 whether a ferry is sailing right now, or whether a
+            It cannot see live operations — whether a ferry is sailing right now, or whether a
             flight is delayed today.
           </li>
           <li>It cannot look up your shipment, booking, container or payment.</li>
@@ -69,7 +69,7 @@ export const Route = createFileRoute('/about')({
   component: About,
   head: () => ({
     meta: [
-      { title: 'About \u2014 SCASPA Assistant' },
+      { title: 'About — SCASPA Assistant' },
       {
         name: 'description',
         content:

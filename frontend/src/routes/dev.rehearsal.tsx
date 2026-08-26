@@ -3,7 +3,7 @@ import { Suspense, lazy } from 'react';
 import { config } from '@/lib/config';
 
 /**
- * The demo failure drill \u2014 `/dev/rehearsal`.
+ * The demo failure drill — `/dev/rehearsal`.
  *
  * A stub for the same reason as the gallery: everything it renders is behind a
  * `lazy(() => import(...))` guarded by `import.meta.env.DEV`, which is a
