@@ -114,7 +114,7 @@ function Landing() {
                   className="flex min-h-touch items-center gap-2 rounded-md bg-navy px-3 py-2 text-left text-small font-medium text-ink-inverse transition-colors duration-fast hover:bg-navy-deep"
                 >
                   <span aria-hidden="true" className="text-amber-board">
-                    \u203a
+                    ›
                   </span>
                   {question}
                 </button>
@@ -217,21 +217,21 @@ const CAPABILITIES = [
  * Not a live call: the hero must not depend on the backend being up, and a
  * visitor who arrives to a spinner has already formed an opinion.
  *
- * ## It used to invent a sailing time \u2014 T-18
+ * ## It used to invent a sailing time — T-18
  *
  * This block previously answered the same question with "the last placeholder
  * sailing back from Nevis on a weekday is 18:00", under a source line reading
- * *"Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on 2026-04-01"*.
+ * *"Ferry — schedule · Official SCASPA website · Verified on 2026-04-01"*.
  *
  * **No such row exists.** The corpus contains no ferry departure time at all,
- * and `kb-192` \u2014 the row that actually answers this question \u2014 carries the note
- * *"ROUTING ROW \u2026 Never state a sailing time."* So the landing page, the first
+ * and `kb-192` — the row that actually answers this question — carries the note
+ * *"ROUTING ROW … Never state a sailing time."* So the landing page, the first
  * thing anyone sees, was doing the one thing the row it cited forbids, and
  * attributing it to SCASPA's website with a verification date. A "placeholder"
  * caption does not undo a fabricated citation: the shape of the claim is what a
  * reader copies down.
  *
- * What is here now is `kb-192` verbatim \u2014 confirmed, `as_of` 2026-07-31, sourced
+ * What is here now is `kb-192` verbatim — confirmed, `as_of` 2026-07-31, sourced
  * to scaspa.com/ferry-schedule.html. It is a better hero than the invention was.
  * A visitor asks the question they actually have, and watches the assistant
  * decline to make up a timetable while still telling them where to look. That is
@@ -244,10 +244,10 @@ function ExampleAnswer() {
   return (
     <figure className="max-w-measure rounded-lg border border-border bg-surface-muted p-4">
       <figcaption className="text-caption text-ink-subtle">
-        An example of an answer \u2014 a real one, from a verified source.
+        An example of an answer — a real one, from a verified source.
       </figcaption>
       <p className="mt-2 text-small font-medium text-ink">
-        \u201cWhat time is the last ferry back from Nevis?\u201d
+        “What time is the last ferry back from Nevis?”
       </p>
       <p className="mt-2 text-small text-ink-muted">
         Ferry departure times vary by operator and by day, so SCASPA publishes them through a live
@@ -258,7 +258,7 @@ function ExampleAnswer() {
         </span>
       </p>
       <p className="mt-2 border-t border-border pt-2 text-caption text-ink-subtle">
-        <strong>1.</strong> Ferry \u2014 schedule \u00b7 Official SCASPA website \u00b7 Verified on
+        <strong>1.</strong> Ferry — schedule · Official SCASPA website · Verified on
         2026-07-31
       </p>
     </figure>
@@ -268,8 +268,8 @@ function ExampleAnswer() {
 /**
  * The footer, including the knowledge-base version from `/api/health`.
  *
- * "Information verified as of \u2026" is a fact the reader can weigh, and it is real
- * rather than a build constant \u2014 it comes from the running backend. It degrades
+ * "Information verified as of …" is a fact the reader can weigh, and it is real
+ * rather than a build constant — it comes from the running backend. It degrades
  * to nothing when health is unavailable, because a landing page must never wait
  * on an API call.
  */
@@ -286,8 +286,8 @@ function SiteFooter() {
       {/*
         A placeholder chip naming the pending credits sat here until T-18. It
         is described rather than quoted, because the exact wording is what the
-        release grep looks for and a comment should not answer it. It did its job \u2014 the
-        slot was visible so it would be chased rather than forgotten \u2014 but a
+        release grep looks for and a comment should not answer it. It did its job — the
+        slot was visible so it would be chased rather than forgotten — but a
         placeholder shipped to a client demonstration reads as unfinished
         software rather than as a deliberate blank waiting on them. The names
         are still a client deliverable and still must not be invented; they go
@@ -297,7 +297,7 @@ function SiteFooter() {
       {version && (
         <p>
           Information verified as of <time dateTime={version}>{version}</time>
-          {isStale(health) ? ' \u2014 please confirm anything time-sensitive.' : '.'}
+          {isStale(health) ? ' — please confirm anything time-sensitive.' : '.'}
         </p>
       )}
     </footer>
@@ -308,7 +308,7 @@ export const Route = createFileRoute('/')({
   component: Landing,
   head: () => ({
     meta: [
-      { title: 'SCASPA Assistant \u2014 ports and travel in St. Kitts' },
+      { title: 'SCASPA Assistant — ports and travel in St. Kitts' },
       {
         name: 'description',
         content:
