@@ -6,11 +6,13 @@
  * about any one of them, which is why they live together.
  */
 
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+
+import { PROJECT_ROOT, globFiles } from './source-files';
 
 import { DiagnosticsPanel } from '@/components/chat/DiagnosticsPanel';
 import { TranscriptionResult } from '@/components/chat/TranscriptionResult';
@@ -19,7 +21,6 @@ import { MarineAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
 import { SourceNotice } from '@/components/ops/SourceNotice';
 import { RATE_LIMITS, formatCountdown, rateLimitMessage } from '@/features/chat/rateLimits';
 
-const PROJECT_ROOT = process.cwd();
 
 // ── Board 15: the diagnostics panel, and the row it is waiting on ────────────
 
@@ -296,7 +297,7 @@ describe('nothing quietly makes a mandatory notice optional', () => {
      * The one legitimate dismiss is `SourceNotice`'s live branch, which is
      * exempted by name and asserted above.
      */
-    const files = globSync('src/**/*.tsx', { cwd: PROJECT_ROOT }).filter(
+    const files = globFiles('src/**/*.tsx').filter(
       (file) =>
         !file.endsWith('SourceNotice.tsx') &&
         // The gallery is a dev catalogue that DESCRIBES these states in prose.
@@ -378,7 +379,7 @@ describe('nothing quietly makes a mandatory notice optional', () => {
 // that one event is being answered twice in different words.
 
 describe('one event, one treatment — board 22', () => {
-  const SOURCE = globSync('src/**/*.tsx', { cwd: PROJECT_ROOT }).map((file) => ({
+  const SOURCE = globFiles('src/**/*.tsx').map((file) => ({
     file,
     // Comments quote the handoff constantly, and a quoted sentence is not a
     // second rendering of it. Same reason the mandatory-notice scan strips them.

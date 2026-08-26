@@ -2603,3 +2603,80 @@ what the values *are*, so writing fixtures first would mean rewriting every
 record to retro-fit the tells. One milestone, one pass. The same reasoning puts
 the `facility` enum and the metric fields here — schema before generation, so
 generation happens exactly once.
+
+
+## 0033 — Test paths have one spelling, and it is the forward slash
+
+**Status:** accepted. Governs every check in `frontend/tests/` that reads the
+repository off disk.
+**Supersedes nothing.**
+
+### The problem this exists to solve
+
+Six of the frontend checks do not assert against a belief about the source tree,
+they glob it and read it: which modules statically import the mock, which files
+name a money amount or a clock time, which component owns the advisory, which
+file is allowed to use the disabled ink. That is the right shape for those
+claims — "it tree-shakes" is a belief, grepping the built output is a fact.
+
+Every one of them then compared the globbed path against a forward-slash
+literal: a `startsWith('src/mocks/')` exclusion, an `assets/index-*.js` regex, a
+lookup keyed by `src/routes/index.tsx`. `globSync` returns the platform's own
+separator, so on Windows those paths arrive as `src\mocks\fixtures.ts` and
+every comparison missed.
+
+The failures were not merely noisy, they were **inverted**. The exclusions
+stopped excluding, so `src/mocks/browser.ts` reported *itself* as a production
+module importing the mock, and `src/mocks/fixtures.ts` reported itself for
+naming a fare — the two files whose entire job is to hold the mock. The lookups
+returned `undefined`, so a check meaning "the landing page quotes a real source"
+failed with "src/routes/index.tsx is missing from the scan". Eleven checks
+failing, and the loudest of them accusing the fixture file of being a fixture.
+
+CI is `ubuntu-latest` on both workflows, so the suite is green there. The only
+reader who ever saw this was a contributor on Windows, on their first run of the
+suite — the reader with the least context for telling a real finding from a path
+bug, being handed eleven fake ones.
+
+### The decision
+
+One helper, `frontend/tests/source-files.ts`, exporting `PROJECT_ROOT` and a
+`globFiles(pattern)` that normalises the separator once. All six files now call
+it. `globSync` no longer appears in `tests/`.
+
+The call sites did not change their spelling of a path — they still read
+`src/mocks/`, still key on `src/routes/index.tsx`. That is the point: the
+normalisation is invisible where the claims are written, so a new check is
+correct by default rather than correct if its author remembered Windows.
+
+### Alternatives considered
+
+**Normalise at each call site** (`.map((f) => f.replaceAll('\\', '/'))`, ten
+times). Rejected: it is the same defect waiting for the eleventh check. The bug
+was never that a author got the replacement wrong, it was that nothing carried
+the requirement to the next person.
+
+**Compare with `path.sep` at each call site.** Rejected: it makes every
+assertion in these files harder to read to buy portability that one helper
+already buys, and the literals are what a reader is checking against a mental
+model of the tree.
+
+**Add `.gitattributes` and let the tree be POSIX.** That is a real and separate
+question (see below), and it would not have fixed this: `globSync` reports the
+separator the *filesystem* uses, not the one the file content is stored with.
+
+### What this does not cover
+
+Two further Windows-only findings, both pre-existing, both left alone
+deliberately because each is a repository-wide call rather than a bug fix:
+
+- **`format:check` fails on all 27 test files on Windows.** `core.autocrlf` is
+  `true` and there is no `.gitattributes`, so a Windows checkout is CRLF while
+  Prettier's `endOfLine` defaults to `lf`. Every file is flagged, including
+  untouched ones. The fix is `* text=auto eol=lf` in a `.gitattributes`, which
+  rewrites the working copy of every file in the repository.
+- **`tests/gallery.test.tsx` times out about one run in two on a slow machine.**
+  Its `findByRole` was already raised to 5000ms for exactly this reason, but
+  Vitest's own `testTimeout` is also 5000ms — so the inner timeout can never
+  fire, and the test dies at the outer one first. The number needs to be a pair,
+  not a single value repeated.
