@@ -18,16 +18,17 @@
  * than passing vacuously.
  */
 
-import { existsSync, globSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const PROJECT_ROOT = process.cwd();
+import { PROJECT_ROOT, globFiles } from './source-files';
+
 
 function builtCss(): string | null {
   const dir = resolve(PROJECT_ROOT, 'dist/assets');
   if (!existsSync(dir)) return null;
-  const files = globSync('dist/assets/*.css', { cwd: PROJECT_ROOT });
+  const files = globFiles('dist/assets/*.css');
   if (files.length === 0) return null;
   return files.map((file) => readFileSync(resolve(PROJECT_ROOT, file), 'utf8')).join('\n');
 }

@@ -39,13 +39,12 @@
  * assertion. Until then these are the guard.
  */
 
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Resolved from the project root rather than import.meta.url: under the jsdom
-// environment import.meta.url is not a file: URL, so fileURLToPath throws.
-const PROJECT_ROOT = process.cwd();
+import { PROJECT_ROOT, globFiles } from './source-files';
+
 const TOKENS_PATH = resolve(PROJECT_ROOT, 'src/styles/tokens.css');
 
 const AA_TEXT = 4.5;
@@ -304,7 +303,7 @@ describe('the placeholder ink is reachable by exactly one name', () => {
     // WCAG 1.4.3 exempts inactive controls. Nothing a user is expected to READ
     // may use this, and the variant prefix is what marks the difference.
     const offenders: string[] = [];
-    for (const file of globSync('src/**/*.{ts,tsx}', { cwd: PROJECT_ROOT })) {
+    for (const file of globFiles('src/**/*.{ts,tsx}')) {
       if (RESTING_GLYPH_INK.includes(file)) continue;
       const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
       for (const [index, line] of source.split('\n').entries()) {
@@ -424,7 +423,7 @@ describe('--color-brand-500 is a FILL, never text on a dark surface', () => {
     const LIGHT_FILL = /\bbg-(caution|absent|positive|live|brand-100|brand-200)\b/;
 
     const offenders: string[] = [];
-    for (const file of globSync('src/**/*.{ts,tsx}', { cwd: PROJECT_ROOT })) {
+    for (const file of globFiles('src/**/*.{ts,tsx}')) {
       const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
       for (const line of source.split('\n')) {
         if (DARK_BRAND_TEXT.test(line) && !LIGHT_FILL.test(line)) {
@@ -769,7 +768,7 @@ describe('every foreground/background pair written in a className', () => {
   it('resolves to at least 4.5:1', () => {
     const offenders: string[] = [];
 
-    for (const file of globSync('src/**/*.tsx', { cwd: PROJECT_ROOT })) {
+    for (const file of globFiles('src/**/*.tsx')) {
       const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
       for (const [index, line] of source.split('\n').entries()) {
         const classes = (line.match(/[\w:/[\]#.-]+/g) ?? []).filter(
@@ -812,7 +811,7 @@ describe('every foreground/background pair written in a className', () => {
      */
     const offenders: string[] = [];
 
-    for (const file of globSync('src/**/*.tsx', { cwd: PROJECT_ROOT })) {
+    for (const file of globFiles('src/**/*.tsx')) {
       const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
       for (const [index, line] of source.split('\n').entries()) {
         const all = line.match(/[\w:/[\]#.-]+/g) ?? [];
@@ -1041,7 +1040,7 @@ describe('no gradient survives inside the frame', () => {
 
   it('nothing in the source still applies one', () => {
     const offenders: string[] = [];
-    for (const file of globSync('src/**/*.{ts,tsx,css}', { cwd: PROJECT_ROOT })) {
+    for (const file of globFiles('src/**/*.{ts,tsx,css}')) {
       const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
       for (const line of source.split('\n')) {
         if (/\bbg-(grad-(sidebar|hero|rail)|hairline-horizon)\b/.test(line)) {

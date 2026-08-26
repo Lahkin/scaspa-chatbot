@@ -9,14 +9,15 @@
  * ESLint cannot see this: to it a className is a string. So it is checked here.
  */
 
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const PROJECT_ROOT = process.cwd();
+import { PROJECT_ROOT, globFiles } from './source-files';
+
 
 function sourceFiles(): string[] {
-  return globSync('src/**/*.{ts,tsx}', { cwd: PROJECT_ROOT }).filter(
+  return globFiles('src/**/*.{ts,tsx}').filter(
     (file) => !file.endsWith('routeTree.gen.ts')
   );
 }
