@@ -15,11 +15,8 @@ import { describe, expect, it } from 'vitest';
 
 import { PROJECT_ROOT, globFiles } from './source-files';
 
-
 function sourceFiles(): string[] {
-  return globFiles('src/**/*.{ts,tsx}').filter(
-    (file) => !file.endsWith('routeTree.gen.ts')
-  );
+  return globFiles('src/**/*.{ts,tsx}').filter((file) => !file.endsWith('routeTree.gen.ts'));
 }
 
 /** Tailwind arbitrary value carrying a hex colour: bg-[#0069b4], text-[#fff]. */

@@ -258,8 +258,7 @@ function ExampleAnswer() {
         </span>
       </p>
       <p className="mt-2 border-t border-border pt-2 text-caption text-ink-subtle">
-        <strong>1.</strong> Ferry — schedule · Official SCASPA website · Verified on
-        2026-07-31
+        <strong>1.</strong> Ferry — schedule · Official SCASPA website · Verified on 2026-07-31
       </p>
     </figure>
   );

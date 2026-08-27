@@ -21,7 +21,6 @@ import { MarineAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
 import { SourceNotice } from '@/components/ops/SourceNotice';
 import { RATE_LIMITS, formatCountdown, rateLimitMessage } from '@/features/chat/rateLimits';
 
-
 // ── Board 15: the diagnostics panel, and the row it is waiting on ────────────
 
 describe('DiagnosticsPanel', () => {

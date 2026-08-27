@@ -13,8 +13,8 @@ function About() {
       <div className="space-y-2">
         <h1 className="text-h1 font-semibold">About this assistant</h1>
         <p className="text-ink-muted">
-          It answers questions about SCASPA’s facilities: the Deep Water Harbour for cargo,
-          Port Zante for cruise ships, the Basseterre Ferry Terminal, and Robert L. Bradshaw
+          It answers questions about SCASPA’s facilities: the Deep Water Harbour for cargo, Port
+          Zante for cruise ships, the Basseterre Ferry Terminal, and Robert L. Bradshaw
           International Airport.
         </p>
       </div>
@@ -22,9 +22,9 @@ function About() {
       <section className="space-y-2">
         <h2 className="text-h3 font-semibold">How it answers</h2>
         <p className="text-ink-muted">
-          SCASPA staff and our researchers built a set of confirmed facts — sailing times,
-          published charges, opening hours, procedures — and recorded where each one came from
-          and the date it was checked.
+          SCASPA staff and our researchers built a set of confirmed facts — sailing times, published
+          charges, opening hours, procedures — and recorded where each one came from and the date it
+          was checked.
         </p>
         <p className="text-ink-muted">
           When you ask something, the assistant looks through that set for the entries that match,
@@ -32,8 +32,8 @@ function About() {
           entry it came from, which is what the small numbered marks in an answer are.
         </p>
         <p className="text-ink-muted">
-          If it cannot find a confirmed answer, it says so and gives you SCASPA’s phone number.
-          It is not allowed to fill the gap with something that sounds right.
+          If it cannot find a confirmed answer, it says so and gives you SCASPA’s phone number. It
+          is not allowed to fill the gap with something that sounds right.
         </p>
       </section>
 
