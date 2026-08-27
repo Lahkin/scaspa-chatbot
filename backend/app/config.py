@@ -194,6 +194,9 @@ class Settings(BaseSettings):
     # file that does not exist and indexed nothing, silently.
     KB_CSV_PATH: Path = Path("../data/knowledge/scaspa_kb_2026-07-31.csv")
     CHROMA_DIR: Path = Path("../data/chroma")
+    # Watchtower's structured store: the operational rows Chroma is the wrong
+    # tool for. A file beside the Chroma one — see app/watchtower/store.py.
+    OPERATIONAL_DB_PATH: Path = Path("../data/operational.sqlite3")
     SCRAPED_DIR: Path = Path("../data/scraped")
 
     # --- Service ----------------------------------------------------------
@@ -250,6 +253,11 @@ class Settings(BaseSettings):
     def chroma_path(self) -> Path:
         """CHROMA_DIR resolved against backend/ so relative defaults work."""
         return (BACKEND_ROOT / self.CHROMA_DIR).resolve()
+
+    @property
+    def operational_db_path(self) -> Path:
+        """OPERATIONAL_DB_PATH resolved against backend/, like the others."""
+        return (BACKEND_ROOT / self.OPERATIONAL_DB_PATH).resolve()
 
     @property
     def kb_csv_path(self) -> Path:
