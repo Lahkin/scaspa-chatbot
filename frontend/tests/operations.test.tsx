@@ -1081,11 +1081,18 @@ describe('the vessels screen', () => {
   });
 
   it('says the feed is missing, not that the filters are wrong', async () => {
+    /*
+     * The panel names AIS, and it names it on purpose.
+     *
+     * "No feed is connected" is our word for our plumbing. A reader who has ever
+     * opened a ship-tracking website knows what AIS is, and is entitled to know
+     * that this product is not reading one — the sentence is a statement about
+     * the world rather than a fault report about the page.
+     */
     setScenario('ops_unavailable');
     renderRoute('/vessels');
-    expect(
-      await screen.findByText('Live vessel movements are currently unavailable')
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Live vessel positions are not connected')).toBeInTheDocument();
+    expect(screen.getByText(/live AIS vessel positions are not currently available/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
   });
 });

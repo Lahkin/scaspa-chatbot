@@ -22,6 +22,7 @@
  */
 
 import type {
+  CruiseCall,
   DataSource,
   Flight,
   GateAssignment,
@@ -686,3 +687,116 @@ export const MOCK_OPERATOR_PROFILE: OperatorProfile = {
   notice:
     'DEMO ONLY — there is no sign-in. This assistant has no accounts and never knows who is asking. Every detail on this card is invented for design review.',
 };
+
+// ── The published cruise schedule ────────────────────────────────────────────
+//
+// `GET /api/cruise-schedule` is the one operational surface with a REAL source
+// behind it in production: Watchtower fetches SCASPA's own endpoint every six
+// hours. So this is the only mock in the file whose `source.kind` is
+// `published`, and the only one that therefore carries no sample-data banner
+// and no hatch.
+//
+// That combination — authoritative chrome around invented rows — is exactly
+// what CLAUDE.md rule 5 is about, so the rule is applied harder here than
+// anywhere else in this file. Every operational field is realistic, because the
+// layout has to be checked against the shape it will really have: `PORTZANTE`
+// is a real pier code and `07:00 - 18:00` is a real published window. Every
+// field a reader could write down and act on is unmistakably synthetic — the
+// vessel names and the cruise lines say SAMPLE and PLACEHOLDER, and no real
+// ship or line appears anywhere below.
+
+/**
+ * What the published schedule looks like once Watchtower has fetched it.
+ *
+ * `as_of` is stamped by the handler at request time rather than fixed here:
+ * this is the one source whose whole claim is "here is when we last looked",
+ * and a fixed instant would render as "checked 30 Jul 2026" forever.
+ */
+export const PUBLISHED_CRUISE_LABEL = 'Official SCASPA cruise schedule';
+
+/**
+ * Six calls at fixed **offsets from today**, not at fixed dates.
+ *
+ * The rest of this file pins ISO instants so that tests do not fail at
+ * midnight, and that is right for a board whose rows are timestamps. It is
+ * wrong here: this screen asks the server for *today*, *tomorrow* and *this
+ * week*, so a fixture pinned to July 2026 would answer every one of those
+ * questions with an empty table and the empty state would be the only thing
+ * anybody ever saw.
+ *
+ * The offsets are what the tests assert on — "the call two days out is absent
+ * from Today and present in This week" — which is a fact about the filter
+ * rather than about the calendar.
+ */
+export const MOCK_CRUISE_OFFSETS: readonly (Omit<CruiseCall, 'call_date' | 'day'> & {
+  dayOffset: number;
+})[] = [
+  {
+    dayOffset: 0,
+    window: '07:00 - 18:00',
+    vessel: 'SAMPLE VOYAGER',
+    cruise_line: 'Placeholder Cruise Line',
+    pier: 'PORTZANTE',
+    inaugural: false,
+    pax: 1840,
+    capacity: 2100,
+  },
+  {
+    // Two ships on one day: the summary tile counts CALLS, not days, and a
+    // fixture with one call a day could never catch it counting the wrong one.
+    dayOffset: 0,
+    window: '08:00 - 17:00',
+    vessel: 'SAMPLE MERIDIAN',
+    cruise_line: 'Placeholder Ocean Lines',
+    pier: 'PR1E',
+    inaugural: false,
+    // Unknown, which the published table writes as 0. Rendering it as "0
+    // passengers" would state something SCASPA did not.
+    pax: null,
+    capacity: 930,
+  },
+  {
+    dayOffset: 1,
+    window: '06:30 - 16:00',
+    vessel: 'SAMPLE ENDEAVOUR',
+    cruise_line: 'Placeholder Cruise Line',
+    pier: 'PORTZANTE',
+    // The inaugural flag, which has no other way of being seen.
+    inaugural: true,
+    pax: 2650,
+    capacity: 2650,
+  },
+  {
+    dayOffset: 3,
+    window: '07:00 - 19:00',
+    vessel: 'SAMPLE HORIZON',
+    cruise_line: 'Placeholder Ocean Lines',
+    pier: 'PORTZANTE',
+    inaugural: false,
+    pax: 1200,
+    capacity: 1400,
+  },
+  {
+    dayOffset: 5,
+    window: '09:00 - 18:00',
+    vessel: 'SAMPLE PROVIDER',
+    cruise_line: 'Placeholder Cruise Line',
+    pier: 'PR1E',
+    inaugural: false,
+    pax: 640,
+    // Capacity not published for this call.
+    capacity: null,
+  },
+  {
+    // Outside the seven-day window on purpose: without it "This week" and "All
+    // upcoming" would render identically and neither control would be tested.
+    dayOffset: 12,
+    window: '07:30 - 17:30',
+    vessel: 'SAMPLE TRADER',
+    cruise_line: 'Placeholder Ocean Lines',
+    pier: 'PORTZANTE',
+    inaugural: false,
+    pax: null,
+    capacity: 1100,
+  },
+];

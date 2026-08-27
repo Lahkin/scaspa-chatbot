@@ -22,9 +22,10 @@ import type { DataSource } from '@/lib/types';
  * So `as_of` is rendered in all three states and is only omitted when the feed
  * genuinely did not say.
  *
- * Fixture and unavailable are the two states to expect in practice: `live` is
- * the one kind that cannot currently occur, because SCASPA has published no
- * feed.
+ * Published, fixture and unavailable are the three states to expect in
+ * practice: `live` is the one kind that cannot currently occur, because SCASPA
+ * has published no live feed. `published` is the cruise schedule — real
+ * Authority data, fetched every six hours, which is neither of the other two.
  */
 
 interface Presentation {
@@ -48,6 +49,23 @@ const PRESENTATION: Record<DataSource['kind'], Presentation> = {
     dot: 'bg-live',
     headline: 'Live data',
     stamp: (when) => `Refreshed ${when}`,
+  },
+  /*
+   * ── PUBLISHED SITS BETWEEN LIVE AND UNAVAILABLE, AND SAYS SO ─────────────
+   *
+   * Real SCASPA information on a six-hour snapshot — the cruise schedule. It
+   * takes the brand dot rather than the live one, because this card's whole
+   * discipline is that it never says everything is fine, and a second green
+   * light would collapse "we are reading a feed" into "we looked this morning".
+   *
+   * "Checked", not "refreshed". The timestamp is when Pilot last LOOKED at
+   * SCASPA's page, which is not when SCASPA last changed it, and a shipping
+   * agent reading this card at 18:00 is entitled to that distinction.
+   */
+  published: {
+    dot: 'bg-brand-400',
+    headline: 'Published SCASPA data',
+    stamp: (when) => `Checked ${when}`,
   },
   /*
    * ── UNAVAILABLE IS NEUTRAL, NOT CRITICAL ─────────────────────────────────

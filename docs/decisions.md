@@ -3302,3 +3302,230 @@ with the rest of the composer and their logic is untouched; they already degrade
 honestly. They are waiting on the OpenAI project being granted
 `gpt-4o-mini-tts` and `gpt-transcribe`, which is an account change rather than
 a code one — see the note at the end of 0037.
+
+---
+
+## 0039 — Cargo publishes nothing, so Watchtower monitors nothing
+
+**Status:** accepted. Referenced by `app/watchtower/registry.py`.
+
+`scaspa.com/cargo.html` is an approved source in principle and is deliberately
+absent from `SOURCES`.
+
+### What is actually on the page
+
+The served document carries an FAQ describing a "Cargo Info table" with a search
+field "at the top right". It contains **no table, no input elements, no iframe,
+and 1,332 characters of body text in total.** The only XHR calls the page makes
+are the site platform's own membership RPCs. Whatever the FAQ is describing is
+either not deployed or is behind something a visitor does not reach.
+
+This is the same class of finding as the cruise page, and the opposite outcome.
+There, `cruise-ship-schedule.html` also served an empty table — and a widget
+behind it called a SCASPA-owned Apps Script endpoint that returns the whole
+schedule as JSON. Looking for the equivalent here found nothing to look at.
+
+### Why registering it anyway would have been worse than leaving it out
+
+Two things follow from adding a source, and both would have been false:
+
+- **A hash that never moves.** Watchtower would fetch the same empty page every
+  six hours forever and record "unchanged" every time. A monitor reporting
+  health on a source that publishes nothing is a monitor teaching its reader to
+  stop reading it.
+- **A parser that has never seen a row.** `registry.Source` requires one. It
+  would be written against a table nobody has, reviewed against a guess, and
+  merged — and on the day SCASPA restores the table it would run against real
+  cargo data for the first time, in production, unobserved.
+
+### What the product says instead
+
+The `/cargo` route says plainly that published cargo status is not available and
+points at the telephone. That is a true sentence today. It is also the sentence
+that has to change on the day the table appears, which is the right place for
+the pressure to sit: on a screen somebody reads, rather than in a registry entry
+nobody looks at.
+
+The entry goes in when SCASPA restores or exposes the table.
+
+---
+
+## 0040 — `/vessels` becomes Cruise & Vessel Activity
+
+**Status:** accepted.
+**Builds on** 0032 (the fixture hatch) and the Watchtower work on
+`feat/watchtower-cruise`.
+
+### The screen was answering a question it could not answer
+
+`/vessels` was one thing: a movements table fed by `GET /api/vessels`. In
+production no feed is connected, so what a real visitor saw was four metric
+tiles reading "— / not reported" above a panel explaining there was nothing.
+
+That is not an honest empty state, it is an empty dashboard — it reads as
+software that failed to load rather than as a service that has not been
+connected, and it pushed the one sentence worth reading below the fold.
+
+Meanwhile SCASPA publishes a genuine cruise schedule, Pilot now fetches it every
+six hours, and the page said nothing about it at all.
+
+### Two sections, and the rule is that they never merge
+
+**A. The official SCASPA cruise schedule.** Real, published, dated. 496 calls in
+the store as this was written.
+
+**B. Live vessel movements and positions.** Not connected: SCASPA publishes no
+movements feed and no external AIS source has been tested for St Kitts coverage.
+
+Separate headings, separate provenance treatments, separate empty states, a rule
+between them. Interleaving the two would lend A's authority to B's absence,
+which is the one thing this page must not do — a schedule and a position report
+are different kinds of claim with different certainties.
+
+Section B is kept fully built rather than reduced to a placeholder: every
+filter, the density toggle and the pagination stay wired to the real endpoint,
+and `OPS_DATA_SOURCE=fixture` still renders all of it. A section rebuilt from
+nothing on the day a feed appears is a section that has never been reviewed.
+
+### The hatch moved off the page and into one section
+
+0032 layer 4 draws caution stripes behind any surface whose `source.kind` is
+`fixture`, and `OpsShell` draws it for the whole screen from the source it is
+handed. This screen now has **two** sources, and only one of them can be
+fixtures.
+
+Handing the shell the movements source would hatch the Authority's own published
+cruise schedule as invented data — the precise lie the hatch exists to prevent,
+told by the mechanism built to prevent it. So the route passes no `source`, and
+the hatch lives inside `VesselMovements` over the half of the screen it is true
+of. Asserted in `tests/cruise-schedule.test.tsx`.
+
+### Three tiles, not the four that were suggested
+
+The brief proposed calls today, expected next 24h, scheduled this week, and Port
+Zante capacity, with the instruction to show "only values that can be derived
+safely". Two cannot be:
+
+| Tile | Why it is not drawn |
+| --- | --- |
+| Expected next 24h | A rolling window needs a timestamp per call. The schedule publishes a *day* plus a free-text window (`07:00 - 18:00`) which the backend deliberately never parses — the page is inconsistent about the format and a parser that guessed would move a sailing time. The count would be arithmetic on a guess. |
+| Port Zante capacity | SCASPA publishes no berth count. The tile would have to invent a denominator, and the denominator is what turns two numbers into a claim about how full the port is. |
+
+They are absent rather than dashed: "do not populate empty dashboards with
+dashes just to preserve layout" is the same instruction that produced this
+rebuild. What is drawn instead is today, tomorrow and the next seven days, which
+answer the same question out of figures that are actually published.
+
+### Counting rows is allowed here and forbidden on the movements table
+
+The movements table takes `total` from the server and counts nothing, because
+its rows are one page of many. The cruise tiles count their own rows — but the
+query behind them asks for the **whole** seven-day window, and the tiles only
+render a figure when `total === calls.length` proves it came back whole.
+Counting a complete result set is reading it. When the window is truncated the
+tiles go to null, because an undercount reads as a fact and a blank reads as a
+blank.
+
+**Zero is a real answer in these tiles**, which is the opposite of the berth
+occupancy rule and worth stating so the two are not confused. Occupancy must
+never show 0 because no feed reports occupancy at all. "Cruise calls today: 0"
+means the schedule was fetched, completely, and lists none — which is precisely
+what SCASPA published, and often correct.
+
+### Two empty tables that mean opposite things
+
+`published` with no calls means SCASPA lists none for those dates: an ordinary
+answer, and there are quiet weeks at Port Zante. `unavailable` means Pilot never
+managed to retrieve the schedule: a statement about this service.
+
+They render as different panels. Collapsing them would let an outage read as a
+quiet week, and that mistake is expensive in one direction only — a passenger
+told there are no ships stops looking.
+
+### A fourth range control the brief did not ask for
+
+Today / Tomorrow / This week are the three specified. **All upcoming** is added,
+because without it the search box can only find a ship inside the selected
+window — so "when is RHAPSODY OF THE SEAS next in?" is unanswerable unless the
+reader already knows roughly when, which is the question. It is also the only
+control that reaches the endpoint's 100-row limit, so it is where the truncation
+line was verified: *Showing the first 100 of 192 published calls.*
+
+The endpoint has no `offset` and this screen invents none. It truncates and
+reports `total`, so the page states the truncation rather than offering a page 2
+that does not exist.
+
+### Dates are computed in the port's time zone, not the reader's and not UTC
+
+`lib/portDate.ts`. SCASPA publishes whole days with no zone attached, and
+"today" on that schedule means today in St Kitts.
+
+- **UTC** would be wrong every evening: St Kitts is UTC−4, so from 20:00 local
+  until midnight, UTC has rolled over and the board would show *tomorrow's*
+  ships under a heading reading "Today".
+- **The browser's local date** is correct in Basseterre and wrong everywhere
+  else — and this product's readers are, by definition, people who have just
+  arrived from somewhere else.
+
+The zone is named (`America/St_Kitts`) and resolved through `Intl` rather than
+hardcoded as −4, so "no daylight saving" stays a fact about the world instead of
+a fact baked into a file. Everything in that module is a `YYYY-MM-DD` string,
+never a `Date`, because a `Date` at local midnight serialises to the previous day
+in any negative-offset zone. The MSW handler was moved onto the same helper: a
+mock anchored on UTC would have put the fixture four hours out of step with the
+page and produced an evening-only test failure.
+
+### `PUBLISHED` needed a badge, and the badge exposed a contrast failure
+
+`SourceKind` gained a fourth value on the backend and the frontend followed:
+`live | published | fixture | unavailable`. The badge says **PUBLISHED** and the
+stamp beside it says **checked *when***, and both halves are required — a badge
+claiming authority with no date on it is the thing `as_of` is mandatory to
+prevent, and "as of" was the wrong preposition because the timestamp is when
+Pilot last *looked*, not when SCASPA last *changed*.
+
+It takes `FILL.brand`, and drawing it there is what surfaced the defect. That
+fill carried `--color-on-navy-primary` — the ink for text **on the navy**, a
+dark ground — over a mid-blue fill, measuring **2.97:1 on the dark palette and
+2.93:1 on the light one** for 11px semibold text, where AA asks 4.5:1. It failed
+in both themes.
+
+It survived because `tests/contrast.test.ts` enumerated the fills it checked and
+this one was not in the list, and because the two badges wearing it — Operator
+and Calculated — are rarely on screen. PUBLISHED is not rare. The ink is now
+`--color-ink-on-bright`, the family ink, which measures 5.86:1 dark and 4.95:1
+light; the exception was removed rather than special-cased, and the fill is now
+in the enumerated list so it cannot fall out again.
+
+### A metric tile that is loading is not a metric tile that is unknown
+
+Both drew the em dash and "not reported". On first paint, before any response
+landed, this screen therefore rendered exactly the row of empty cards it was
+rebuilt to remove — transiently, which is the version nobody catches in review
+because it is gone by the time the page is looked at.
+
+`MetricTile` now takes `loading`, and draws a skeleton bar inside the value's
+own line box so the tile is the same height loaded and loading. "Wait" and "the
+source did not say" are different sentences.
+
+### The bridge back into the conversation
+
+`AskPilot` sends a stated question into `/chat` through the in-memory handoff the
+landing chips already use — never a query string, which would put message
+content in history, in the address bar and in every screenshot. The label *is*
+the question, because a button reading "Ask Pilot" that then fires an unseen
+question is the assistant putting words in somebody's mouth.
+
+### Verified against the real source
+
+The backend was pointed at the live store, not fixtures. Today's date is
+2026-08-27; the store held 496 published calls; the week window returned exactly
+one — RHAPSODY OF THE SEAS, 2 September, PORTZANTE, capacity 2,026, **passenger
+count not published**, which is the `pax: 0 → null` rule rendering correctly on
+real Authority data. The tiles read 0 / 0 / 1. Search for "rhapsody" over all
+upcoming returned five calls and kept focus through all eight keystrokes. The
+hatch was confirmed by measurement to begin below the cruise section's last
+pixel.
+
+821 frontend tests, lint, typecheck, production build, both themes, 375px and
+desktop.

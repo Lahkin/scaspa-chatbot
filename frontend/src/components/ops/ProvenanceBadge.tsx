@@ -70,7 +70,25 @@ const FILL = {
    * the ink is the one that passes. decisions.md 0034.
    */
   aqua: 'bg-aqua text-ink-on-aqua',
-  brand: 'bg-brand-400 text-on-navy-primary',
+  /*
+   * ── THIS FILL WAS THE FAMILY'S ONE UNCHECKED EXCEPTION ────────────────────
+   *
+   * It carried `--color-on-navy-primary`, which is the ink for text ON THE NAVY
+   * — a dark ground. Here it is white-ish text on a mid-blue fill, and it
+   * measures **2.97:1 on the dark palette and 2.93:1 on the light one**. The
+   * badge is 11px semibold, so AA asks 4.5:1, and it failed in both themes.
+   *
+   * It survived because `tests/contrast.test.ts` enumerated the fills it
+   * checked and this one was not among them, and because the two badges wearing
+   * it — Operator and Calculated — are rarely on screen. PUBLISHED is not rare:
+   * it is on the cruise schedule every time anybody opens it.
+   *
+   * `--color-ink-on-bright` is the family ink and it is the one that passes:
+   * 5.86:1 dark, 4.95:1 light. The exception is removed rather than special-
+   * cased, which is what the note at the top of this file says the family is
+   * for. Asserted now in tests/contrast.test.ts alongside the others.
+   */
+  brand: 'bg-brand-400 text-ink-on-bright',
   /** Unfilled — the quiet surface with muted ink. The quietest of the family. */
   quiet: 'bg-surface-muted text-ink-muted',
   /** Outlined and dashed — a value that is not recorded rather than one that is. */
@@ -85,15 +103,19 @@ const FILL = {
  * users will actually see, and it is a statement about the world rather than
  * a fault in the product.
  *
- * ── FOUR VARIANTS, THREE OF WHICH THE WIRE CAN PRODUCE ──────────────────────
+ * ── FIVE VARIANTS, FOUR OF WHICH THE WIRE CAN PRODUCE ───────────────────────
  *
  * The handoff's Family A draws `none` and `unavailable` as two badges: `none` is
  * the neutral fill with an x reading NO FEED, `unavailable` the divider fill
  * with an info glyph reading NOT CONNECTED. `SourceKind` on the wire is
- * `live | fixture | unavailable` and has no `none`, so the fourth is drawn and
- * unreachable — the same treatment as every other blocked component in
+ * `live | published | fixture | unavailable` and has no `none`, so that one is
+ * drawn and unreachable — the same treatment as every other blocked component in
  * `08-blocked-and-forbidden.md`. It is typed here rather than on `SourceKind`
  * so that adding it cannot make a schema accept a value the backend never sends.
+ *
+ * `published` was the most recent addition and it came from the wire, not from
+ * the handoff: the cruise schedule is real SCASPA data on a six-hour snapshot,
+ * and the board had no badge that was neither a live feed nor a warning.
  *
  * Which of the two `unavailable` takes is settled by the rest of the handoff
  * rather than by the badge table: §5.7 draws the empty vessels table with "the
@@ -105,6 +127,26 @@ type SourceBadgeValue = SourceKind | 'none';
 
 const SOURCE_KIND: Record<SourceBadgeValue, Treatment> = {
   live: { label: 'Live feed', icon: 'lightning', className: FILL.live },
+  /*
+   * ── "PUBLISHED", AND DELIBERATELY NOT GREEN ─────────────────────────────
+   *
+   * Official SCASPA information, fetched at a stated time. It wears the brand
+   * fill rather than `FILL.live` or `FILL.positive` for two separate reasons.
+   *
+   * Not live, because the whole point of the fourth kind is that a six-hourly
+   * snapshot is not a feed, and two badges a shade apart would collapse that
+   * distinction on the one screen where it matters.
+   *
+   * Not positive, because green in this product means berthed, on time,
+   * settled — an operational state. Provenance is not an operational state, and
+   * borrowing the hue would put "where this came from" into the vocabulary a
+   * reader scans for "what is happening".
+   *
+   * The badge says PUBLISHED and the stamp beside it says CHECKED <when>. Both
+   * halves are required: without the second this is a badge claiming authority
+   * with no date on it, which is the failure `as_of` is mandatory to prevent.
+   */
+  published: { label: 'Published', icon: 'file', className: FILL.brand },
   fixture: { label: 'Sample data', icon: 'alert', className: FILL.caution },
   /*
    * "Live data unavailable", not "No feed".

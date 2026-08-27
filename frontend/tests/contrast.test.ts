@@ -425,6 +425,17 @@ describe.each(THEMES)('%s theme', (theme) => {
       '--color-critical',
       '--color-live',
       '--color-absent',
+      /*
+       * The one that was missing, and the one that was wrong.
+       *
+       * `FILL.brand` carried `--color-on-navy-primary` — the ink for text on the
+       * NAVY, a dark ground — over a mid-blue fill. It measured 2.97:1 dark and
+       * 2.93:1 light on an 11px semibold badge, and it passed review for as long
+       * as it did because this list did not contain it. Enumerated lists are
+       * only as good as their last entry, so the fill that the provenance family
+       * now uses for PUBLISHED is in it.
+       */
+      '--color-brand-400',
     ];
 
     it('ink-on-bright clears AA on every one of them', () => {

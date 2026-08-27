@@ -95,6 +95,9 @@ import { TranscriptState } from '@/components/ops/TranscriptState';
 import { PositionMarker } from '@/components/ops/PositionMap';
 import { HealthPanel } from '@/components/ops/HealthPanel';
 import { IndexStatusPanel } from '@/components/ops/IndexStatusPanel';
+import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
+import { SourceAge } from '@/components/ops/SourceNotice';
+import { NothingPublished, ScheduleUnavailable } from '@/components/ops/cruise/CruiseStates';
 import type { HealthResponse, TariffQuote } from '@/lib/types';
 
 /**
@@ -932,6 +935,42 @@ function OperationsTableSection() {
           {/* Counts down live, then hands the button back — §1.3. */}
           <RateLimitedState retryAfterS={18} onRetry={() => {}} />
           <RateLimitedState retryAfterS={null} />
+        </div>
+      </Section>
+
+      <Section
+        title="The published schedule's two emptinesses"
+        note="An empty table with a retrieved source and an empty table with no source at all are OPPOSITE facts — a quiet week, and an outage. They are the only two states in the product that render identically if you get this wrong, and the cheaper-looking mistake is the expensive one: a passenger told there are no ships stops looking."
+      >
+        <div className="space-y-4">
+          <NothingPublished range="week" onWiden={() => {}} />
+          <ScheduleUnavailable />
+        </div>
+      </Section>
+
+      <Section
+        title="Provenance — source kinds, including the fourth"
+        note="`published` is real SCASPA data on a six-hour snapshot: neither a live feed nor sample data, and the badge exists because presenting it as either would be a lie in one direction or the other. `none` is drawn and unreachable — the wire has no value for it."
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <ProvenanceBadge kind="source" value="live" />
+          <ProvenanceBadge kind="source" value="published" />
+          <ProvenanceBadge kind="source" value="fixture" />
+          <ProvenanceBadge kind="source" value="unavailable" />
+          <ProvenanceBadge kind="source" value="none" />
+        </div>
+        <p className="mt-3 text-caption text-ink-subtle">
+          The stamp that must accompany PUBLISHED, which is the other half of the same claim:
+        </p>
+        <div className="mt-2">
+          <SourceAge
+            source={{
+              kind: 'published',
+              label: 'Official SCASPA cruise schedule',
+              as_of: '2026-08-27T05:12:00Z',
+              notice: null,
+            }}
+          />
         </div>
       </Section>
 
