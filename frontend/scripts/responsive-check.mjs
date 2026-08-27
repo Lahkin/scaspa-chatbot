@@ -64,6 +64,7 @@ const ROUTES = [
   '/widget',
   '/vessels',
   '/flights',
+  '/cargo',
   '/tariffs',
   '/support',
   '/settings',

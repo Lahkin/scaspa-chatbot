@@ -3790,3 +3790,131 @@ No console errors.
 661 backend tests, 831 frontend tests, lint, typecheck, prettier, production
 build, and `check:a11y` fully green. The one backend failure is the Windows
 symlink-privilege error in `test_ingest.py`, unrelated and pre-existing.
+
+---
+
+## 0043 — `/cargo` ships without the feature the brief asked for
+
+**Status:** accepted. A recorded deviation from the navigation brief §20.
+**Builds on** 0039 (why cargo is not a Watchtower source) and 0042 (the guide).
+
+### What was asked for
+
+A cargo status lookup: "Search by vessel or agent", returning a card of
+**Vessel · Agent · Status · Last updated · Official SCASPA source**. The brief
+also says to inspect `scaspa.com/cargo.html` first — DOM, XHR, fetch calls,
+embedded JSON — and to prefer a structured endpoint, falling back to parsing
+server-side.
+
+### What the inspection found, twice
+
+0039 reached its conclusion from the served HTML. This is a second look, in a
+real browser with JavaScript running, because the whole page design rests on it:
+
+| | |
+| --- | --- |
+| `<table>` elements | 5, **all** Weebly `wsite-multicol-table` layout blocks — no `<th>`, no data rows |
+| `<input>` / `<select>` / `<textarea>` | 0 |
+| `<iframe>` | 0 |
+| Embedded JSON | none |
+| XHR / fetch | only `CustomerAccounts::getAccountDetails` and `Member::get_session_details` — the site platform's own membership RPCs |
+| Body text | 1,156 characters |
+
+There is no structured endpoint to prefer and nothing to parse server-side.
+
+**And it is sharper than "no data".** The page's own FAQ answers "How do I Check
+my Cargo Status" with: search "the search field located at the top right of the
+Cargo Info table" — and there is no Cargo Info table on that page. Its next
+question, "Is the information updated regularly", has no answer at all; the
+field is empty. An agent following the Authority's published instructions
+reaches a dead end. Recorded as `found-during-build.md` item 12.
+
+### So the search box is not built
+
+This is the deviation. A search field over nothing is not a neutral placeholder
+— it is a promise. Somebody types a vessel name, gets "no results", and
+reasonably concludes their cargo is not at the port. That is a **different and
+much worse answer** than "this is not published", and it is the one a search box
+manufactures for free.
+
+The page says what is true instead: cargo status is not published online,
+SCASPA's page describes a table the site does not currently publish, and here is
+the telephone number to ring with the vessel or agent name. Reproducing the dead
+end more prettily would help nobody.
+
+The control goes in when there is something behind it. `tests/cargo.test.tsx`
+asserts its absence so that "we should add a search box" is a conversation
+rather than a commit.
+
+### The page leads with what SCASPA HAS published
+
+Ten confirmed cargo answers sit in the researchers' export — customs clearance,
+berth specifications, ramps, tariffs, what the Deep Water Harbour is, how much
+cargo it handles. Same mechanism as Airport Information: `GET /api/guide`, no
+model in the path, every answer carrying its source, verification date and the
+`kb-` id the assistant cites.
+
+The privacy sentence is on the page even though there is no feed to leak from:
+*"Pilot has no accounts and never knows who is asking."* The brief says not to
+expose private shipment data beyond what SCASPA publishes, and that rule needs
+to exist **before** a source is connected — a rule that lives only in prose gets
+relaxed by whoever wires the feed up. It is asserted in a test for the same
+reason.
+
+### Reusing the guide component exposed a bug in it
+
+`GuideTopics` maps the researchers' subcategory slugs to display headings, and
+those headings were written when the airport was the only category using them.
+The same slugs appear under cargo:
+
+| Slug | Rendered | Over |
+| --- | --- | --- |
+| `identity` | "About the airport" | "What is the Deep Water Harbour?" |
+| `infrastructure` | "Runway and infrastructure" | "What are the specifications of the cargo berth?" |
+| `statistics` | "Passenger numbers" | "How much cargo does the port handle?" |
+
+A heading is read as a claim about what is under it, so "Passenger numbers"
+above a tonnage figure is a small lie printed in capitals. Every label is now
+neutral enough to be true of any facility, which is the constraint a shared
+component was always under and which was invisible while one screen used it.
+
+### A route added to the app but not to `__root.tsx`
+
+`SELF_CHROMED_ROUTES` lists the screens that supply their own header, `<main>`
+and footer and must not be wrapped in the marketing chrome. `/cargo` went into
+the app without going into that list, so it rendered inside both: **two `<main>`
+landmarks**, a marketing footer an operations screen has no use for, and 469px
+of horizontal overflow at 320px from chrome that does not belong on it.
+
+`__root.tsx` already carried a comment saying this defect was found by
+`check:responsive` "not by review". It happened again, and was found the same
+way again — because the landmark test only ever rendered `/about`.
+
+**A guard that examines one example is a guard for that example.** The
+assertion now walks every route in the generated tree, parsed out of
+`routeTree.gen.ts` so a new route is covered without anybody remembering to add
+it. Verified by reintroducing the bug and watching `/cargo has exactly one main
+landmark` go red, then restoring.
+
+`/cargo` was also missing from the route lists in `scripts/a11y-check.mjs` and
+`scripts/responsive-check.mjs` — the same class of omission, and the reason
+those checks are worth running before a page is called finished.
+
+### The gallery timeout, raised a second time
+
+`tests/gallery.test.tsx` waits on a lazy import of the whole component gallery.
+Adding the published-answer, nothing-verified and cargo-status sections pulled
+three more import graphs into that transform, and it began failing roughly one
+full-suite run in three while passing every time in isolation.
+
+Raised 5s to 15s with a note: if it needs a third raise, the fix is to stop
+lazy-loading the gallery in tests rather than to keep buying seconds.
+
+### Verified
+
+856 frontend tests, 661 backend, lint, typecheck, prettier, production build.
+`check:a11y` reports **0 axe violations and 0 manual failures** across 14 routes
+at two viewports, `/cargo` included. `check:responsive` is clean on `/cargo` for
+overflow at all five widths; its remaining touch-target failures there are the
+shared sidebar and header chrome, identical on `/vessels` and `/flights`, and
+predate this work.

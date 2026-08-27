@@ -93,6 +93,10 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { label: 'Vessels', href: '/vessels', icon: 'ship' },
       { label: 'Flights', href: '/flights', icon: 'plane' },
+      // §4 of the navigation brief puts Cargo in this group. It is the last of
+      // the four facilities to get a screen, and it arrives after the others
+      // because it was the only one with nothing to put on it — see 0043.
+      { label: 'Cargo', href: '/cargo', icon: 'anchor' },
       { label: 'Tariffs', href: '/tariffs', icon: 'receipt' },
       { label: 'Support', href: '/support', icon: 'headset' },
       { label: 'Console', href: '/ops', icon: 'chart' },

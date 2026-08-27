@@ -40,25 +40,47 @@ import type { GuideEntry, GuideTopic } from '@/lib/types';
  * Display names for the researchers' own subcategory slugs.
  *
  * This is the one place in the file with strings that are not from the wire,
- * and they are deliberately all *headings*: `checkin` → "Check-in" renames a
+ * and they are deliberately all *headings*: `checkin` → "Checking in" renames a
  * grouping and asserts nothing about SCASPA. Anything not listed falls through
  * to a title-cased version of the slug, so a new subcategory appears with a
  * readable heading rather than disappearing.
+ *
+ * ── THEY MUST BE TRUE FOR EVERY CATEGORY, NOT JUST THE FIRST ONE ────────────
+ *
+ * These were written against the airport, which was the only category using
+ * them. Three of them then asserted the wrong subject the moment `/cargo`
+ * reused the component, because the same slugs appear under both:
+ *
+ * | Slug | Was | Rendered over |
+ * | --- | --- | --- |
+ * | `identity` | "About the airport" | "What is the Deep Water Harbour?" |
+ * | `infrastructure` | "Runway and infrastructure" | "What are the specifications of the cargo berth?" |
+ * | `statistics` | "Passenger numbers" | "How much cargo does the port handle?" |
+ *
+ * A heading is read as a claim about what is under it, so "Passenger numbers"
+ * above a tonnage figure is a small lie printed in capitals. Every label here
+ * is now neutral enough to be true of any facility — which is the constraint a
+ * shared component was always under, and was only invisible while one screen
+ * used it.
  */
 const LABELS: Record<string, string> = {
   aviation: 'Aviation and charters',
   checkin: 'Checking in',
-  codes: 'Airport codes',
+  codes: 'Codes',
+  customs: 'Customs',
   facilities: 'Facilities',
-  identity: 'About the airport',
+  identity: 'What it is',
   immigration: 'Immigration and customs',
-  infrastructure: 'Runway and infrastructure',
+  infrastructure: 'Infrastructure',
   location: 'Getting there',
+  operations: 'Operations',
   parking: 'Parking and access',
   projects: 'Works and projects',
   schedule: 'Opening times',
   security: 'Security',
-  statistics: 'Passenger numbers',
+  statistics: 'Published figures',
+  tariffs: 'Charges',
+  tracking: 'Tracking a shipment',
   trivia: 'Other',
   general: 'General',
 };

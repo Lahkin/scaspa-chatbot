@@ -50,6 +50,7 @@ import {
   FIXTURE_SOURCE,
   MOCK_CRUISE_OFFSETS,
   MOCK_DIRECTORY,
+  MOCK_CARGO_TOPICS,
   MOCK_GUIDE_TOPICS,
   MOCK_DISCLAIMER,
   MOCK_FLIGHTS,
@@ -458,7 +459,10 @@ export const handlers = [
   http.get(`${base}/api/guide`, ({ request }) => {
     const category = new URL(request.url).searchParams.get('category') ?? 'airport';
 
-    if (getScenario() === 'ops_unavailable' || category !== 'airport') {
+    const topics =
+      category === 'airport' ? MOCK_GUIDE_TOPICS : category === 'cargo' ? MOCK_CARGO_TOPICS : null;
+
+    if (getScenario() === 'ops_unavailable' || topics === null) {
       return HttpResponse.json({
         source: {
           kind: 'unavailable',
@@ -484,8 +488,8 @@ export const handlers = [
         notice: null,
       },
       category,
-      topics: MOCK_GUIDE_TOPICS,
-      total: MOCK_GUIDE_TOPICS.reduce((n, topic) => n + topic.entries.length, 0),
+      topics,
+      total: topics.reduce((n, topic) => n + topic.entries.length, 0),
     });
   }),
 

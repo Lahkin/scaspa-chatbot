@@ -53,6 +53,12 @@ const SELF_CHROMED_ROUTES = [
   // invisible without layout.
   '/vessels',
   '/flights',
+  // `/cargo` was added to the app before it was added here, and the same check
+  // caught it a second time: the page rendered inside the marketing chrome AND
+  // its own, so it had two `<main>` landmarks, a marketing footer an operations
+  // screen has no use for, and 469px of horizontal overflow at 320px from
+  // chrome that does not belong on it.
+  '/cargo',
   '/tariffs',
   '/support',
   '/settings',
