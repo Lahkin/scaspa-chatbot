@@ -50,13 +50,35 @@ interface NavItem {
   hint?: string;
 }
 
-/** Section nav, top bar. Every one resolves. */
+/**
+ * The console's tabs — §22, in its order. Every one resolves.
+ *
+ * Three of them are console routes and two leave for the public screens, which
+ * looks inconsistent and is not: §22 says to use the SAME backend services as
+ * the public pages and not to duplicate data fetching. `/tariffs` and
+ * `/support` are already the whole of what a Tariffs or Contact tab would show,
+ * so a console copy of either would be a second implementation of a screen that
+ * exists — the exact thing the brief rules out.
+ *
+ * **Cargo is a tab, and "Cargo Tracking" still is not.** The distinction is the
+ * one `tests/console.test.tsx` has always guarded: a link promising to look up
+ * somebody's container is the `personal_record` refusal wearing a nav label,
+ * read long before the refusal is. `/cargo` says plainly that cargo status is
+ * not published and offers no search — so the tab leads to an honest answer
+ * rather than to a lookup that cannot exist.
+ */
 const SECTIONS: NavItem[] = [
-  { to: '/ops/vessels', label: 'Vessel arrivals' },
-  { to: '/ops/flights', label: 'Flight schedules' },
-  { to: '/tariffs', label: 'Port tariffs' },
-  { to: '/support', label: 'Contact support' },
+  { to: '/ops/vessels', label: 'Cruise & Vessels' },
+  { to: '/ops/flights', label: 'Airport' },
+  { to: '/ops/cargo', label: 'Cargo' },
+  { to: '/tariffs', label: 'Tariffs' },
+  { to: '/support', label: 'Contact' },
 ];
+
+/** §22's strapline. Rendered once per console page, under the bar. */
+const CONSOLE_NAME = 'Pilot Operations Console';
+const CONSOLE_STRAPLINE =
+  'A unified view of published SCASPA operational information and service status.';
 
 /** Rail. Same rule. */
 const RAIL: NavItem[] = [
@@ -112,6 +134,18 @@ export function ConsoleShell({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <h1 className="text-h1 font-semibold text-ops-ink">{title}</h1>
+                {/*
+                  §22's supporting text, on every console page rather than on a
+                  landing page — because there is no landing page. `/ops`
+                  redirects to the first tab: a dashboard summarises across
+                  sources, and every source here is already summarised on the
+                  tab that owns it, so an overview would be a click between the
+                  reader and the data.
+
+                  It sits above the section's own intro because it describes the
+                  console and the line below describes the screen.
+                */}
+                <p className="mt-1 text-caption text-ops-ink-variant">{CONSOLE_STRAPLINE}</p>
                 {intro ? (
                   <p className="mt-1 max-w-measure text-small text-ops-ink-variant">{intro}</p>
                 ) : null}
@@ -162,11 +196,19 @@ function TopBar() {
               the aria-hidden glyph and nothing else — no accessible name at all
               (axe `link-name`, serious). The sr-only copy is always present, so
               the name survives the breakpoint. */}
-          {/* The Authority, not the product: this is an operations console for
-              SCASPA staff, and Pilot is the customer-facing guide. */}
-          <span className="sr-only">SCASPA operations</span>
+          {/*
+            ── PILOT'S CONSOLE, SHOWING SCASPA'S INFORMATION ──────────────────
+            This read "SCASPA operations", on the note that the console is for
+            Authority staff while Pilot is the customer-facing guide. §22 names
+            it "Pilot Operations Console", and the brief is right: §1 makes
+            PILOT the PRODUCT brand and SCASPA the INSTITUTIONAL one, so a Pilot
+            surface displaying SCASPA's data is exactly that architecture. The
+            old label had it inverted — it treated a product screen as an
+            institutional artefact. 0045.
+          */}
+          <span className="sr-only">{CONSOLE_NAME}</span>
           <span className="hidden sm:inline" aria-hidden="true">
-            SCASPA operations
+            {CONSOLE_NAME}
           </span>
         </Link>
 

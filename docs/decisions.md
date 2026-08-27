@@ -4016,3 +4016,121 @@ instead of one — against a suite that had started crying wolf.
 Verified by five consecutive full runs with no failure but the environmental
 one (`CLAUDE_CODE_MESSAGING_TOKEN` in the developing shell's environment, which
 `config.test.ts` correctly objects to and which is not in the repository).
+
+---
+
+## 0045 — The console stops being a second implementation of the product
+
+**Status:** accepted.
+**Builds on** 0042, 0043 and 0044.
+
+### It was two copies of the same screens
+
+`/ops/vessels` carried its own search field, its own pagination, its own
+`DataTable`, its own metric tiles and its own empty states — around 150 lines
+rendering the same `useVessels` query the public `/vessels` renders. `/ops/flights`
+did the same against `useFlights`.
+
+Two copies of one screen is two places for the ETA/ATA distinction to be lost,
+two places for a filter to start lying about `total`, and two places to fix
+anything found in either. It is not hypothetical: the console is where the
+ETA/ATA columns *were* collapsed into one "Arrival" column, and it had to be
+fixed there separately.
+
+§22 is explicit — "Use the SAME backend services as the public pages. Do not
+duplicate data fetching logic." So the console tabs now render the public
+sections themselves: `CruiseSchedule`, `VesselMovements`, `GuideTopics`,
+`FlightMovements`, `CargoStatus`.
+
+### What the console is FOR, once the tables are shared
+
+The aside panels, and nothing else: position reports, marine advisories, gate
+assignments, service health, index freshness. That is operational
+instrumentation a traveller has no use for and an operator does.
+
+Stating it that plainly is a better answer than a second table that looked
+different for no reason — and it is a real answer to "why does this screen
+exist", which the console did not previously have.
+
+### Deleting the duplication found a component with no callers
+
+`OpsListState` existed to give the console's lists a skeleton, an empty and an
+error state. With the console's own tables gone it had **zero callers**, and it
+was `tests/matrix.test.tsx` that noticed — its guard scans for `<OpsListState`
+callers and asserts each hands over `columns`, and the caller count fell to
+nought.
+
+The component is deleted. The guard is not: the rule it protects — a loading
+table keeps its column headings, §7.5, so the table does not dissolve and move
+every column twice — is now enforced by `TableSkeleton`, which is the only thing
+that draws that state. The scan points there instead.
+
+`OpsPage` itself survives; `/settings` and `/profile` still use it.
+
+### The tabs are §22's, and two of the five leave the console
+
+```
+Cruise & Vessels · Airport · Cargo · Tariffs · Contact
+```
+
+Tariffs and Contact link to `/tariffs` and `/support` rather than to console
+copies, which looks inconsistent and is not: those public screens are already
+the whole of what such a tab would show, so a console version of either would be
+a second implementation of a screen that exists — the exact thing this decision
+removes everywhere else.
+
+### A Cargo tab is not a Cargo Tracking link
+
+`tests/console.test.tsx` has asserted since the console was built that it offers
+no "Cargo Tracking", on the grounds that a link promising to look up somebody's
+container is the `personal_record` refusal wearing a nav label — read long
+before the refusal is.
+
+That guard now sits next to a Cargo tab, so the distinction is worth stating
+rather than assuming safe. `/ops/cargo` leads to what SCASPA has published about
+cargo and to a panel saying, in as many words, that cargo status is not
+published online and that Pilot has no accounts with which to look up a private
+consignment. It is an answer, not a lookup. The test still passes, and it is now
+guarding a distinction the product actually makes rather than an absence.
+
+`/ops/cargo` has no aside. There is no cargo feed, no cargo gate map and no
+cargo advisory source, so the panel column would be empty furniture — and an
+empty aside on one tab of three reads as something failing to load.
+
+### "Pilot Operations Console", and the old label had the brand architecture inverted
+
+The top bar read **SCASPA operations**, on the note that "this is an operations
+console for SCASPA staff, and Pilot is the customer-facing guide".
+
+§22 names it **Pilot Operations Console**, and the brief is right. §1 establishes
+two brands: PILOT is the **product**, SCASPA is the **institution**. A Pilot
+surface displaying SCASPA's information is precisely that architecture — the old
+label treated a product screen as an institutional artefact, which is the
+inversion, not the fix.
+
+§22's supporting text — *"A unified view of published SCASPA operational
+information and service status."* — sits under the section heading on every
+console page rather than on a landing page, because there is no landing page.
+`/ops` still redirects to the first tab: a dashboard summarises across sources,
+every source here is already summarised on the tab that owns it, and an overview
+would be a click between the reader and the data.
+
+### Ask Pilot came along for free
+
+§22 asks for contextual actions — "Ask Pilot about today's arrivals", "Ask Pilot
+what documents I need". They are already inside the shared sections, so the
+console acquired them by rendering the same components. That is the argument for
+sharing, made by the first feature that arrived after it.
+
+### Verified
+
+858 frontend tests, lint, typecheck, prettier, production build.
+`check:a11y` at 0 violations and 0 manual failures, `/ops/cargo` included in the
+route list along with `check:responsive`.
+
+Counted in a browser on a clean tab: `/ops/vessels` issues **five** distinct
+requests — cruise schedule, vessels, positions, advisories, health — which is
+comfortably inside the 60-per-minute operations budget. (Dev doubles each
+through StrictMode's double mount; production does not.) The cruise table and
+its summary tiles share one request on the default range, because their query
+keys match.

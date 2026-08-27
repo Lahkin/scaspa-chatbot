@@ -1,60 +1,54 @@
-import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { Button, Input } from '@/components/ui';
 import { ConsoleShell } from '@/components/ops/console/ConsoleShell';
-import { DataTable, Td, Th, Tr } from '@/components/ops/console/DataTable';
-import { Pagination } from '@/components/ops/console/Pagination';
 import { OperationalAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
 import { GateMap } from '@/components/ops/GateMap';
-import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
-import { OpsListState } from '@/components/ops/OpsPage';
-import { SourceAge, SourceNotice } from '@/components/ops/SourceNotice';
-import { FlightStatusChip } from '@/components/ops/StatusChip';
-import { useFlights, useGateMap } from '@/features/ops/queries';
-import type { FlightDirection } from '@/lib/types';
+import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
+import { TableError } from '@/components/ops/TableStates';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { GuideTopics, NothingVerified } from '@/components/ops/guide/GuideSection';
+import { FlightMovements } from '@/components/ops/flights/FlightMovements';
+import { useFlights, useGateMap, useGuide } from '@/features/ops/queries';
 
-const PAGE_SIZE = 10;
-
-/** `/ops/flights` — the design's `flight_schedules` desktop screen. */
+/**
+ * `/ops/flights` — the console's **Airport** tab.
+ *
+ * The same rewrite as `/ops/vessels`, for the same reason: this carried its own
+ * search, pagination, `DataTable` and metric tiles over the same `useFlights`
+ * query the public screen renders. §22 — "use the SAME backend services as the
+ * public pages, do not duplicate data fetching logic."
+ *
+ * `useFlights` is still called here, but only for the advisory the aside panel
+ * needs; the movements table owns its own copy of that query and React Query
+ * serves both from one request when the parameters match.
+ *
+ * The console keeps the gate map and the console-toned advisory panel, which
+ * are the operator's instrumentation and are not on the public screen.
+ */
 function OpsFlightsRoute() {
-  const [direction, setDirection] = useState<FlightDirection>('arrival');
+  const guide = useGuide('airport');
   const gates = useGateMap();
-  const [search, setSearch] = useState('');
-  const [submitted, setSubmitted] = useState('');
-  const [offset, setOffset] = useState(0);
+  /*
+   * The advisory only. `FlightMovements` runs the paged query it needs and this
+   * one asks for a single row, so the aside is not waiting on a table it does
+   * not draw.
+   */
+  const advisory = useFlights({ limit: 1 });
 
-  const query = useFlights({
-    direction,
-    limit: PAGE_SIZE,
-    offset,
-    ...(submitted ? { q: submitted } : {}),
-  });
-
-  const data = query.data;
-  const flights = data?.flights ?? [];
+  const source = guide.data?.source;
 
   return (
     <ConsoleShell
-      breadcrumb={['Console', 'Flight schedules']}
-      title="Flight schedules"
-      intro="Arrivals and departures at R.L. Bradshaw International Airport."
-      actions={
-        <Button
-          variant="secondary"
-          onClick={() => void query.refetch()}
-          disabled={query.isFetching}
-        >
-          {query.isFetching ? 'Refreshing…' : 'Refresh'}
-        </Button>
-      }
+      breadcrumb={['Console', 'Airport']}
+      title="Airport"
+      intro="Published information and movements for R. L. Bradshaw International Airport."
       aside={
         <>
-          <OperationalAdvisoryPanel advisory={data?.advisory ?? null} tone="console" />
+          <OperationalAdvisoryPanel advisory={advisory.data?.advisory ?? null} tone="console" />
           {/*
-            §6.8. `active` and `total` are the SERVER's figures — "never
+            §6.8. `active` and `total` are the SERVER's figures — never
             recomputed from the visible rows, which would drop to zero under a
-            filter" — so they are required props rather than optional ones, and
-            the panel does not render until the response carries them.
+            filter — so they are required props and the panel does not render
+            until the response carries them.
           */}
           {gates.data ? (
             <GateMap gates={gates.data.gates} active={gates.data.active} total={gates.data.total} />
@@ -62,178 +56,45 @@ function OpsFlightsRoute() {
         </>
       }
     >
-      {data?.source ? (
-        <>
-          <SourceAge source={data.source} />
-          <SourceNotice source={data.source} />
-        </>
-      ) : null}
-
-      <MetricRow>
-        <MetricTile label="Flights" value={data?.metrics.total_flights ?? null} />
-        <MetricTile label="On time" value={data?.metrics.on_time_percent ?? null} suffix="%" />
-        <MetricTile
-          label="Gates in use"
-          value={data?.metrics.gates_active ?? null}
-          suffix={data?.metrics.gates_total ? `/ ${data.metrics.gates_total}` : ''}
-        />
-      </MetricRow>
-
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div role="radiogroup" aria-label="Direction" className="flex gap-2">
-          {(['arrival', 'departure'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={direction === value}
-              onClick={() => {
-                setDirection(value);
-                setOffset(0);
-              }}
-              className={
-                direction === value
-                  ? 'min-h-touch rounded-sm bg-ops-navy px-4 text-small font-semibold text-ink-inverse'
-                  : 'min-h-touch rounded-sm border border-ops-outline px-4 text-small font-medium text-ops-ink'
-              }
-            >
-              {value === 'arrival' ? 'Arrivals' : 'Departures'}
-            </button>
-          ))}
+      <section className="space-y-4" aria-labelledby="ops-airport-guide-heading">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h2 id="ops-airport-guide-heading" className="text-section font-semibold text-ink">
+            What SCASPA publishes about the airport
+          </h2>
+          {source ? <ProvenanceBadge kind="source" value={source.kind} /> : null}
         </div>
 
-        <form
-          className="flex flex-1 items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setSubmitted(search.trim());
-            setOffset(0);
-          }}
-        >
-          <div className="min-w-40 flex-1">
-            <Input
-              label="Search flight or destination"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Flight number or city"
-            />
+        {guide.isPending ? (
+          <div className="space-y-2" role="status">
+            <span className="sr-only">Loading published airport information</span>
+            <Skeleton className="h-12" />
+            <Skeleton className="h-12" />
           </div>
-          <Button type="submit">Search</Button>
-        </form>
-      </div>
+        ) : guide.error ? (
+          <TableError error={guide.error} onRetry={() => void guide.refetch()} />
+        ) : (guide.data?.total ?? 0) === 0 ? (
+          <NothingVerified subject="the airport" />
+        ) : (
+          <GuideTopics topics={guide.data?.topics ?? []} />
+        )}
+      </section>
 
-      <OpsListState
-        // §7.5's one skeleton, with the headings that keep the shape stable.
-        columns={[
-          'Flight',
-          'Airline',
-          direction === 'arrival' ? 'From' : 'To',
-          'Time',
-          'Gate',
-          'Status',
-        ]}
-        isLoading={query.isPending}
-        error={query.error ?? null}
-        isEmpty={flights.length === 0}
-        emptyTitle={
-          submitted
-            ? 'No flights match that search'
-            : `No ${direction === 'arrival' ? 'arrivals' : 'departures'} are being reported`
-        }
-        emptyHint="Call SCASPA on 869-465-8121 / 2 / 3 to check a flight."
-        onRetry={() => void query.refetch()}
-      />
+      <hr className="border-border" />
 
-      {flights.length > 0 ? (
-        <>
-          <DataTable
-            caption="Flight schedules: number, airline, route, time, gate and status"
-            head={
-              <>
-                <Th>Flight</Th>
-                <Th>Airline</Th>
-                <Th>{direction === 'arrival' ? 'From' : 'To'}</Th>
-                <Th>Time</Th>
-                <Th>Gate</Th>
-                <Th>Status</Th>
-              </>
-            }
-          >
-            {flights.map((flight, index) => {
-              const revised =
-                flight.estimated_time && flight.estimated_time !== flight.scheduled_time;
-              return (
-                <Tr key={flight.id} index={index}>
-                  <Td nowrap>
-                    <span className="font-medium tabular">{flight.flight_no}</span>
-                  </Td>
-                  <Td muted>{flight.airline || '—'}</Td>
-                  <Td>
-                    {flight.port || '—'}
-                    {flight.port_code ? (
-                      <span className="text-ops-ink-variant"> ({flight.port_code})</span>
-                    ) : null}
-                  </Td>
-                  <Td nowrap>
-                    {revised ? (
-                      <>
-                        {/* Both times. Showing only the new one loses the fact
-                            that it moved, which is what the person waiting
-                            actually needs. */}
-                        <s className="text-ops-ink-variant tabular">
-                          {formatTime(flight.scheduled_time)}
-                        </s>{' '}
-                        <span className="font-semibold tabular">
-                          {formatTime(flight.estimated_time)}
-                        </span>
-                        <span className="sr-only">
-                          {' '}
-                          — rescheduled from {formatTime(flight.scheduled_time)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="tabular">{formatTime(flight.scheduled_time)}</span>
-                    )}
-                  </Td>
-                  <Td muted nowrap>
-                    {flight.gate ?? '—'}
-                  </Td>
-                  <Td nowrap>
-                    <FlightStatusChip status={flight.status} />
-                  </Td>
-                </Tr>
-              );
-            })}
-          </DataTable>
-
-          <Pagination
-            offset={offset}
-            limit={PAGE_SIZE}
-            total={data?.total ?? flights.length}
-            onOffsetChange={setOffset}
-            noun="flights"
-          />
-        </>
-      ) : null}
+      <FlightMovements />
     </ConsoleShell>
   );
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return '—';
-  const when = new Date(iso);
-  if (Number.isNaN(when.getTime())) return iso;
-  return when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 export const Route = createFileRoute('/ops/flights')({
   component: OpsFlightsRoute,
   head: () => ({
     meta: [
-      { title: 'Flight schedules — SCASPA operations' },
+      { title: 'Airport — Pilot Operations Console' },
       {
         name: 'description',
-        content: 'Arrivals and departures at R.L. Bradshaw International Airport.',
+        content:
+          'Published information and flight movements for R. L. Bradshaw International Airport.',
       },
     ],
   }),

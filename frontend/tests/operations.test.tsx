@@ -1176,8 +1176,16 @@ describe('the console screen', () => {
      * the figure has been believed, and the first thing lost when the column is
      * narrow. It was flagged on board 17 and is board 20's screen.
      */
+    /*
+     * The table is now the public screen's own `VesselMovements`, so its caption
+     * reads "Vessel movements" rather than "Vessel arrivals" — the console
+     * stopped drawing a second implementation of it (0045). The assertion is
+     * kept on the CONSOLE route rather than folded into the `/vessels` tests,
+     * because the two-column rule was broken on the console specifically and a
+     * guard is worth keeping where the defect actually happened.
+     */
     renderRoute('/ops/vessels');
-    const table = within(await screen.findByRole('table', { name: /Vessel arrivals/ }));
+    const table = within(await screen.findByRole('table', { name: /Vessel movements/ }));
     expect(table.getByRole('columnheader', { name: 'ETA' })).toBeInTheDocument();
     expect(table.getByRole('columnheader', { name: 'ATA' })).toBeInTheDocument();
     expect(table.queryByRole('columnheader', { name: 'Arrival' })).toBeNull();

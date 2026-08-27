@@ -486,9 +486,21 @@ describe('one event, one treatment — board 22', () => {
      * blank cards instead, so the same event had two treatments — and the one
      * that dissolved the table moved every column twice.
      */
-    // Every caller of the console's list state hands it the headings, so the
-    // loading case is `TableSkeleton` rather than the card placeholders.
-    const callers = SOURCE.filter((entry) => /<OpsListState/.test(entry.code));
+    /*
+     * This used to scan `<OpsListState`, the console's own list-state component,
+     * and check that every caller handed it `columns` so the loading case fell
+     * to `TableSkeleton` rather than to blank cards.
+     *
+     * `OpsListState` no longer exists. The console stopped drawing its own
+     * tables — it renders the same sections the public screens do (0045) — and
+     * that left the component with no callers at all, which is how this
+     * assertion found it.
+     *
+     * The RULE is unchanged and so is this test's job: wherever a table is
+     * loading, the headings stay. `TableSkeleton` is now the only thing that
+     * draws that state, so it is the thing to scan.
+     */
+    const callers = SOURCE.filter((entry) => /<TableSkeleton/.test(entry.code));
     expect(callers.length).toBeGreaterThan(0);
     for (const caller of callers) {
       expect(/columns=\{/.test(caller.code), caller.file).toBe(true);
