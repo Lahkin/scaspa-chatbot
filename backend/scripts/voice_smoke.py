@@ -75,7 +75,7 @@ def list_voices() -> int:
     it is a configuration question and answering it should not need the API up.
     """
     from app.config import get_settings
-    from app.voice.provider import elevenlabs_voices
+    from app.voice.provider import VoicesNotPermitted, elevenlabs_voices
 
     settings = get_settings()
     if not settings.ELEVENLABS_API_KEY.strip():
@@ -84,6 +84,16 @@ def list_voices() -> int:
 
     try:
         voices = elevenlabs_voices(settings)
+    except VoicesNotPermitted as exc:
+        # The common case with a properly-scoped key, and NOT a failure: this
+        # key can synthesise and transcribe and simply may not enumerate voices.
+        print(f"cannot list voices: {exc}", file=sys.stderr)
+        print(file=sys.stderr)
+        print("Voices are on the ElevenLabs dashboard: Voices -> the voice -> ID.", file=sys.stderr)
+        print("Then set it in backend/.env:", file=sys.stderr)
+        print(file=sys.stderr)
+        print("    ELEVENLABS_VOICE_ID=<id>", file=sys.stderr)
+        return 1
     except Exception as exc:  # noqa: BLE001 — a CLI reports rather than raises
         print(f"could not reach ElevenLabs: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1

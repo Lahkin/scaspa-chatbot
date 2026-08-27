@@ -16,7 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from app.config import Settings
-from app.voice import availability
+from app.voice import availability, provider
 
 
 @pytest.fixture(autouse=True)
@@ -139,8 +139,15 @@ class TestTheElevenLabsProbe:
         defaults = {"ELEVENLABS_API_KEY": "xi-test", "VOICE_PROVIDER": "elevenlabs"}
         return Settings(_env_file=None, **{**defaults, **overrides})
 
+    @staticmethod
+    def _reachable():  # noqa: ANN205
+        return patch.object(availability, "elevenlabs_reachable", lambda _s: None)
+
     def test_a_chosen_voice_makes_both_halves_available(self) -> None:
-        with patch.object(availability, "elevenlabs_voices", lambda _s: [("voice-42", "Marin")]):
+        with (
+            self._reachable(),
+            patch.object(availability, "elevenlabs_voices", lambda _s: [("voice-42", "Marin")]),
+        ):
             result = availability.voice_availability(self._el(ELEVENLABS_VOICE_ID="voice-42"))
 
         assert (result.stt, result.tts, result.checked) == (True, True, True)
@@ -156,7 +163,10 @@ class TestTheElevenLabsProbe:
         the speak-aloud control does not, and the detail says which command
         lists the options.
         """
-        with patch.object(availability, "elevenlabs_voices", lambda _s: [("voice-42", "Marin")]):
+        with (
+            self._reachable(),
+            patch.object(availability, "elevenlabs_voices", lambda _s: [("voice-42", "Marin")]),
+        ):
             result = availability.voice_availability(self._el(ELEVENLABS_VOICE_ID=""))
 
         assert result.stt is True, "transcription needs no voice"
@@ -167,7 +177,10 @@ class TestTheElevenLabsProbe:
     def test_a_voice_id_that_is_not_on_the_account_is_caught(self) -> None:
         # A typo or a copied id from another account. Better found by a probe
         # than by a 404 in front of somebody waiting to hear an answer.
-        with patch.object(availability, "elevenlabs_voices", lambda _s: [("voice-42", "Marin")]):
+        with (
+            self._reachable(),
+            patch.object(availability, "elevenlabs_voices", lambda _s: [("voice-42", "Marin")]),
+        ):
             result = availability.voice_availability(self._el(ELEVENLABS_VOICE_ID="voice-99"))
 
         assert result.tts is False
@@ -177,8 +190,35 @@ class TestTheElevenLabsProbe:
         def explode(_s):  # noqa: ANN001, ANN202
             raise RuntimeError("connection reset")
 
-        with patch.object(availability, "elevenlabs_voices", explode):
+        with patch.object(availability, "elevenlabs_reachable", explode):
             result = availability.voice_availability(self._el(ELEVENLABS_VOICE_ID="voice-42"))
 
         assert (result.stt, result.tts) == (True, True)
         assert result.checked is False, "an unreachable provider is not a finding"
+
+    def test_a_key_that_may_not_list_voices_still_speaks(self) -> None:
+        """── THE BUG THIS PINS ────────────────────────────────────────────────
+
+        The first probe listed voices as its reachability check. The key
+        supplied for this project returns 200 for text-to-speech and
+        speech-to-text and 401 for `voices_read` — least privilege done
+        properly, not a misconfiguration.
+
+        That probe reported "could not reach ElevenLabs" and would have hidden
+        two working controls, which is exactly the failure this module exists to
+        prevent, arriving from the one direction it did not anticipate.
+
+        Reachability is now `/v1/models`; listing voices is an optional extra
+        that verifies the id, and being refused it is not a finding.
+        """
+
+        def refuse(_s):  # noqa: ANN001, ANN202
+            raise provider.VoicesNotPermitted("no voices_read")
+
+        with self._reachable(), patch.object(availability, "elevenlabs_voices", refuse):
+            result = availability.voice_availability(self._el(ELEVENLABS_VOICE_ID="voice-42"))
+
+        assert result.tts is True, "synthesis does not need voices_read"
+        assert result.stt is True
+        assert result.checked is True
+        assert "voices_read" in result.detail

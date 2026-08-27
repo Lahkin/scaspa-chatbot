@@ -128,15 +128,47 @@ def elevenlabs_transcribe(data: bytes, filename: str, settings: Settings) -> str
     return text
 
 
+class VoicesNotPermitted(Exception):
+    """This key may synthesise and transcribe, but may not list voices.
+
+    ── NOT A FAILURE, AND THE DIFFERENCE MATTERS ────────────────────────────
+
+    ElevenLabs keys carry granular permissions, and a well-made one is scoped
+    to exactly what the application needs. The key supplied for this project
+    returns 200 for text-to-speech and speech-to-text and 401 for `voices_read`
+    and `user_read` — which is least privilege done properly, not a
+    misconfiguration.
+
+    So "cannot list voices" must never be reported as "cannot reach
+    ElevenLabs". Treating it as an outage would hide two working controls on
+    the strength of a permission the product does not require.
+    """
+
+
+def elevenlabs_reachable(settings: Settings) -> None:
+    """Raise unless the key can authenticate. Requires no special permission.
+
+    `/v1/models` is the check because it is the one endpoint this integration
+    can rely on: it answers for any valid key, where `/v1/voices` and
+    `/v1/user` each need a permission a least-privilege key will not have.
+    """
+    with _client(settings) as client:
+        client.get("/models").raise_for_status()
+
+
 def elevenlabs_voices(settings: Settings) -> list[tuple[str, str]]:
     """`(voice_id, name)` for the account, so a human can choose one.
 
-    Used by `scripts/voice_smoke.py --voices` and by the availability probe.
-    Voice names are the account's own and are printed to an operator, never to
-    a user.
+    Raises `VoicesNotPermitted` when the key lacks `voices_read` — a state the
+    caller must handle rather than report as a failure. See the class above.
     """
     with _client(settings) as client:
         response = client.get("/voices")
+        if response.status_code in (401, 403):
+            raise VoicesNotPermitted(
+                "this key does not have the voices_read permission — read the voice id "
+                "from the ElevenLabs dashboard, or add that permission to the key"
+            )
         response.raise_for_status()
         voices = response.json().get("voices", [])
     return [(v.get("voice_id", ""), v.get("name", "")) for v in voices]

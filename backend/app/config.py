@@ -54,10 +54,37 @@ class _EnvFile(DotEnvSettingsSource):
         return {key: value for key, value in super().__call__().items() if not _is_unset(value)}
 
 
+def _dotenv_disabled(dotenv_settings: PydanticBaseSettingsSource) -> bool:
+    """Whether the caller passed `_env_file=None`, meaning "read no file".
+
+    `_env_file` is consumed before the custom sources run and does not survive
+    into `init_kwargs`, and `config["env_file"]` is the CLASS default in both
+    cases. The per-call value lands on the dotenv source's own `env_file`
+    attribute, which `model_config` declares a default for purely so that
+    `None` there is distinguishable from "never configured".
+
+    Defensive about the shape, because it is a detail of the library — and the
+    asymmetry matters: a wrong answer this way costs test isolation, while a
+    wrong answer the other way would stop production reading `.env` at all and
+    take the API key with it. So anything unexpected reads as "not disabled".
+    """
+    if not hasattr(dotenv_settings, "env_file"):
+        return False
+    return dotenv_settings.env_file is None
+
+
 class Settings(BaseSettings):
     """Single source of configuration truth for the backend."""
 
     model_config = SettingsConfigDict(
+        # Declared so that `_env_file=None` is DISTINGUISHABLE from the default.
+        #
+        # The files are actually read by the `_EnvFile` sources below, which
+        # filter blanks; pydantic's own dotenv source is not returned and so
+        # never used. This exists purely as the sentinel: without it,
+        # `config["env_file"]` is None whether or not the caller asked for
+        # isolation, and `settings_customise_sources` cannot tell the two apart.
+        env_file=(BACKEND_ROOT / ".env", REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,
@@ -82,7 +109,24 @@ class Settings(BaseSettings):
         that". Losing an afternoon to that is not a lesson worth teaching twice.
 
         Both are gitignored. Neither is ever committed — CLAUDE.md rule 1.
+
+        ## `_env_file=None` genuinely isolates, and for a while it did not
+
+        `Settings(_env_file=None)` is how every test says "ignore this
+        developer's configuration". These two sources were reading their files
+        regardless, so it said nothing at all — and `tests/conftest.py` carried a
+        comment claiming the opposite.
+
+        It was invisible while no test asserted on a value a developer happened
+        to have set. It surfaced the day `ELEVENLABS_API_KEY` appeared in a real
+        `.env`, because that one flips which speech provider `auto` resolves to:
+        eight tests that had passed for months began failing on a machine where
+        the key existed and would still have passed in CI, which is the worst
+        shape a test failure can take.
         """
+        if _dotenv_disabled(dotenv_settings):
+            return (init_settings, env_settings, file_secret_settings)
+
         return (
             init_settings,
             env_settings,

@@ -48,7 +48,12 @@ from dataclasses import dataclass
 from openai import OpenAI
 
 from app.config import Settings, get_settings
-from app.voice.provider import elevenlabs_voices, resolve_provider
+from app.voice.provider import (
+    VoicesNotPermitted,
+    elevenlabs_reachable,
+    elevenlabs_voices,
+    resolve_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,19 +122,21 @@ def _probe(settings: Settings) -> VoiceAvailability:
 
 
 def _probe_elevenlabs(settings: Settings) -> VoiceAvailability:
-    """Can this key reach ElevenLabs, and has a voice been chosen?
+    """Can this key reach ElevenLabs, and has a usable voice been chosen?
 
-    Two separate questions, and they fail differently:
+    ── THE PROBE MUST NOT NEED A PERMISSION THE PRODUCT DOES NOT ────────────
 
-    * **No key** — nothing can work, and it is not a finding, because a
-      deployment without a key was never asked to do voice.
-    * **A key but no `ELEVENLABS_VOICE_ID`** — transcription works and
-      synthesis does not. That is a real, reportable, *half*-available state,
-      and it is the one this account will be in until somebody chooses a voice.
+    The first version listed voices and treated a failure as unreachable. The
+    key supplied for this project returns **200 for text-to-speech and
+    speech-to-text and 401 for `voices_read`** — least privilege done properly,
+    not a misconfiguration. That probe would have reported "could not reach
+    ElevenLabs" and hidden two working controls, which is precisely the failure
+    this module exists to prevent, arriving from the one direction it did not
+    anticipate.
 
-    Listing voices doubles as the reachability check: it is the cheapest
-    authenticated call the API has, and its answer is the thing the operator
-    needs anyway.
+    So reachability is `/v1/models`, which answers for any valid key. Listing
+    voices is a *second, optional* step used only to check the configured id,
+    and being refused it is not a finding about availability.
     """
     if not settings.ELEVENLABS_API_KEY.strip():
         return VoiceAvailability(
@@ -141,7 +148,7 @@ def _probe_elevenlabs(settings: Settings) -> VoiceAvailability:
         )
 
     try:
-        voices = elevenlabs_voices(settings)
+        elevenlabs_reachable(settings)
     except Exception as exc:
         logger.warning("voice_probe_failed provider=elevenlabs error=%s", type(exc).__name__)
         return VoiceAvailability(
@@ -155,22 +162,49 @@ def _probe_elevenlabs(settings: Settings) -> VoiceAvailability:
         )
 
     chosen = settings.ELEVENLABS_VOICE_ID.strip()
-    ids = {voice_id for voice_id, _ in voices}
-
     if not chosen:
         detail = (
-            f"ElevenLabs is reachable with {len(voices)} voices, but ELEVENLABS_VOICE_ID is "
-            f"not set — run scripts/voice_smoke.py --voices and choose one"
+            "ElevenLabs is reachable, but ELEVENLABS_VOICE_ID is not set — reading answers "
+            "aloud needs a voice. Run scripts/voice_smoke.py --voices, or take the id from "
+            "the ElevenLabs dashboard"
         )
-        tts = False
-    elif chosen not in ids:
-        detail = f"ELEVENLABS_VOICE_ID {chosen!r} is not one of this account's {len(voices)} voices"
-        tts = False
-    else:
-        name = next((n for i, n in voices if i == chosen), chosen)
-        detail = f"ElevenLabs is reachable; speaking as {name!r}"
-        tts = True
+        return _elevenlabs_result(tts=False, detail=detail)
 
+    # A voice IS configured. Verifying it is a bonus, not a gate: synthesis does
+    # not need `voices_read`, so a key without that permission still speaks.
+    try:
+        voices = elevenlabs_voices(settings)
+    except VoicesNotPermitted:
+        return _elevenlabs_result(
+            tts=True,
+            detail=(
+                "ElevenLabs is reachable and a voice is configured. The id could not be "
+                "verified because this key has no voices_read permission, which synthesis "
+                "does not require"
+            ),
+        )
+    except Exception as exc:
+        # Reachable a moment ago, so this is not an outage — say what happened
+        # and do not withdraw a control on the strength of it.
+        return _elevenlabs_result(
+            tts=True,
+            detail=f"ElevenLabs is reachable; the voice id was not verified ({type(exc).__name__})",
+        )
+
+    names = {voice_id: name for voice_id, name in voices}
+    if chosen not in names:
+        return _elevenlabs_result(
+            tts=False,
+            detail=f"ELEVENLABS_VOICE_ID {chosen!r} is not one of this account's "
+            f"{len(voices)} voices",
+        )
+    return _elevenlabs_result(
+        tts=True, detail=f"ElevenLabs is reachable; speaking as {names[chosen]!r}"
+    )
+
+
+def _elevenlabs_result(*, tts: bool, detail: str) -> VoiceAvailability:
+    """Transcription needs no voice, so `stt` is true whenever the key works."""
     logger.info("voice_probe provider=elevenlabs stt=True tts=%s detail=%s", tts, detail)
     return VoiceAvailability(stt=True, tts=tts, checked=True, detail=detail, provider="elevenlabs")
 
