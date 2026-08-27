@@ -341,13 +341,19 @@ describe('LogoLockup', () => {
     // Decorative: the visible name beside it already says it.
     expect(img).toHaveAttribute('alt', '');
     expect(img).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByText('SCASPA Assistant')).toBeInTheDocument();
+    /*
+     * "SCASPA", not the product name. This is the INSTITUTIONAL lockup — the
+     * Authority's seal, and the Authority beside it. It read "SCASPA Assistant"
+     * while the product WAS the SCASPA Assistant; the product is Pilot now, and
+     * `PilotBrand` is where its name lives.
+     */
+    expect(screen.getByText('SCASPA')).toBeInTheDocument();
   });
 
   it('lets the mark carry the name when the name is hidden', () => {
     const { container } = render(<LogoLockup nameHidden />);
-    expect(container.querySelector('img')).toHaveAttribute('alt', 'SCASPA Assistant');
-    expect(screen.getByAltText('SCASPA Assistant')).toBeInTheDocument();
+    expect(container.querySelector('img')).toHaveAttribute('alt', 'SCASPA');
+    expect(screen.getByAltText('SCASPA')).toBeInTheDocument();
   });
 
   it('never distorts the aspect ratio', () => {
@@ -404,7 +410,7 @@ describe('LogoLockup', () => {
     // `600 15px/20px, white-space: nowrap` — an ellipsis in the Authority's own
     // name is a layout bug shipped as a design.
     render(<LogoLockup />);
-    const name = screen.getByText('SCASPA Assistant');
+    const name = screen.getByText('SCASPA');
     expect(name.className).toContain('whitespace-nowrap');
     expect(name.className).not.toContain('truncate');
     expect(name.className).toContain('text-wordmark');

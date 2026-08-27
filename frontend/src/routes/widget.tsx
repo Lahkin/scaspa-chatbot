@@ -19,8 +19,8 @@ export const Route = createFileRoute('/widget')({
   component: WidgetRoute,
   head: () => ({
     meta: [
-      { title: 'SCASPA Assistant' },
-      { name: 'description', content: 'Embedded SCASPA Assistant.' },
+      { title: 'Pilot | SCASPA Digital Guide' },
+      { name: 'description', content: 'Pilot, embedded.' },
       // Embedded in someone else's page; it must never appear in search results
       // as a standalone page.
       { name: 'robots', content: 'noindex' },

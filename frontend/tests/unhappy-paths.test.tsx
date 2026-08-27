@@ -564,7 +564,7 @@ describe('the empty state', () => {
       const alt = img.getAttribute('alt') ?? '';
       expect(alt).not.toMatch(/robot|assistant illustration|mascot|bot/i);
       // Decorative, or the SCASPA mark. Nothing else belongs in this shell.
-      expect(alt === '' || alt === 'SCASPA Assistant').toBe(true);
+      expect(alt === '' || alt === 'SCASPA').toBe(true);
     }
   });
 });

@@ -133,7 +133,7 @@ export const Route = createFileRoute('/support')({
   component: SupportRoute,
   head: () => ({
     meta: [
-      { title: 'Contact support — SCASPA Assistant' },
+      { title: 'Contact support — Pilot' },
       { name: 'description', content: 'Published SCASPA contact routes, and the support desk.' },
     ],
   }),

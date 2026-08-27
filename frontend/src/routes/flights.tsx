@@ -91,6 +91,9 @@ function FlightsRoute() {
   const data = query.data;
   const source = data?.source;
   const flights = data?.flights ?? [];
+  // See the note in routes/vessels.tsx: a missing SERVICE and an empty QUERY
+  // look identical on screen and need opposite remedies.
+  const noFeed = source?.kind === 'unavailable' && flights.length === 0;
 
   const toolbar = (
     <>
@@ -181,11 +184,15 @@ function FlightsRoute() {
         the nearest figure. They render the em dash until a feed fills them,
         which is §5.3's own treatment for a null and not a placeholder.
       */}
-      <MetricRow columns={3}>
-        <MetricTile label="Arrivals today" value={data?.metrics.arrivals_today ?? null} />
-        <MetricTile label="Departures today" value={data?.metrics.departures_today ?? null} />
-        <MetricTile label="Delayed" value={data?.metrics.delayed ?? null} />
-      </MetricRow>
+      {/* Three tiles reading "— / not reported" are not an empty state.
+          See routes/vessels.tsx. */}
+      {noFeed ? null : (
+        <MetricRow columns={3}>
+          <MetricTile label="Arrivals today" value={data?.metrics.arrivals_today ?? null} />
+          <MetricTile label="Departures today" value={data?.metrics.departures_today ?? null} />
+          <MetricTile label="Delayed" value={data?.metrics.delayed ?? null} />
+        </MetricRow>
+      )}
 
       {/*
         §5.6, passthrough only. The full caution fill is gated on attribution —
@@ -200,10 +207,17 @@ function FlightsRoute() {
         <TableSkeleton columns={COLUMNS} density={density} />
       ) : query.error ? (
         <TableError error={query.error} onRetry={() => void query.refetch()} />
-      ) : source?.kind === 'unavailable' && flights.length === 0 ? (
+      ) : noFeed ? (
         // A statement about the SERVICE, not about the query. Airport Operations
         // rather than Marine: this is an arrivals board, not a harbour.
-        <NoFeedState noun="flight" department="Airport Operations" />
+        <NoFeedState
+          noun="flight"
+          department="Airport Operations"
+          alternatives={[
+            { label: 'Airport facilities', to: '/chat' },
+            { label: 'Contact SCASPA', to: '/support' },
+          ]}
+        />
       ) : flights.length === 0 ? (
         // A statement about the QUERY. Different remedy, different panel.
         /*
@@ -317,7 +331,7 @@ export const Route = createFileRoute('/flights')({
   component: FlightsRoute,
   head: () => ({
     meta: [
-      { title: 'Flight movements — SCASPA Assistant' },
+      { title: 'Flight movements — Pilot' },
       {
         name: 'description',
         content: 'Flight arrivals and departures at R. L. Bradshaw International Airport.',

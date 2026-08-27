@@ -100,7 +100,17 @@ function VesselsRoute() {
 
   const data = query.data;
   const source = data?.source;
+
+  /*
+   * No feed at all, as opposed to a filter that matched nothing.
+   *
+   * Both produce an empty table and they need opposite remedies: one is a
+   * statement about the SERVICE and the other about the QUERY. Naming it once
+   * here keeps the metric row and the panel below agreeing about which is on
+   * screen.
+   */
   const vessels = data?.vessels ?? [];
+  const noFeed = source?.kind === 'unavailable' && vessels.length === 0;
 
   /** Back to the first page: page 3 of a new result set is somebody else's page. */
   const clearSearch = () => {
@@ -238,37 +248,50 @@ function VesselsRoute() {
       */}
       {source ? <SourceNotice source={source} /> : null}
 
-      <MetricRow columns={4}>
-        <MetricTile label="Vessels in port" value={data?.metrics.vessels_at_berth ?? null} />
-        {/*
+      {/*
+        ── FOUR EMPTY TILES ARE NOT AN HONEST EMPTY STATE ─────────────────────
+        With no feed connected — the production default — every one of these
+        read "— / not reported". Four cards of nothing, above a panel that then
+        explained there was nothing. It looked like software that had failed to
+        load rather than a service that has not been connected, and it pushed
+        the one sentence worth reading below the fold.
+
+        The tiles are for a screen that HAS figures. When there are none, the
+        statement below is the whole content of the screen.
+      */}
+      {noFeed ? null : (
+        <MetricRow columns={4}>
+          <MetricTile label="Vessels in port" value={data?.metrics.vessels_at_berth ?? null} />
+          {/*
           `arrivals_today` — a calendar day, which is what the label says.
           UNBLOCKED in M2: this read `arrivals_next_24h`, a rolling window, as
           the nearest figure the wire carried. The two agree at midday and
           diverge every evening, and the tile claims the calendar day.
           Null until a feed fills it, which is the em-dash treatment.
         */}
-        <MetricTile label="Expected today" value={data?.metrics.arrivals_today ?? null} />
-        {/*
+          <MetricTile label="Expected today" value={data?.metrics.arrivals_today ?? null} />
+          {/*
           **The single most dangerous default in the product.** The feed does not
           report berth occupancy, so this tile is the em dash — never 0, which
           would say the port is empty.
         */}
-        <MetricTile label="Berth occupancy" value={null} />
-        <MetricTile
-          label="Alongside of expected"
-          value={data?.metrics.vessels_at_berth ?? null}
-          /*
-           * Both operands are server figures; nothing here is counted from the
-           * visible rows. Null when either is missing — half a ratio is a
-           * stronger claim than none.
-           */
-          ratio={
-            data?.metrics.vessels_at_berth != null && data.metrics.arrivals_next_24h != null
-              ? `/ ${data.metrics.vessels_at_berth + data.metrics.arrivals_next_24h}`
-              : null
-          }
-        />
-      </MetricRow>
+          <MetricTile label="Berth occupancy" value={null} />
+          <MetricTile
+            label="Alongside of expected"
+            value={data?.metrics.vessels_at_berth ?? null}
+            /*
+             * Both operands are server figures; nothing here is counted from the
+             * visible rows. Null when either is missing — half a ratio is a
+             * stronger claim than none.
+             */
+            ratio={
+              data?.metrics.vessels_at_berth != null && data.metrics.arrivals_next_24h != null
+                ? `/ ${data.metrics.vessels_at_berth + data.metrics.arrivals_next_24h}`
+                : null
+            }
+          />
+        </MetricRow>
+      )}
 
       {query.isPending ? (
         <TableSkeleton columns={COLUMNS} density={density} />
@@ -281,9 +304,16 @@ function VesselsRoute() {
        */
       query.error ? (
         <TableError error={query.error} onRetry={() => void query.refetch()} />
-      ) : source?.kind === 'unavailable' && vessels.length === 0 ? (
+      ) : noFeed ? (
         // A statement about the SERVICE, not about the query.
-        <NoFeedState noun="vessel" />
+        <NoFeedState
+          noun="vessel"
+          alternatives={[
+            { label: 'Published tariffs', to: '/tariffs' },
+            { label: 'Contact SCASPA', to: '/support' },
+            { label: 'Ask Pilot', to: '/chat' },
+          ]}
+        />
       ) : vessels.length === 0 ? (
         // A statement about the QUERY. Different remedy, different panel.
         <FilteredOutState
@@ -351,7 +381,7 @@ export const Route = createFileRoute('/vessels')({
   component: VesselsRoute,
   head: () => ({
     meta: [
-      { title: 'Vessel movements — SCASPA Assistant' },
+      { title: 'Vessel movements — Pilot' },
       {
         name: 'description',
         content: 'Vessel arrivals and berth occupancy across SCASPA port facilities.',

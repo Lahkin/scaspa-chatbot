@@ -81,8 +81,9 @@ const FILL = {
  * `source.kind`, the badge that matters most.
  *
  * Rendered on every operations block. `unavailable` is the PRODUCTION DEFAULT —
- * SCASPA has published no feed — so "No feed" is the badge most users will
- * actually see, and it is a statement about the world rather than a fault.
+ * SCASPA has published no feed — so "Live data unavailable" is the badge most
+ * users will actually see, and it is a statement about the world rather than
+ * a fault in the product.
  *
  * ── FOUR VARIANTS, THREE OF WHICH THE WIRE CAN PRODUCE ──────────────────────
  *
@@ -105,7 +106,17 @@ type SourceBadgeValue = SourceKind | 'none';
 const SOURCE_KIND: Record<SourceBadgeValue, Treatment> = {
   live: { label: 'Live feed', icon: 'lightning', className: FILL.live },
   fixture: { label: 'Sample data', icon: 'alert', className: FILL.caution },
-  unavailable: { label: 'No feed', icon: 'x', className: FILL.absent },
+  /*
+   * "Live data unavailable", not "No feed".
+   *
+   * "Feed" is our word for our plumbing. A traveller does not know whether
+   * SCASPA publishes a feed, and "NO FEED" in a badge reads as a fault in the
+   * thing they are looking at rather than as a description of what is and is not
+   * connected. This says what is actually true from the reader's side: the live
+   * data is not available. The panel underneath then says why, and what Pilot
+   * will not do about it.
+   */
+  unavailable: { label: 'Live data unavailable', icon: 'x', className: FILL.absent },
   none: { label: 'Not connected', icon: 'info', className: FILL.quiet },
 };
 

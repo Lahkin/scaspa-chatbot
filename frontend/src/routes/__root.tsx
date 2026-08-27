@@ -230,7 +230,7 @@ export const Route = createRootRoute({
   // that forgets still gets something accurate rather than an empty tab.
   head: () => ({
     meta: [
-      { title: 'SCASPA Assistant' },
+      { title: 'Pilot | SCASPA Digital Guide' },
       {
         name: 'description',
         content:

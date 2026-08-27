@@ -3195,3 +3195,110 @@ composer and its logic is untouched — it already degrades honestly, announcing
 "The spoken version is not available just now" rather than breaking, which was
 confirmed while investigating the missing speech models. It is waiting on
 project access to `gpt-4o-mini-tts` and `gpt-transcribe`, not on this work.
+
+## 0038 — Pilot, said out loud: the terminology sweep and the honest empty screen
+
+**Status:** accepted. Stage 5 of 5 for the Pilot identity.
+**Completes** 0034–0037.
+
+### The product has a name now, and the Authority keeps its own
+
+`SCASPA Assistant` is gone from every title, every document head, the
+no-JavaScript fallback and the OpenAPI document. Route titles read `X — Pilot`;
+the shell default and the PWA identity read `Pilot | SCASPA Digital Guide`.
+
+Deliberately **not** a global find-and-replace, and this is the part that
+mattered. Several of those strings sit beside the SCASPA seal, where the
+Authority's name is the correct thing to say — a blanket substitution would have
+renamed the client. So:
+
+- `LogoLockup` now reads **SCASPA**. It is the institutional lockup: the
+  Authority's seal, and the Authority beside it. It said "SCASPA Assistant"
+  because at the time the product *was* the SCASPA Assistant and the two names
+  were the same thing. Putting "Pilot" there instead would be exactly the hybrid
+  mark 0035 forbids — the Authority's seal with the guide's name under it.
+- The operations console header reads **SCASPA operations**. It is a console for
+  SCASPA staff; Pilot is the customer-facing guide.
+
+The landing page keeps a descriptive title — `Pilot — ports and travel in
+St. Kitts` — rather than repeating the shell default. That is not decoration:
+`accessibility.test.tsx` proves each route sets its own title by looking for a
+distinctive fragment, and a landing title identical to the default would make
+"set its own" and "forgot and inherited" indistinguishable.
+
+### Four empty tiles are not an empty state
+
+With no feed connected — **the production default** — `/vessels` drew four
+metric cards reading `— / not reported`, above a panel that then explained there
+was nothing. It looked like software that had failed to load rather than a
+service that has not been connected, and it pushed the one sentence worth
+reading below the fold.
+
+The tiles now render only when there are figures. What replaces them is one
+deliberate statement:
+
+> **Live vessel movements are currently unavailable**
+> **Pilot will not invent operational data.** For current movements, telephone
+> Marine Operations on 869-465-8121.
+
+That middle sentence is the most valuable line on the screen and the Pilot spec
+asks for it by name. "No feed is connected" describes a deficiency. "Pilot will
+not invent operational data" describes a rule the product holds itself to — the
+same rule that makes every answer it *does* give worth believing. It is the
+argument for the whole product, made at the one moment the product has nothing
+to show.
+
+Underneath, where Pilot can still help: published tariffs, contact, and the
+assistant itself. A dead end became a junction.
+
+### "NO FEED" became "Live data unavailable"
+
+"Feed" is our word for our plumbing. A traveller does not know whether SCASPA
+publishes a feed, and `NO FEED` in a badge reads as a fault in the thing they
+are looking at rather than as a description of what is connected.
+
+The duplicate went with it. `SourceNotice` sits directly above the panel
+carrying the same badge and the same statement; two identical labels a few
+centimetres apart do not double a message, they halve it — a reader who sees the
+same words twice reads them as chrome.
+
+### "Total" implied a bill
+
+The tariff result said **Total**, which is what appears at the foot of an
+invoice. This figure is arithmetic over a published schedule: nobody has been
+billed, no account has been debited, and the number can change when the real
+charge is raised. It now reads **Estimated SCASPA charge**, and **Estimated
+charge so far** when a component could not be priced.
+
+The "so far" rule is untouched — it appears only when the unpriced flag is
+present, never inferred by string-matching. The word it modifies changed; the
+mechanism did not. A test now asserts the word "Total" appears nowhere in the
+result at all.
+
+### A test that caught the rewording, correctly and then wrongly
+
+`console.test.tsx` asserted that an empty position map never claims a live
+source, with `/live (ais|data|feed|map view)/i`. Reworded, the badge reads "Live
+data unavailable" — a phrase saying the opposite of the claim, failing a check
+that exists to catch the claim.
+
+Rewritten to match the affirmative badges by name. A negation containing the
+word "live" is the correct thing to show on that screen, and a guard that cannot
+tell a claim from its denial is a guard that will be loosened rather than fixed.
+
+### Verified in the production-default state, not just the demo one
+
+The demonstration runs on `OPS_DATA_SOURCE=fixture`, so the empty state never
+appears there. It was checked by switching the backend to `none` — what SCASPA
+actually has — reading the screen, and switching back. Every assertion above
+about what that screen says was read off it.
+
+810 tests, lint, typecheck, build, and the backend unchanged at 610/611.
+
+### What remains
+
+Voice, and only voice. The microphone and the spoken-answer button are styled
+with the rest of the composer and their logic is untouched; they already degrade
+honestly. They are waiting on the OpenAI project being granted
+`gpt-4o-mini-tts` and `gpt-transcribe`, which is an account change rather than
+a code one — see the note at the end of 0037.

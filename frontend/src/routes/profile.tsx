@@ -184,7 +184,7 @@ export const Route = createFileRoute('/profile')({
   component: ProfileRoute,
   head: () => ({
     meta: [
-      { title: 'Profile & settings — SCASPA Assistant' },
+      { title: 'Profile & settings — Pilot' },
       {
         name: 'description',
         content:

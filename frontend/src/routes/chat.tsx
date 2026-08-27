@@ -17,7 +17,7 @@ export const Route = createFileRoute('/chat')({
   component: ChatRoute,
   head: () => ({
     meta: [
-      { title: 'Chat — SCASPA Assistant' },
+      { title: 'Chat — Pilot' },
       {
         name: 'description',
         content: 'Ask a question about SCASPA ferries, cruise arrivals, cargo or the airport.',

@@ -279,7 +279,7 @@ export const Route = createFileRoute('/settings')({
     const t = stringsFor(getLocale());
     return {
       meta: [
-        { title: `${t.settings.title} — SCASPA Assistant` },
+        { title: `${t.settings.title} — Pilot` },
         { name: 'description', content: t.settings.intro },
       ],
     };

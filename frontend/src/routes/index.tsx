@@ -267,7 +267,21 @@ export const Route = createFileRoute('/')({
   component: Landing,
   head: () => ({
     meta: [
-      { title: 'SCASPA Assistant — ports and travel in St. Kitts' },
+      {
+        /*
+         * Distinct from the root default on purpose.
+         *
+         * `__root` sets "Pilot | SCASPA Digital Guide" — the app's identity, and
+         * what a PWA install and a bare tab show. If the landing page repeated
+         * it, `accessibility.test.tsx` could no longer tell a route that sets
+         * its own title from one that forgot and inherited the default, which is
+         * the only thing that test is checking.
+         *
+         * It is also the better title for a search result: it says where this
+         * is and what it covers.
+         */
+        title: 'Pilot — ports and travel in St. Kitts',
+      },
       {
         name: 'description',
         content:

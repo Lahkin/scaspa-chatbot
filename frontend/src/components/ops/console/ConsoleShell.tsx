@@ -162,9 +162,11 @@ function TopBar() {
               the aria-hidden glyph and nothing else — no accessible name at all
               (axe `link-name`, serious). The sr-only copy is always present, so
               the name survives the breakpoint. */}
-          <span className="sr-only">SCASPA Assistant</span>
+          {/* The Authority, not the product: this is an operations console for
+              SCASPA staff, and Pilot is the customer-facing guide. */}
+          <span className="sr-only">SCASPA operations</span>
           <span className="hidden sm:inline" aria-hidden="true">
-            SCASPA Assistant
+            SCASPA operations
           </span>
         </Link>
 

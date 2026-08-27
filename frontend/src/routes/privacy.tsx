@@ -100,7 +100,7 @@ export const Route = createFileRoute('/privacy')({
   component: Privacy,
   head: () => ({
     meta: [
-      { title: 'Privacy — SCASPA Assistant' },
+      { title: 'Privacy — Pilot' },
       {
         name: 'description',
         content:
