@@ -227,6 +227,24 @@ class Settings(BaseSettings):
     # OpsSource implementation and this string, and nothing else.
     OPS_DATA_SOURCE: str = "none"
 
+    # --- Watchtower -------------------------------------------------------
+    # Whether the application runs the source monitor on a schedule.
+    #
+    # ── DEFAULT TRUE, DELIBERATELY ────────────────────────────────────────
+    #
+    # `interval_hours=6` sat in the source registry for a while with nothing
+    # calling it, so the Vessels page stamped "checked at 05:12" against a fetch
+    # nobody was going to repeat. A default of False would have left that true
+    # for any deployment whose operator did not know to set a flag — and the
+    # failure is invisible, because the screen keeps looking correct while the
+    # data ages underneath it.
+    #
+    # Off is for a process that must not reach the network: the test suite (see
+    # tests/conftest.py) and any one-shot CLI. Sources still govern their own
+    # cadence, so switching this on does not decide how often anything is
+    # fetched — see app/watchtower/scheduler.py.
+    WATCHTOWER_ENABLED: bool = True
+
     # --- Runtime ----------------------------------------------------------
     ENV: str = "dev"
     LOG_LEVEL: str = "INFO"

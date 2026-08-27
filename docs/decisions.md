@@ -3529,3 +3529,135 @@ pixel.
 
 821 frontend tests, lint, typecheck, production build, both themes, 375px and
 desktop.
+
+---
+
+## 0041 — Watchtower runs on a schedule, which until now it did not
+
+**Status:** accepted.
+**Completes** the Watchtower work begun in 0039/0040.
+
+### The bug was an absence, and absences do not show up in review
+
+`check_all()` was written, documented and tested. Every source in the registry
+carried an `interval_hours`. `check_source` had a `_due()` helper comparing
+`last_checked_at` against it. And **nothing called any of it.**
+
+The 496 cruise calls in the store were there because a person ran the monitor by
+hand, once. The Vessels page read `source.as_of` and stamped every row
+*"checked 27 Aug 2026 at 05:12"* — accurately, about a fetch that was never
+going to happen again.
+
+That is the worst shape a defect can take in this product. There is no error, no
+failing test and no red health check; the screen goes on making a confident,
+dated claim while the thing behind it has quietly stopped, and the only symptom
+is a date getting slowly older. Everything about the feature looked finished
+because every part of it existed except the part that made it run.
+
+### In the API process, not a second one
+
+A separate worker or a system cron is the textbook answer and both were
+considered. This deployment is a single container. Adding a second process to
+run one job every six hours would introduce a supervisor, a second image, and a
+second thing that can be down without anybody noticing — to replace a task that
+is forty lines and cancels cleanly on shutdown.
+
+The two things that usually make in-process scheduling a bad idea are handled
+rather than waved at:
+
+| Objection | What was done |
+| --- | --- |
+| **Multiple workers each run their own** | `uvicorn --workers 4` builds the app four times. A `scheduler_lease` row in SQLite settles which one sweeps. |
+| **The fetch blocks the event loop** | `check_source` uses a synchronous `httpx.Client` and `time.sleep` for retry backoff — up to six seconds of deliberate sleeping, which would stall every in-flight chat stream. It runs under `asyncio.to_thread`. |
+
+### A lease, not a lock
+
+A lock has no expiry, and a worker killed mid-sweep never releases one. The
+cruise schedule would then stop updating **forever**, with the application still
+serving happily and no error anywhere — arriving at exactly the same silent
+failure this decision exists to fix, from the other direction.
+
+The lease runs out. Acquire, renew and steal are one `INSERT ... ON CONFLICT
+... DO UPDATE ... WHERE`: read-then-write would let two workers both observe an
+expired lease and both conclude they had won it, so the `WHERE` does the
+deciding inside SQLite's own write lock and exactly one caller sees a row change.
+
+A holder may always renew its own lease, or a healthy worker would lose it to a
+peer every tick and the sweep would bounce between processes for no reason.
+
+### The loop ticks every fifteen minutes; the sources decide the cadence
+
+`check_source` already asks `_due()`. So the loop ticks far more often than
+anything is due, and a tick against an up-to-date source costs one SQLite read.
+The alternative — a loop that slept for six hours — would put the cadence in two
+places, and they would disagree the first time either changed. It also means a
+source becomes due within a quarter of an hour of its mark rather than up to six
+hours late.
+
+### Nothing is fetched at boot
+
+Sixty seconds before the first tick. A container in a crash-loop would otherwise
+hit SCASPA's endpoint once per restart, and a deployment scaling to six replicas
+would hit it six times in the same second. It also means a smoke check that
+starts the app and stops it does no network I/O at all.
+
+### The default is on, and that is the whole point
+
+`WATCHTOWER_ENABLED` defaults to `True`. A flag an operator has to know about
+would have left the original bug true for every deployment whose operator did
+not know — and this failure is invisible, so nobody would have found out.
+
+Off is for a process that must not reach the network. The test suite sets it in
+a session-scoped autouse fixture, before any `Settings` is built, because
+`get_settings()` is `lru_cache`d and `create_app()` calls it directly. Two other
+things happen to protect the suite today and neither is load-bearing:
+`TestClient(app)` outside a `with` block never runs the lifespan, and the
+startup delay outlives most test processes. One `with TestClient(app) as client`
+and a slow suite would be enough to start fetching a live schedule from CI.
+
+### A CLI, for the three things a scheduler cannot do
+
+`scripts/watchtower.py` — `--force` for a release step, `--status` for "is it
+actually working", and the whole mechanism if someone prefers cron. It shares
+the lease, so running it alongside a live application is safe.
+
+`--status` deliberately prints `last checked` and `last changed` as two lines.
+They render identically on a screen and mean opposite things: *"nobody has
+looked since Tuesday"* is our fault, *"SCASPA has not edited it since Tuesday"*
+is a normal week.
+
+### A row count that was six too high
+
+Running the new `--status` against the real store showed `rows=502` in the
+change log and 496 rows in the table.
+
+`replace_cruise_calls` returned `len(calls)` — what it was *handed*, not what
+landed. The primary key is `(call_date, vessel)` and SCASPA's published schedule
+genuinely contains repeats, which `ON CONFLICT DO UPDATE` correctly folds. So
+the one place an operator looks to ask "did that work" was quietly reporting six
+rows that existed nowhere.
+
+It now counts back out of the database, and the log line carries **both**
+numbers — `parsed=502 stored=496` — because the gap between them is itself worth
+seeing. It would grow if the publisher started duplicating rows in earnest.
+
+A count that is only ever slightly wrong is the kind that never gets checked.
+
+### Verified running, not just tested
+
+Driven against the real store and the real SCASPA endpoint with the delays
+collapsed. The scheduler started, took the lease, fetched **the revision marker
+only** — a few hundred bytes against a quarter of a megabyte — compared it,
+logged `unchanged`, and the next two ticks correctly skipped because the source
+was no longer due. Then a clean cancel on shutdown.
+
+Booted normally afterwards: `watchtower_scheduler_started worker=… tick_s=900
+first_sweep_in_s=60`, with `/api/health` answering 200 throughout.
+
+648 backend tests, ruff clean. The one failure is the Windows symlink-privilege
+error in `test_ingest.py`, unrelated and pre-existing.
+
+### Still missing
+
+`docs/architecture.md` does not mention Watchtower at all — a gap that predates
+this change and is worth closing when that document is next touched.
