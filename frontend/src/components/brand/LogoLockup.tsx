@@ -121,7 +121,7 @@ export function Seal({ size = 'lockup', label }: { size?: LogoSize; label?: stri
 export function LogoLockup({ size = 'lockup', nameHidden = false }: LogoLockupProps) {
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <Seal size={size} {...(nameHidden ? { label: 'SCASPA Assistant' } : {})} />
+      <Seal size={size} {...(nameHidden ? { label: 'SCASPA' } : {})} />
 
       {/*
         `whitespace-nowrap`, not `truncate`. The handoff sets the wordmark
@@ -134,7 +134,20 @@ export function LogoLockup({ size = 'lockup', nameHidden = false }: LogoLockupPr
           nameHidden && 'sr-only'
         )}
       >
-        SCASPA Assistant
+        {/*
+          "SCASPA", not the product name.
+
+          This is the INSTITUTIONAL lockup: the Authority's seal, and the
+          Authority beside it. It used to read "SCASPA Assistant" because at the
+          time the product WAS the SCASPA Assistant and the two names were the
+          same thing. They are not any more — the product is Pilot, and
+          `PilotBrand` is where its name lives (decisions.md 0035).
+
+          Putting "Pilot" here instead would be the hybrid mark the brand
+          architecture forbids: the Authority's seal with the guide's name
+          under it.
+        */}
+        SCASPA
       </span>
     </span>
   );

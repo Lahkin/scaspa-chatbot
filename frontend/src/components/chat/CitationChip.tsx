@@ -39,7 +39,7 @@ export function CitationChip({ kbId }: { kbId: string }) {
       <span
         data-kb-id={kbId}
         aria-hidden="true"
-        className="mx-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-border align-baseline text-caption text-ink-muted"
+        className="mx-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface-muted align-baseline text-caption text-ink-muted"
       >
         {/* Deliberately not a number: numbering before reconciliation would be a
             number that might change or vanish. A neutral dot says "being

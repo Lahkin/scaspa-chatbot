@@ -2680,3 +2680,852 @@ deliberately because each is a repository-wide call rather than a bug fix:
   Vitest's own `testTimeout` is also 5000ms — so the inner timeout can never
   fire, and the test dies at the outer one first. The number needs to be a pair,
   not a single value repeated.
+
+## 0034 — Two themes, one palette, and the brand that stopped being purple
+
+**Status:** accepted. Foundations for the Pilot identity (stage 1 of 5).
+**Supersedes** the "THE PRODUCT IS DARK. There is no light theme and no theme
+switch." ruling recorded in `frontend/src/styles/tokens.css` and enforced by the
+previous `tests/contrast.test.ts`.
+
+### What changed, and why it is not a repaint
+
+The client approved a Pilot identity expressed as two mock-ups — a light design
+and a dark design of the same product. The product had exactly one theme, by an
+earlier deliberate decision, and its contrast suite was written against that one
+palette: pinned ratios, and three colours asserted to FAIL on purpose.
+
+So this is not "add a light mode". It is re-introducing a theme axis into 880
+lines of tokens and rewriting the check that guards them.
+
+### The thing that made it tractable
+
+`tokens.css` was already two layers, and nobody had planned for this:
+
+- ~34 **primitives** with literal values — canvas, the surface ramp, the brand
+  ramp, ink, status hues, tints, edges.
+- ~60 **aliases** that are `var(--primitive)` and nothing else —
+  `--color-ink: var(--color-text-1)`, `--color-surface: var(--color-surface-2)`.
+
+Components almost never touch the primitives. `bg-surface` appears 165 times,
+`bg-surface-muted` 83, and `bg-surface-2` twice. So re-theming the primitives
+moved the aliases, and the aliases moved the entire component tree. **Two themes
+cost 38 declarations, not 100 components.**
+
+That is worth stating plainly because it was luck earned by an earlier decision:
+an alias layer named for MEANING rather than for colour is what let a palette be
+swapped underneath a product that had never considered the possibility.
+
+### Roles, not lightness
+
+The one rule that makes the two palettes coherent, and the one that is easy to
+get wrong.
+
+`--color-brand-300` is not "the 300 step of a ramp" in both themes. It is
+"readable brand text" in both, and its two values sit on either side of the
+ground each lands on — #0a56c0 on white, #5ca5f0 on navy. The surface ramp
+inverts for the same reason: `surface-sunken` is a step AWAY from the card in
+both themes, which is _down_ in one and _up_ in the other.
+
+A palette translated by lightness instead of by role produces pale-blue body
+text on white, and passes every test anyone remembered to write.
+
+### `light-dark()` was written first, and replaced
+
+The first implementation gave every primitive a single
+`light-dark(light, dark)` declaration. One place to write both values, and a
+token could not be given one theme and forgotten in the other.
+
+**It was measured working** and replaced anyway, which is worth recording so
+nobody re-litigates it from the diff. Under `data-theme='light'` the aliased
+chain resolved correctly all the way down to `--color-ink-muted: #5d6b80`, in
+the dev server and in the built output alike. Two duller reasons carried the
+day: it is not supported everywhere this app is read, so the build downlevels it
+into paired `var(--lightningcss-light, …)` space-toggles that turn every colour
+in the inspector into something unreadable while debugging a demonstration; and
+the parity it guaranteed for free can be bought for the price of one test.
+
+`tests/theme-parity.test.ts` is that test. It asserts the two blocks declare
+exactly the same token names, and that no token is given the same value twice by
+accident. Two exemptions, both named and both argued: `--color-ink-inverse`
+(white, because it means "ink on a dark fill" rather than "the opposite of the
+current ink") and `--color-amber-board` (the figure on the departure-board
+strip, which is navy in both themes).
+
+An honest note on the route here. An intermediate version of this work claimed
+`light-dark()` had a repaint bug in Chromium. It does not. The browser pane used
+for the measurement reports `document.hidden === true` and never fires
+`requestAnimationFrame`, so it defers style recalculation on already-rendered
+descendants — and plain custom properties behaved identically under it. The
+claim was removed from the token file rather than left there to mislead whoever
+reads it next.
+
+### The brand stopped being purple
+
+The old ramp ran `#383a97` → `#7a7cd6`, which reads as indigo. The Pilot spec
+bans purple as the dominant brand colour outright, so the ramp is now SCASPA
+navy through action blue, with aqua and one amber beacon carried in from the
+Pilot mark.
+
+`tests/contrast.test.ts` checks the HUE, not the values: blue must dominate red,
+and green must not be suppressed below red. A future retune can therefore be
+caught drifting back towards indigo — which the old ramp would have done while
+passing every contrast assertion in the file.
+
+### Where the approved mock-up and WCAG AA disagree
+
+One place, and the spec asks for both.
+
+The mock-up draws the **ALL CITED** badge as white on aqua `#08aeb7`. That
+measures **2.71:1**. Spec §52 requires WCAG AA. The hue is the more valuable half
+of the instruction — it is Pilot's colour — so the hue is kept and the ink is
+changed: `--color-ink-on-aqua`, dark in both themes, 5.49:1 light and 8.25:1
+dark. The badge reads navy-on-aqua rather than white-on-aqua. Put to the client
+before implementation and confirmed.
+
+Three aquas exist because one could not do three jobs: `--color-aqua` is the
+fill, `--color-aqua-strong` the boundary or meaningful icon at 3.41:1, and
+`--color-aqua-text` the readable word at 5.85:1.
+
+### What the flip found
+
+The palette change was also an audit. The className scanner — which reads every
+element setting both a background and a text colour, and now measures each pair
+twice — found **seven pairings unreadable on the light ground**, all invisible
+while the product had one theme:
+
+- Four quiet chips filled with `--color-border`, the DIVIDER colour, leaving
+  muted ink at 4.20:1. They use `--color-surface-muted` now, which is the token
+  for a quiet fill; using a line colour as a fill was the actual smell.
+- A checkbox whose ternary put the checked ink and the unchecked fill on one
+  line, so the scan paired two states that never render together. Split, per the
+  convention the rest of the codebase already follows.
+- The departure-board figure and the voice button's ending state, both amber on
+  navy, both resolved by the token split below.
+
+None of these was reachable by a hand-written assertion. All seven came from the
+check that reads what components actually wrote.
+
+### `--color-amber-board` became a token of its own
+
+The clearest example in the palette of why a token's name has to describe its
+job. It was an alias of `--color-caution`, and that held only while there was
+one theme.
+
+The status amber is a WORD on the page: on the light ground it must be a dark
+amber (#8a6100) to clear AA on white. The board amber is a FIGURE on a navy
+strip, in both themes, so it must stay bright — and #8a6100 on navy is 2.82:1.
+One token could not be both. It is now declared once at #d9a23b: 6.83:1 on the
+light navy, 6.57:1 on the dark one.
+
+### The switch
+
+`color-scheme` plus a `data-theme` attribute on the root, resolved before first
+paint by a blocking inline script in `index.html`. React cannot do this job — by
+the time a module script has been fetched, parsed and hydrated, a reader on a
+dark phone has already been shown a white page, and that flash is the most
+obvious sign of a theme bolted on afterwards.
+
+The default follows the operating system and keeps following it: `system` is a
+real, selectable choice rather than the absence of one, and the store subscribes
+to `prefers-color-scheme` for as long as that is what the reader has chosen.
+
+The preference is a second FIELD in the existing `scaspa.prefs` key, not a second
+key — `frontend/CLAUDE.md` rule 5 permits one key, and this respects it.
+`writePrefs` became a merging patch in the process: as a plain write, choosing a
+language would have silently erased the theme, which is the kind of bug that only
+appears on the reader's next visit.
+
+### What this does not cover
+
+The rest of the Pilot work. This is foundations only: no Pilot mark, no landing
+page, no chat workspace, no terminology change. `--shadow-card` is still `none`
+while the spec asks for soft shadows in the light theme; that arrives with the
+screens that need it, not here.
+
+## 0035 — Two brands on one screen: SCASPA owns the information, Pilot does the talking
+
+**Status:** accepted. Stage 2 of 5 for the Pilot identity.
+**Depends on** 0034 for the aqua and beacon tokens.
+
+### The architecture, because everything else follows from it
+
+There are now two marks in this product and they are never merged:
+
+| | SCASPA | Pilot |
+| --- | --- | --- |
+| what it is | the Authority | the digital guide |
+| what it means | official, institutional, the owner of the facts | the thing that answers |
+| its mark | the supplied seal, used verbatim | drawn geometry |
+| in a transcript | never speaks | fronts every assistant message |
+
+The rule that makes this concrete: **an assistant message is fronted by the
+Pilot avatar, never by the institutional seal.** SCASPA owns the service; Pilot
+is the one talking. `tests/pilot-brand.test.tsx` scans for a component that
+imports both and draws them as one object, which is the hybrid this forbids.
+
+### The mark is a transcription, and the geometry was measured
+
+The approved asset is a raster on a white page. It cannot ship as it stands: at
+28px beside a chat message it turns to mush, on the navy sidebar it arrives
+inside a white box, and no part of it can be animated for the thinking state.
+
+So it was redrawn as SVG — and the proportions were **measured off the asset with
+Pillow**, not eyeballed, because an eyeballed transcription is close at 96px and
+wrong at 28px. Every number in `PilotAvatar.tsx` is a fraction of the source
+image times 96:
+
+```
+ring         outer radius 0.3045, stroke 0.033   ->  r 27.6, width 3.2
+compass tip  0.030 from the edge                 ->  y 2.9
+compass base 0.242, half-width 0.034             ->  y 23.2, ±3.3
+beacon       centre y 0.358, radius 0.043        ->  cy 34.4, r 4.1
+figure       top 0.397, widest 0.212 at y 0.64   ->  38.1, ±10.2, base 66.4
+```
+
+The result was then rasterised locally and looked at, in both themes, before
+being accepted. That is worth recording as a method: a brand mark is the one
+artefact where "the tests pass" proves nothing at all.
+
+### The rays are `brand-200` at 45%, and the first attempt was wrong
+
+The diagonal rays were first drawn as translucent aqua, which is correct on
+white and wrong on navy: a transparent colour over a dark ground darkens
+*towards* that ground, so the rays became muddy teal smudges on the one surface
+where they most need to read as light.
+
+`--color-brand-200` is a strong blue on white and a pale blue on navy, so at 45%
+it lands correctly on both — pale blue over white, silver-blue over navy. Found
+by rendering it, not by reasoning about it.
+
+### One artwork, two themes — and the wordmark proves the point
+
+The geometry is identical in both themes and only the tokens resolve
+differently. The wordmark is the clearest case: the spec asks for a deep-blue
+PILOT on light and a white one on dark, which is exactly what `--color-ink`
+already is (#10264f / #f5f8fc). Reaching for a brand step would have produced a
+bright blue wordmark in the dark theme — not what the approved lockup shows —
+and fixing that would have taken a theme-conditional class.
+
+PILOT is set as **text**, not shipped as an image: it inherits the interface
+font, scales without a second asset, is selectable, is read aloud correctly, and
+its descriptor translates. An image would have needed three of them.
+
+### Motion: one thing moves, and the compass is not it
+
+The avatar is the thinking indicator and the listening indicator, so this is
+product behaviour rather than decoration. The beacon pulses (1.6s) or the ring
+pulses (1.8s). **The compass never rotates** — a spinning compass reads as a
+loading spinner, which says "waiting" where this has to say "working". Asserted,
+not just written down.
+
+Both keyframe sets start AND end at rest. That is load-bearing: the base layer
+collapses every animation to 0.01ms with one iteration under
+`prefers-reduced-motion`, which freezes an element on its FINAL keyframe — so a
+pulse written 100% → 50% would leave the beacon permanently half-lit for exactly
+the readers who asked for less motion.
+
+### States add a badge; they never swap the mark
+
+`idle`, `thinking`, `listening`, `verified`, `attention`. The spec is explicit
+that there is no warning robot and no second avatar, so the two badge states draw
+a badge *beside* the mark and the identity holds. The test counts paths to prove
+it.
+
+### The favicon duplicates the geometry, and is checked
+
+`public/pilot-mark.svg` has to repeat the paths: a favicon is fetched as a
+standalone document with no stylesheet behind it, so it can neither read a token
+nor reuse a React component. Duplicated geometry with nothing watching it is how
+a product ends up with a tab icon that is subtly a different logo from the one in
+its own header — nobody looks at a 16px square twice.
+
+So the test parses both and asserts the path sets are **equal, both directions**,
+against the RESTING mark: the favicon must not lose a ray, and must not gain a
+flourish. It carries its own `prefers-color-scheme` block, because browser chrome
+has a light and a dark of its own that has nothing to do with the app's
+`data-theme`, and a navy compass on a dark tab strip is an empty tab.
+
+One SVG rather than a 16/32/48/192/512 raster set — it scales to whatever is
+asked for at a fraction of the bytes, on a product that self-hosts its font to
+save a single DNS round trip.
+
+### What this does not cover
+
+The mark is built and shown in the gallery; almost nothing uses it yet. Putting
+it into the sidebar, in front of every assistant message, and into the composer's
+generating state is stage 4. The browser title and PWA name (`Pilot | SCASPA
+Digital Guide`) are terminology and arrive in stage 5 with the rest of the
+renaming.
+
+## 0036 — The landing page becomes a gateway, and keeps the one thing worth reading
+
+**Status:** accepted. Stage 3 of 5 for the Pilot identity.
+**Depends on** 0034 (themes) and 0035 (the Pilot mark).
+
+### The shape the spec asked for, and the one place this departs from it
+
+Hero, four journeys, one call to action, four trust signals, into the
+application. "It should not require five screens of scrolling before reaching
+the assistant." The long "what it can help with" list and the full-length trust
+section are gone — compressed into the four cards and the strip, with `/about`
+still carrying the expanded version for a reader who came to find it.
+
+**The example answer stayed, against the spec's own list of sections.** It is the
+one thing on the page a visitor actually reads, it is `kb-192` as retrieved
+rather than copy, and `tests/matrix.test.tsx` guards it under T-18 because this
+page once invented a sailing time. Shortening a page by deleting its only
+verified content is the wrong trade on a product whose entire argument is that it
+does not invent things. It is one compact block and the page is still two
+screens.
+
+### The four cards ask questions the knowledge base can answer
+
+Each card sends one of the four labels already in
+`features/chat/suggestions.ts`, every one annotated there with the rows behind
+it. A card that opened a conversation and got "I do not have that" would be the
+worst possible first impression, and it is avoidable by not inventing new
+phrasings on a marketing page. `tests/landing.test.tsx` asserts every card's
+question is one the suggestion set vouches for.
+
+The question travels through the in-memory `pendingQuestion` store, not the URL —
+a query string would put it in history, in the address bar and in every
+screenshot taken during a demonstration.
+
+### The hero photograph: two exposures, chosen in JS
+
+Daylight and blue hour, the same scene. This is what `useResolvedTheme` was
+written for: a difference that is not a colour and therefore cannot be a token.
+
+A `<source media="(prefers-color-scheme: dark)">` would have been fewer lines and
+is **wrong** here — the theme can be set explicitly in `/settings`, and a media
+query cannot see that choice. A reader who picked Light on a dark phone would
+have got the light interface with the night photograph inside it.
+
+### Fitting the budget, decided by looking
+
+`scripts/bundle-budget.mjs` allows 100 kB per image and 250 kB across the build.
+The SCASPA seal already spends 45.8 kB, leaving 204 kB for four hero files
+(two themes x two widths). They come to 193 kB; the build reports 240.3 kB total.
+
+**1200 wide, not 1440, and that was settled by rendering both.** At the same
+~74 kB, 1440 needs quality 39 and visibly smears the traveller's shirt and the
+hillside buildings; 1200 holds together at quality 59. The hero occupies roughly
+900–960 CSS px at desktop, so 1200 is still comfortably over 1x. Arithmetic said
+"more pixels"; the crops said otherwise.
+
+A fixed height at desktop rather than an aspect ratio, because the two
+photographs are not the same shape — 1200x640 light, 1200x675 dark. Under
+`aspect-[...]` the column would change height when a reader switched theme,
+moving everything below it.
+
+### The accessible name was garbled, and only a browser said so
+
+The cards announced **"Ferry & NevisSchedules, terminalsand travel
+information"**. Accessible-name computation concatenates the title, the line
+break and the two description lines with no separator, so every join in the card
+produced a run-together word.
+
+Invisible on screen and invisible in jsdom, which computes no accessible name at
+all. Fixed with an explicit `aria-label` that states the name once in the order a
+listener needs it, and asserted on the attribute rather than on the computed
+name — because the test environment cannot see the thing that was wrong.
+
+### The header is the Authority's, and Privacy moved
+
+Seal, statutory name, three destinations, language, accessibility. Pilot's
+identity appears inside the page, where the product begins — the architecture
+from 0035.
+
+`Privacy` moved from the header into the footer, where a policy link
+conventionally lives and where it is still one tap away on every document page.
+The approved design gives the header three destinations and this is which three.
+
+**"EN" is a link to `/settings#language`, not a dropdown, and that is a
+departure.** `LanguagePicker` is radios rather than a `<select>` because on iOS a
+native select opens a modal wheel that does not commit until "Done" — so a reader
+picks a language, sees nothing happen, and picks it again. Rebuilding that
+control in miniature in a header would either repeat the bug or duplicate a
+solved problem in a second place, and two controls writing one preference is how
+they drift.
+
+### Verified
+
+`/` reports **0 axe violations at both mobile and desktop**, and a live audit of
+every text node against its painted background reports 0 contrast failures in
+both themes. 807 tests, lint, typecheck, build and the performance budget all
+clean.
+
+`npm run check:a11y` does report four other failures, all outside this stage:
+two `scrollable-region-focusable` on `/vessels` and `/flights` at mobile, which
+are pre-existing (neither route nor `components/ops/` appears in this branch's
+diff), and two chat manual checks that could not run because the checker serves
+on `http://localhost:4400` and that origin is not in `ALLOWED_ORIGINS`, so the
+page never received an answer to announce. Worth fixing so the check can pass on
+its own terms; it is a backend configuration line, not a frontend defect.
+
+## 0037 — The workspace stops explaining itself in developer terms
+
+**Status:** accepted. Stage 4 of 5 for the Pilot identity.
+**Depends on** 0035 for the mark.
+
+The three-column workspace was already the right structure, so almost nothing
+here is layout. It is about who is speaking, what the interface claims, and
+which of its own internals it puts in front of a traveller.
+
+### Pilot appears where a speaker belongs
+
+The mark now fronts every assistant turn, opens the conversation beside the
+greeting, and heads the sidebar in place of the SCASPA seal. That is the
+architecture from 0035 made visible: the Authority owns the information, Pilot
+does the talking, and the seal stays in the institutional header on the document
+pages.
+
+Decorative in every one of those places — no label. A mark announcing "Pilot"
+before each answer would make a screen reader say the name before every sentence
+it is about to read, and `AnswerAnnouncer` already says it once, in words, when
+the answer completes.
+
+The avatar's state is the message's own: thinking while tokens arrive, and the
+verified badge once the answer has settled **and** the backend reported it
+grounded. The badge is a claim about verification, so it waits for the thing it
+is claiming rather than appearing with the first token.
+
+### "1 tool used · 361 ms" was the most inside-out sentence in the product
+
+A traveller standing on a pier, deciding whether to believe a fact about a
+ferry, was being told how many function calls had run and how long they took.
+
+It is now **"How Pilot verified this"**, and what sits under the answer instead
+is the evidence: `Source: Official SCASPA website — … · Verified: 2026-07-31`,
+with a link to the row. Every word of it comes from the citation through the
+same `sourceTypeLabel` and `entryLabel` helpers the sources rail uses, so a
+source cannot be described one way beside an answer and another way in the
+panel.
+
+The timing was demoted, not deleted. It is inside the collapsed trace, where a
+reader who opened something called "How Pilot verified this" is asking exactly
+that. While tools are still running the count DOES show — "Verifying — 2 of 6
+steps" — because then it is progress rather than trivia.
+
+The footer is gated on `grounded` as well as on having a citation: an ungrounded
+answer already carries `UngroundedNotice`, and a "Verified:" line under a notice
+saying the figures could not be verified is the interface contradicting itself
+in two consecutive lines.
+
+### Diagnostics moved behind a flag
+
+`Answer time`, `records searched` and `rate-limit keys tracked` are facts about
+the machine. They sat beside every answer, next to the new verification footer —
+one evidence expander too many, and the wrong one first.
+
+Gated on `DEV` **and** `VITE_SHOW_DIAGNOSTICS`, not on `DEV` alone, and the
+reasoning is borrowed wholesale from the mock controls: the client demonstration
+runs on `npm run dev`, so anything gated on DEV alone is on screen throughout it.
+
+### The sources rail has to be earned
+
+It used to render whatever happened, so a reader who had not yet asked anything
+was given a third of a wide screen occupied by the words "Nothing to show yet".
+A permanent empty panel does not read as "sources will appear here" — it reads as
+a part of the product that is broken.
+
+The conversation holds that width until an answer earns it. The layout does move
+once, when the first cited answer lands, and that movement is the point: it is
+the evidence arriving. It happens under an answer the reader is about to start
+reading, not under their cursor, and once per conversation.
+
+### ALL CITED is aqua, and that is a semantic change
+
+It was green. Green in this product means berthed, on time, settled — an
+operational state — so a verification result was wearing the status vocabulary,
+where a reader scanning a screen could reasonably take it for another piece of
+live information.
+
+Aqua is Pilot's hue and belongs to claims about Pilot's own work. Its ink is
+`--color-ink-on-aqua`, because aqua is bright in both themes.
+
+### The navigation stopped naming its own implementation
+
+**ASSISTANT**, **OPERATIONS** and **CONDITIONAL** became **Ask Pilot** and
+**Services**. The first two are jargon; the third is not a category at all — it
+is a note to the developer that a route may not exist. "Conditional" as a
+heading above a customer's navigation is the clearest possible sign of an
+interface labelled from the inside out.
+
+Console joined Services rather than keeping a group of its own: a heading
+reading "Console" above a single item called "Console" says nothing twice. It is
+still filtered out when its route is absent, which was the only real content of
+the old label.
+
+### A person is permanently on screen
+
+`HumanHelpCard` in the sidebar foot. `EscalationBlock` already offers a number at
+the moment Pilot cannot answer, and that is right for that moment. This is a
+different job: it is there BEFORE anything goes wrong, so a traveller who is
+late, or anxious, or simply does not want to type at a machine can see that a
+person exists without first failing a conversation to find out.
+
+### A guard of mine fired on the wrong thing
+
+`pilot-brand.test.tsx` asserts nothing merges the seal into the Pilot mark. It
+matched module NAMES, and immediately reported `Composer` — which imports
+`SCASPA_PHONE_HREF`, a phone-number constant that happens to be exported from
+`ScaspaMark.tsx`, and draws no seal at all.
+
+Tightened to actual rendering. A guard that fires on a file's neighbours rather
+than on what it does is worse than no guard: it gets suppressed, and then it is
+not watching.
+
+### Verified end to end, against the running backend
+
+One real question, one real answer: the rail appeared only once there was
+evidence, two Pilot marks on screen with exactly one carrying the verified
+badge, the source footer present, "How Pilot verified this" present, and
+`Diagnostics` and "N tools used" both absent. 0 contrast failures across the
+answered conversation.
+
+809 tests. Six of them asserted the old wording and were moved to the new intent
+rather than loosened to accept either.
+
+### What this does not cover
+
+The voice control's behaviour. The button is styled with the rest of the
+composer and its logic is untouched — it already degrades honestly, announcing
+"The spoken version is not available just now" rather than breaking, which was
+confirmed while investigating the missing speech models. It is waiting on
+project access to `gpt-4o-mini-tts` and `gpt-transcribe`, not on this work.
+
+## 0038 — Pilot, said out loud: the terminology sweep and the honest empty screen
+
+**Status:** accepted. Stage 5 of 5 for the Pilot identity.
+**Completes** 0034–0037.
+
+### The product has a name now, and the Authority keeps its own
+
+`SCASPA Assistant` is gone from every title, every document head, the
+no-JavaScript fallback and the OpenAPI document. Route titles read `X — Pilot`;
+the shell default and the PWA identity read `Pilot | SCASPA Digital Guide`.
+
+Deliberately **not** a global find-and-replace, and this is the part that
+mattered. Several of those strings sit beside the SCASPA seal, where the
+Authority's name is the correct thing to say — a blanket substitution would have
+renamed the client. So:
+
+- `LogoLockup` now reads **SCASPA**. It is the institutional lockup: the
+  Authority's seal, and the Authority beside it. It said "SCASPA Assistant"
+  because at the time the product *was* the SCASPA Assistant and the two names
+  were the same thing. Putting "Pilot" there instead would be exactly the hybrid
+  mark 0035 forbids — the Authority's seal with the guide's name under it.
+- The operations console header reads **SCASPA operations**. It is a console for
+  SCASPA staff; Pilot is the customer-facing guide.
+
+The landing page keeps a descriptive title — `Pilot — ports and travel in
+St. Kitts` — rather than repeating the shell default. That is not decoration:
+`accessibility.test.tsx` proves each route sets its own title by looking for a
+distinctive fragment, and a landing title identical to the default would make
+"set its own" and "forgot and inherited" indistinguishable.
+
+### Four empty tiles are not an empty state
+
+With no feed connected — **the production default** — `/vessels` drew four
+metric cards reading `— / not reported`, above a panel that then explained there
+was nothing. It looked like software that had failed to load rather than a
+service that has not been connected, and it pushed the one sentence worth
+reading below the fold.
+
+The tiles now render only when there are figures. What replaces them is one
+deliberate statement:
+
+> **Live vessel movements are currently unavailable**
+> **Pilot will not invent operational data.** For current movements, telephone
+> Marine Operations on 869-465-8121.
+
+That middle sentence is the most valuable line on the screen and the Pilot spec
+asks for it by name. "No feed is connected" describes a deficiency. "Pilot will
+not invent operational data" describes a rule the product holds itself to — the
+same rule that makes every answer it *does* give worth believing. It is the
+argument for the whole product, made at the one moment the product has nothing
+to show.
+
+Underneath, where Pilot can still help: published tariffs, contact, and the
+assistant itself. A dead end became a junction.
+
+### "NO FEED" became "Live data unavailable"
+
+"Feed" is our word for our plumbing. A traveller does not know whether SCASPA
+publishes a feed, and `NO FEED` in a badge reads as a fault in the thing they
+are looking at rather than as a description of what is connected.
+
+The duplicate went with it. `SourceNotice` sits directly above the panel
+carrying the same badge and the same statement; two identical labels a few
+centimetres apart do not double a message, they halve it — a reader who sees the
+same words twice reads them as chrome.
+
+### "Total" implied a bill
+
+The tariff result said **Total**, which is what appears at the foot of an
+invoice. This figure is arithmetic over a published schedule: nobody has been
+billed, no account has been debited, and the number can change when the real
+charge is raised. It now reads **Estimated SCASPA charge**, and **Estimated
+charge so far** when a component could not be priced.
+
+The "so far" rule is untouched — it appears only when the unpriced flag is
+present, never inferred by string-matching. The word it modifies changed; the
+mechanism did not. A test now asserts the word "Total" appears nowhere in the
+result at all.
+
+### A test that caught the rewording, correctly and then wrongly
+
+`console.test.tsx` asserted that an empty position map never claims a live
+source, with `/live (ais|data|feed|map view)/i`. Reworded, the badge reads "Live
+data unavailable" — a phrase saying the opposite of the claim, failing a check
+that exists to catch the claim.
+
+Rewritten to match the affirmative badges by name. A negation containing the
+word "live" is the correct thing to show on that screen, and a guard that cannot
+tell a claim from its denial is a guard that will be loosened rather than fixed.
+
+### Verified in the production-default state, not just the demo one
+
+The demonstration runs on `OPS_DATA_SOURCE=fixture`, so the empty state never
+appears there. It was checked by switching the backend to `none` — what SCASPA
+actually has — reading the screen, and switching back. Every assertion above
+about what that screen says was read off it.
+
+810 tests, lint, typecheck, build, and the backend unchanged at 610/611.
+
+### What remains
+
+Voice, and only voice. The microphone and the spoken-answer button are styled
+with the rest of the composer and their logic is untouched; they already degrade
+honestly. They are waiting on the OpenAI project being granted
+`gpt-4o-mini-tts` and `gpt-transcribe`, which is an account change rather than
+a code one — see the note at the end of 0037.
+
+---
+
+## 0039 — Cargo publishes nothing, so Watchtower monitors nothing
+
+**Status:** accepted. Referenced by `app/watchtower/registry.py`.
+
+`scaspa.com/cargo.html` is an approved source in principle and is deliberately
+absent from `SOURCES`.
+
+### What is actually on the page
+
+The served document carries an FAQ describing a "Cargo Info table" with a search
+field "at the top right". It contains **no table, no input elements, no iframe,
+and 1,332 characters of body text in total.** The only XHR calls the page makes
+are the site platform's own membership RPCs. Whatever the FAQ is describing is
+either not deployed or is behind something a visitor does not reach.
+
+This is the same class of finding as the cruise page, and the opposite outcome.
+There, `cruise-ship-schedule.html` also served an empty table — and a widget
+behind it called a SCASPA-owned Apps Script endpoint that returns the whole
+schedule as JSON. Looking for the equivalent here found nothing to look at.
+
+### Why registering it anyway would have been worse than leaving it out
+
+Two things follow from adding a source, and both would have been false:
+
+- **A hash that never moves.** Watchtower would fetch the same empty page every
+  six hours forever and record "unchanged" every time. A monitor reporting
+  health on a source that publishes nothing is a monitor teaching its reader to
+  stop reading it.
+- **A parser that has never seen a row.** `registry.Source` requires one. It
+  would be written against a table nobody has, reviewed against a guess, and
+  merged — and on the day SCASPA restores the table it would run against real
+  cargo data for the first time, in production, unobserved.
+
+### What the product says instead
+
+The `/cargo` route says plainly that published cargo status is not available and
+points at the telephone. That is a true sentence today. It is also the sentence
+that has to change on the day the table appears, which is the right place for
+the pressure to sit: on a screen somebody reads, rather than in a registry entry
+nobody looks at.
+
+The entry goes in when SCASPA restores or exposes the table.
+
+---
+
+## 0040 — `/vessels` becomes Cruise & Vessel Activity
+
+**Status:** accepted.
+**Builds on** 0032 (the fixture hatch) and the Watchtower work on
+`feat/watchtower-cruise`.
+
+### The screen was answering a question it could not answer
+
+`/vessels` was one thing: a movements table fed by `GET /api/vessels`. In
+production no feed is connected, so what a real visitor saw was four metric
+tiles reading "— / not reported" above a panel explaining there was nothing.
+
+That is not an honest empty state, it is an empty dashboard — it reads as
+software that failed to load rather than as a service that has not been
+connected, and it pushed the one sentence worth reading below the fold.
+
+Meanwhile SCASPA publishes a genuine cruise schedule, Pilot now fetches it every
+six hours, and the page said nothing about it at all.
+
+### Two sections, and the rule is that they never merge
+
+**A. The official SCASPA cruise schedule.** Real, published, dated. 496 calls in
+the store as this was written.
+
+**B. Live vessel movements and positions.** Not connected: SCASPA publishes no
+movements feed and no external AIS source has been tested for St Kitts coverage.
+
+Separate headings, separate provenance treatments, separate empty states, a rule
+between them. Interleaving the two would lend A's authority to B's absence,
+which is the one thing this page must not do — a schedule and a position report
+are different kinds of claim with different certainties.
+
+Section B is kept fully built rather than reduced to a placeholder: every
+filter, the density toggle and the pagination stay wired to the real endpoint,
+and `OPS_DATA_SOURCE=fixture` still renders all of it. A section rebuilt from
+nothing on the day a feed appears is a section that has never been reviewed.
+
+### The hatch moved off the page and into one section
+
+0032 layer 4 draws caution stripes behind any surface whose `source.kind` is
+`fixture`, and `OpsShell` draws it for the whole screen from the source it is
+handed. This screen now has **two** sources, and only one of them can be
+fixtures.
+
+Handing the shell the movements source would hatch the Authority's own published
+cruise schedule as invented data — the precise lie the hatch exists to prevent,
+told by the mechanism built to prevent it. So the route passes no `source`, and
+the hatch lives inside `VesselMovements` over the half of the screen it is true
+of. Asserted in `tests/cruise-schedule.test.tsx`.
+
+### Three tiles, not the four that were suggested
+
+The brief proposed calls today, expected next 24h, scheduled this week, and Port
+Zante capacity, with the instruction to show "only values that can be derived
+safely". Two cannot be:
+
+| Tile | Why it is not drawn |
+| --- | --- |
+| Expected next 24h | A rolling window needs a timestamp per call. The schedule publishes a *day* plus a free-text window (`07:00 - 18:00`) which the backend deliberately never parses — the page is inconsistent about the format and a parser that guessed would move a sailing time. The count would be arithmetic on a guess. |
+| Port Zante capacity | SCASPA publishes no berth count. The tile would have to invent a denominator, and the denominator is what turns two numbers into a claim about how full the port is. |
+
+They are absent rather than dashed: "do not populate empty dashboards with
+dashes just to preserve layout" is the same instruction that produced this
+rebuild. What is drawn instead is today, tomorrow and the next seven days, which
+answer the same question out of figures that are actually published.
+
+### Counting rows is allowed here and forbidden on the movements table
+
+The movements table takes `total` from the server and counts nothing, because
+its rows are one page of many. The cruise tiles count their own rows — but the
+query behind them asks for the **whole** seven-day window, and the tiles only
+render a figure when `total === calls.length` proves it came back whole.
+Counting a complete result set is reading it. When the window is truncated the
+tiles go to null, because an undercount reads as a fact and a blank reads as a
+blank.
+
+**Zero is a real answer in these tiles**, which is the opposite of the berth
+occupancy rule and worth stating so the two are not confused. Occupancy must
+never show 0 because no feed reports occupancy at all. "Cruise calls today: 0"
+means the schedule was fetched, completely, and lists none — which is precisely
+what SCASPA published, and often correct.
+
+### Two empty tables that mean opposite things
+
+`published` with no calls means SCASPA lists none for those dates: an ordinary
+answer, and there are quiet weeks at Port Zante. `unavailable` means Pilot never
+managed to retrieve the schedule: a statement about this service.
+
+They render as different panels. Collapsing them would let an outage read as a
+quiet week, and that mistake is expensive in one direction only — a passenger
+told there are no ships stops looking.
+
+### A fourth range control the brief did not ask for
+
+Today / Tomorrow / This week are the three specified. **All upcoming** is added,
+because without it the search box can only find a ship inside the selected
+window — so "when is RHAPSODY OF THE SEAS next in?" is unanswerable unless the
+reader already knows roughly when, which is the question. It is also the only
+control that reaches the endpoint's 100-row limit, so it is where the truncation
+line was verified: *Showing the first 100 of 192 published calls.*
+
+The endpoint has no `offset` and this screen invents none. It truncates and
+reports `total`, so the page states the truncation rather than offering a page 2
+that does not exist.
+
+### Dates are computed in the port's time zone, not the reader's and not UTC
+
+`lib/portDate.ts`. SCASPA publishes whole days with no zone attached, and
+"today" on that schedule means today in St Kitts.
+
+- **UTC** would be wrong every evening: St Kitts is UTC−4, so from 20:00 local
+  until midnight, UTC has rolled over and the board would show *tomorrow's*
+  ships under a heading reading "Today".
+- **The browser's local date** is correct in Basseterre and wrong everywhere
+  else — and this product's readers are, by definition, people who have just
+  arrived from somewhere else.
+
+The zone is named (`America/St_Kitts`) and resolved through `Intl` rather than
+hardcoded as −4, so "no daylight saving" stays a fact about the world instead of
+a fact baked into a file. Everything in that module is a `YYYY-MM-DD` string,
+never a `Date`, because a `Date` at local midnight serialises to the previous day
+in any negative-offset zone. The MSW handler was moved onto the same helper: a
+mock anchored on UTC would have put the fixture four hours out of step with the
+page and produced an evening-only test failure.
+
+### `PUBLISHED` needed a badge, and the badge exposed a contrast failure
+
+`SourceKind` gained a fourth value on the backend and the frontend followed:
+`live | published | fixture | unavailable`. The badge says **PUBLISHED** and the
+stamp beside it says **checked *when***, and both halves are required — a badge
+claiming authority with no date on it is the thing `as_of` is mandatory to
+prevent, and "as of" was the wrong preposition because the timestamp is when
+Pilot last *looked*, not when SCASPA last *changed*.
+
+It takes `FILL.brand`, and drawing it there is what surfaced the defect. That
+fill carried `--color-on-navy-primary` — the ink for text **on the navy**, a
+dark ground — over a mid-blue fill, measuring **2.97:1 on the dark palette and
+2.93:1 on the light one** for 11px semibold text, where AA asks 4.5:1. It failed
+in both themes.
+
+It survived because `tests/contrast.test.ts` enumerated the fills it checked and
+this one was not in the list, and because the two badges wearing it — Operator
+and Calculated — are rarely on screen. PUBLISHED is not rare. The ink is now
+`--color-ink-on-bright`, the family ink, which measures 5.86:1 dark and 4.95:1
+light; the exception was removed rather than special-cased, and the fill is now
+in the enumerated list so it cannot fall out again.
+
+### A metric tile that is loading is not a metric tile that is unknown
+
+Both drew the em dash and "not reported". On first paint, before any response
+landed, this screen therefore rendered exactly the row of empty cards it was
+rebuilt to remove — transiently, which is the version nobody catches in review
+because it is gone by the time the page is looked at.
+
+`MetricTile` now takes `loading`, and draws a skeleton bar inside the value's
+own line box so the tile is the same height loaded and loading. "Wait" and "the
+source did not say" are different sentences.
+
+### The bridge back into the conversation
+
+`AskPilot` sends a stated question into `/chat` through the in-memory handoff the
+landing chips already use — never a query string, which would put message
+content in history, in the address bar and in every screenshot. The label *is*
+the question, because a button reading "Ask Pilot" that then fires an unseen
+question is the assistant putting words in somebody's mouth.
+
+### Verified against the real source
+
+The backend was pointed at the live store, not fixtures. Today's date is
+2026-08-27; the store held 496 published calls; the week window returned exactly
+one — RHAPSODY OF THE SEAS, 2 September, PORTZANTE, capacity 2,026, **passenger
+count not published**, which is the `pax: 0 → null` rule rendering correctly on
+real Authority data. The tiles read 0 / 0 / 1. Search for "rhapsody" over all
+upcoming returned five calls and kept focus through all eight keystrokes. The
+hatch was confirmed by measurement to begin below the cruise section's last
+pixel.
+
+821 frontend tests, lint, typecheck, production build, both themes, 375px and
+desktop.

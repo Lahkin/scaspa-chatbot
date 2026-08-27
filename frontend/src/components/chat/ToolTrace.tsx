@@ -41,7 +41,6 @@ export function ToolTrace({ activity }: { activity: ToolActivity[] }) {
   }
 
   const finished = activity.filter((step) => step.done).length;
-  const elapsed = activity.reduce((total, step) => total + (step.ms ?? 0), 0);
   const complete = finished === activity.length;
 
   return (
@@ -50,13 +49,26 @@ export function ToolTrace({ activity }: { activity: ToolActivity[] }) {
         label={
           <>
             {/*
-             * "3 tools used" once settled; "2 of 6 tools used" while some are
-             * still running, so the figure never claims more than it knows.
+             * ── THE LABEL IS NOT A COUNT OF FUNCTION CALLS ──────────────────
+             *
+             * This read "3 tools used · 361 ms". A traveller standing on a pier,
+             * deciding whether to believe a fact about a ferry, was being told
+             * how many function calls had run and how long they took. It is the
+             * single most inside-out sentence the product had.
+             *
+             * The detail is still in the panel — which tool, what it was asked,
+             * how long it took — because a reader who opens something called
+             * "How Pilot verified this" is asking exactly that, and the answer
+             * is genuinely useful. It is one click away instead of on the face
+             * of every answer.
+             *
+             * While tools are still running the count DOES appear, because then
+             * it is progress rather than trivia: "2 of 6" is the difference
+             * between working and stuck.
              */}
             {complete
-              ? `${activity.length} ${activity.length === 1 ? 'tool' : 'tools'} used`
-              : `${finished} of ${activity.length} tools used`}
-            {elapsed > 0 ? ` · ${formatDuration(elapsed)}` : null}
+              ? 'How Pilot verified this'
+              : `Verifying — ${finished} of ${activity.length} steps`}
           </>
         }
       >

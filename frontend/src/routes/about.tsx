@@ -69,11 +69,11 @@ export const Route = createFileRoute('/about')({
   component: About,
   head: () => ({
     meta: [
-      { title: 'About — SCASPA Assistant' },
+      { title: 'About Pilot' },
       {
         name: 'description',
         content:
-          'How the SCASPA Assistant answers, where its information comes from, and what it cannot tell you.',
+          'How Pilot answers, where its information comes from, and what it cannot tell you.',
       },
     ],
   }),

@@ -1,7 +1,9 @@
+import { DEFAULT_THEME_CHOICE, isThemeChoice, type ThemeChoice } from '../theme/choice';
 import { DEFAULT_LOCALE, isLocaleCode, type LocaleCode } from './locales';
 
 /**
- * The one preferences key, in `localStorage`.
+ * The one preferences key, in `localStorage`. It holds the language and the
+ * theme — two fields, still one key, deliberately.
  *
  * ## This is a deliberate amendment to `frontend/CLAUDE.md` rule 5, not a leak
  *
@@ -40,9 +42,10 @@ const STORAGE_KEY = 'scaspa.prefs';
 
 export interface Prefs {
   locale: LocaleCode;
+  theme: ThemeChoice;
 }
 
-export const DEFAULT_PREFS: Prefs = { locale: DEFAULT_LOCALE };
+export const DEFAULT_PREFS: Prefs = { locale: DEFAULT_LOCALE, theme: DEFAULT_THEME_CHOICE };
 
 function storage(): Storage | null {
   try {
@@ -62,7 +65,7 @@ function storage(): Storage | null {
  * explicit choice of English apart from never having chosen — the first gets
  * respected, the second falls through to the browser's own language.
  */
-export function readPrefs(): Prefs | null {
+export function readPrefs(): Partial<Prefs> | null {
   try {
     const raw = storage()?.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -70,18 +73,48 @@ export function readPrefs(): Prefs | null {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return null;
 
-    const locale = (parsed as Record<string, unknown>)['locale'];
-    return isLocaleCode(locale) ? { locale } : null;
+    const record = parsed as Record<string, unknown>;
+    const locale = record['locale'];
+    const theme = record['theme'];
+
+    /*
+     * Each field is narrowed on its own, and a field that fails narrowing is
+     * dropped without taking the other one with it.
+     *
+     * That is the whole reason this returns a Partial. The key holds two
+     * unrelated preferences now, and the first version of this function
+     * returned `null` the moment `locale` was unrecognised — which would have
+     * thrown away a perfectly good stored theme because someone had once
+     * hand-edited a language code in a console.
+     */
+    const prefs: Partial<Prefs> = {};
+    if (isLocaleCode(locale)) prefs.locale = locale;
+    if (isThemeChoice(theme)) prefs.theme = theme;
+
+    // Still null when nothing survived narrowing. "Stored, but every field was
+    // junk" and "never stored" mean the same thing to every caller, and the
+    // callers already distinguish "chose English" from "never chose" by whether
+    // this is null — an empty object would quietly answer "chose" to that.
+    return Object.keys(prefs).length > 0 ? prefs : null;
   } catch {
-    // Malformed JSON, a quota error, a locked-down kiosk. English is a correct
-    // answer to all of them.
+    // Malformed JSON, a quota error, a locked-down kiosk. The defaults are a
+    // correct answer to all of them.
     return null;
   }
 }
 
-export function writePrefs(prefs: Prefs): void {
+/**
+ * Merge a preference into the stored key, leaving the others alone.
+ *
+ * A patch, not a write: `writePrefs({ locale })` used to replace the whole
+ * object, so with two preferences in one key, choosing a language would have
+ * silently forgotten the theme — the exact failure that makes people distrust a
+ * settings screen, and one that only shows up on the NEXT visit.
+ */
+export function writePrefs(patch: Partial<Prefs>): void {
   try {
-    storage()?.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    const merged = { ...(readPrefs() ?? {}), ...patch };
+    storage()?.setItem(STORAGE_KEY, JSON.stringify(merged));
   } catch {
     // The choice still applies to this page; it just will not survive a reload.
   }

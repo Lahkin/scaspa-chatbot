@@ -15,6 +15,7 @@ changes, this file changes in the same pull request.
 | `POST /api/tts`              | Synthesise text to MP3 audio                     |
 | `POST /api/tts/preview`      | Show what TTS would say, free                    |
 | `GET /api/vessels`           | Vessel arrivals and berth occupancy              |
+| `GET /api/cruise-schedule`   | Cruise calls as SCASPA publishes them            |
 | `GET /api/flights`           | Flight arrivals and departures                   |
 | `GET /api/tariffs`           | Published schedule of port charges               |
 | `POST /api/tariffs/quote`    | Estimate charges from published rates            |
@@ -485,6 +486,7 @@ The five tools, so you can pick an icon per `name`:
 | `name`                    | What it means                                  |
 | ------------------------- | ---------------------------------------------- |
 | `search_scaspa_knowledge` | Searching the verified knowledge base          |
+| `get_cruise_schedule`     | Reading the published SCASPA cruise schedule    |
 | `search_site_content`     | Searching scaspa.com pages and PDFs            |
 | `make_chart`              | Building a chart                               |
 | `calculate`               | Doing arithmetic on retrieved figures          |
@@ -916,7 +918,7 @@ complete set with a total. Do not send `limit` or `offset` to them.
 
 | Field    | Type                                   | Notes                                                   |
 | -------- | -------------------------------------- | ------------------------------------------------------- |
-| `kind`   | `"live" \| "fixture" \| "unavailable"` | Which of the three you are looking at                   |
+| `kind`   | `"live" \| "published" \| "fixture" \| "unavailable"` | Which of the four you are looking at        |
 | `label`  | `string`                               | Human-readable origin, safe to render                   |
 | `as_of`  | `string \| null`                       | When the data was produced. **Not** when you fetched it |
 | `notice` | `string \| null`                       | **Render this whenever present**                        |
@@ -926,6 +928,25 @@ complete set with a total. Do not send `limit` or `offset` to them.
 > vessel arrivals is believed on sight, and nothing in the rows tells a reader
 > whether they are looking at a real feed or at development sample data. This
 > string is the only thing that does.
+
+#### `kind: "published"` — official information, fetched periodically
+
+Official SCASPA information that this service **retrieved at a stated time** —
+the cruise schedule, today. It is deliberately neither of the two things it
+would otherwise have to pretend to be:
+
+- **not `live`.** A page fetched every six hours is a snapshot, and calling a
+  snapshot live is the claim that makes every other claim on the screen worth
+  less. Never label it LIVE in a UI.
+- **not `fixture`.** This is real SCASPA data, and dressing it in the
+  sample-data warning teaches readers to ignore that warning.
+
+`as_of` is **mandatory** for this kind and is when Pilot last fetched it — the
+server refuses to build a `published` source without it. Render it: "Checked 27
+Aug 2026 at 05:12 UTC" is the honest label, and a published snapshot with no
+date on it is indistinguishable from a live feed.
+
+`notice` is null, because there is nothing to warn about.
 
 `kind: "unavailable"` is the **production default** and is a **200 with an empty
 list**, not an error. SCASPA has published no feed; that is a fact about the

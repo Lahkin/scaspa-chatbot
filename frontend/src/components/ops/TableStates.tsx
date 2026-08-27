@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/cn';
 import { ErrorState } from '@/components/chat/ErrorState';
-import { ProvenanceBadge } from './ProvenanceBadge';
 import type { Density } from './OpsTable';
 import { formatCountdown } from '@/features/chat/rateLimits';
 import { OFFLINE } from '@/features/chat/errorCopy';
@@ -35,21 +34,68 @@ import type { ApiError } from '@/lib/api';
 export function NoFeedState({
   noun = 'vessel',
   department = 'Marine Operations',
+  alternatives = [],
 }: {
   noun?: string;
   department?: string;
+  /**
+   * Somewhere else worth going, since this screen has nothing.
+   *
+   * A `to` for a route Pilot can serve now. Empty renders no list at all — a
+   * heading reading "In the meantime" over nothing is worse than silence.
+   */
+  alternatives?: readonly { label: string; to: string }[];
 }) {
   return (
     <div className="flex flex-col items-start gap-3 rounded-panel border border-border bg-surface px-6 py-8">
-      <ProvenanceBadge kind="source" value="unavailable" />
-      <h3 className="text-section font-semibold text-ink">No {noun} feed is connected</h3>
+      {/*
+        No badge here.
+
+        `SourceNotice` sits directly above this panel on every screen that can
+        render it, carrying the same "Live data unavailable" badge and the same
+        statement. Two identical badges a few centimetres apart do not
+        double the message, they halve it — a reader who sees the same label
+        twice reads it as chrome.
+      */}
+      <h3 className="text-section font-semibold text-ink">
+        Live {noun} movements are currently unavailable
+      </h3>
+
+      {/*
+        ── THE LIMITATION, SAID AS A PROMISE ───────────────────────────────────
+        The Pilot spec asks for this sentence by name, and it is the most
+        valuable line on the screen. "No feed is connected" describes a
+        deficiency. "Pilot will not invent operational data" describes a rule the
+        product holds itself to — the same rule that makes every answer it DOES
+        give worth believing. It is the argument for the whole product, made at
+        the one moment the product has nothing to show.
+      */}
       <p className="max-w-105 text-label leading-5 text-ink-muted">
-        This assistant has no source of {noun} movements at the moment. Telephone {department} on{' '}
-        <a href={SCASPA_TEL_HREF} className="font-medium text-brand-200 underline tabular">
+        <strong className="font-semibold text-ink">Pilot will not invent operational data.</strong>{' '}
+        For current movements, telephone {department} on{' '}
+        <a href={SCASPA_TEL_HREF} className="font-medium text-brand-300 underline tabular">
           {SCASPA_TEL_TEXT}
         </a>
         .
       </p>
+
+      {alternatives.length > 0 && (
+        <div className="mt-1">
+          <p className="text-caption text-ink-subtle">Pilot can still help with</p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {alternatives.map(({ label, to }) => (
+              <li key={to}>
+                <a
+                  href={to}
+                  className="inline-flex min-h-touch items-center rounded-button border border-border bg-surface-muted px-3 text-label font-medium text-ink hover:border-aqua-strong"
+                >
+                  {label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

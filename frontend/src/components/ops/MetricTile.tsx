@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/cn';
 
 /**
@@ -31,6 +32,23 @@ import { cn } from '@/lib/cn';
 export function MetricTile({
   label,
   value,
+  /**
+   * The figure has not arrived yet, which is not the same as not existing.
+   *
+   * ── WHY THIS IS NOT JUST `value={null}` ────────────────────────────────────
+   *
+   * A tile in flight and a tile whose feed does not report both draw an em
+   * dash, and they mean completely different things: "wait" against "the
+   * source did not say". On first paint a row of four tiles reading "— / not
+   * reported" is the exact "four cards of nothing" that this screen was
+   * rebuilt to remove — and it was TRANSIENTLY drawing it before the first
+   * response landed, which is the version nobody notices in review because it
+   * is gone by the time the page is looked at.
+   *
+   * A skeleton bar in the value's place, so the tile keeps its height and
+   * nothing moves when the figure arrives.
+   */
+  loading = false,
   /** e.g. `%`. Suppressed when the value is unknown. */
   suffix,
   /**
@@ -44,6 +62,7 @@ export function MetricTile({
 }: {
   label: string;
   value: number | null;
+  loading?: boolean;
   suffix?: string | undefined;
   ratio?: ReactNode;
 }) {
@@ -59,19 +78,25 @@ export function MetricTile({
     >
       <p className="text-caption font-medium text-ink-muted">{label}</p>
       <p className="flex items-baseline gap-1.5">
+        {/*
+          The skeleton sits INSIDE the value's own line box — `text-h1` carries
+          the 38px line height — so the tile is exactly the same height loading
+          and loaded and nothing moves when the figure arrives. The bar itself is
+          `aria-hidden`; the live region belongs to whatever is fetching.
+        */}
         <span
-          className={
-            known
-              ? 'text-h1 font-semibold text-ink tabular'
-              : 'text-h1 font-semibold text-ink-muted'
-          }
+          className={cn(
+            'text-h1 font-semibold',
+            loading && 'flex items-center',
+            known ? 'text-ink tabular' : 'text-ink-muted'
+          )}
         >
-          {known ? formatValue(value) : '—'}
+          {loading ? <Skeleton className="h-2.5 w-14" /> : known ? formatValue(value) : '—'}
         </span>
-        {known && suffix ? (
+        {!loading && known && suffix ? (
           <span className="text-h3 font-medium text-ink-muted tabular">{suffix}</span>
         ) : null}
-        {known && ratio ? (
+        {!loading && known && ratio ? (
           <span className="text-h3 font-medium text-ink-muted tabular">{ratio}</span>
         ) : null}
       </p>
@@ -81,7 +106,9 @@ export function MetricTile({
         true. Rendered only when there is nothing, so a populated tile is two
         lines rather than three.
       */}
-      {known ? null : <p className="text-caption font-medium text-ink-muted">not reported</p>}
+      {loading || known ? null : (
+        <p className="text-caption font-medium text-ink-muted">not reported</p>
+      )}
     </div>
   );
 }

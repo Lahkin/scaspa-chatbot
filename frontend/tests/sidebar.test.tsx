@@ -150,12 +150,29 @@ describe('the sidebar drawer', () => {
 // ── 3. The destinations ──────────────────────────────────────────────────────
 
 describe('the navigation', () => {
-  it('lists the handoff’s groups and destinations, in order', async () => {
+  it('groups the destinations in words a customer would use', async () => {
+    /*
+     * These headings used to read ASSISTANT, OPERATIONS and CONDITIONAL.
+     *
+     * The first two are jargon and the third is not a category at all — it is a
+     * note to the developer that the route may not exist. The Pilot spec names
+     * all three as things to stop showing, and "Conditional" above a public
+     * navigation is the clearest possible sign of an interface labelled from
+     * the inside out.
+     *
+     * Console moved into Services rather than keeping a group of its own: a
+     * heading reading "Console" above a single item called "Console" says
+     * nothing twice. It is still filtered out when its route is absent, which
+     * was the only real content of the old label.
+     */
     await renderSidebar();
     const nav = screen.getByRole('navigation', { name: 'Sections' });
 
-    for (const label of ['Assistant', 'Operations', 'Conditional']) {
+    for (const label of ['Ask Pilot', 'Services']) {
       expect(within(nav).getByRole('heading', { name: label })).toBeInTheDocument();
+    }
+    for (const gone of ['Assistant', 'Operations', 'Conditional']) {
+      expect(within(nav).queryByRole('heading', { name: gone })).not.toBeInTheDocument();
     }
     const links = within(nav)
       .getAllByRole('link')
@@ -324,13 +341,19 @@ describe('LogoLockup', () => {
     // Decorative: the visible name beside it already says it.
     expect(img).toHaveAttribute('alt', '');
     expect(img).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByText('SCASPA Assistant')).toBeInTheDocument();
+    /*
+     * "SCASPA", not the product name. This is the INSTITUTIONAL lockup — the
+     * Authority's seal, and the Authority beside it. It read "SCASPA Assistant"
+     * while the product WAS the SCASPA Assistant; the product is Pilot now, and
+     * `PilotBrand` is where its name lives.
+     */
+    expect(screen.getByText('SCASPA')).toBeInTheDocument();
   });
 
   it('lets the mark carry the name when the name is hidden', () => {
     const { container } = render(<LogoLockup nameHidden />);
-    expect(container.querySelector('img')).toHaveAttribute('alt', 'SCASPA Assistant');
-    expect(screen.getByAltText('SCASPA Assistant')).toBeInTheDocument();
+    expect(container.querySelector('img')).toHaveAttribute('alt', 'SCASPA');
+    expect(screen.getByAltText('SCASPA')).toBeInTheDocument();
   });
 
   it('never distorts the aspect ratio', () => {
@@ -387,7 +410,7 @@ describe('LogoLockup', () => {
     // `600 15px/20px, white-space: nowrap` — an ellipsis in the Authority's own
     // name is a layout bug shipped as a design.
     render(<LogoLockup />);
-    const name = screen.getByText('SCASPA Assistant');
+    const name = screen.getByText('SCASPA');
     expect(name.className).toContain('whitespace-nowrap');
     expect(name.className).not.toContain('truncate');
     expect(name.className).toContain('text-wordmark');

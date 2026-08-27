@@ -174,7 +174,7 @@ def create_app() -> FastAPI:
     configure_logging(settings)
 
     app = FastAPI(
-        title="SCASPA Assistant API",
+        title="Pilot API — SCASPA Digital Guide",
         description=(
             "Backend for the SCASPA AI assistant. Answers questions about the Deep Water "
             "Harbour (cargo), Port Zante (cruise), the Basseterre Ferry Terminal and "

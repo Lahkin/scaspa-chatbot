@@ -36,7 +36,7 @@ export function AirlineAvatar({ code, airline }: { code: string; airline: string
       // The code is already in the flight number beside it, so this is decoration.
       aria-hidden="true"
       title={airline}
-      className="flex size-6.5 shrink-0 items-center justify-center rounded-ghost bg-border text-micro font-semibold text-ink-muted"
+      className="flex size-6.5 shrink-0 items-center justify-center rounded-ghost bg-surface-muted text-micro font-semibold text-ink-muted"
     >
       {code}
     </span>

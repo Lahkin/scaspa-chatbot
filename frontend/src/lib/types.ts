@@ -467,8 +467,23 @@ export type StreamEventName = StreamEvent['event'];
 // endpoints serve a feed and state where it came from. A panel may therefore
 // show a berth status that the assistant will not put in a sentence.
 
-/** Where a set of records came from, and how much to trust it. */
-export type SourceKind = 'live' | 'fixture' | 'unavailable';
+/**
+ * Where a set of records came from, and how much to trust it.
+ *
+ * ## `published` is the fourth, and it exists because the other three all lie
+ *
+ * The cruise schedule is real SCASPA information that this service fetched at a
+ * stated time. Calling it `live` would be a lie — it is a snapshot taken every
+ * six hours, and a snapshot presented as live is the claim that makes every
+ * other claim on the screen worth less. Calling it `fixture` would be a worse
+ * lie in the other direction: dressing real Authority data in the sample-data
+ * warning is how readers learn to ignore that warning.
+ *
+ * So: "this is what SCASPA published, and here is when we last looked."
+ * `as_of` carries the second half and the backend's schema refuses to build a
+ * `published` source without it.
+ */
+export type SourceKind = 'live' | 'published' | 'fixture' | 'unavailable';
 
 export interface DataSource {
   kind: SourceKind;
@@ -498,6 +513,52 @@ export interface DataSource {
  */
 export type Facility =
   'deep_water_harbour' | 'port_zante' | 'basseterre_ferry_terminal' | 'rlb_airport';
+
+/**
+ * One published cruise call — `GET /api/cruise-schedule`.
+ *
+ * These are the columns of the table SCASPA publishes on
+ * `cruise-ship-schedule.html`, and nothing else. The endpoint behind it returns
+ * a great deal more — captain, pilot, agent, ship workers, records the Authority
+ * has marked hidden — and none of it has a field here, because a column this
+ * product invented would be indistinguishable on screen from one SCASPA stands
+ * behind.
+ *
+ * ## `window` is a string, and that is not laziness
+ *
+ * `'07:00 - 18:00'`, exactly as published. The page is not consistent about the
+ * format, so a parser that turned it into two timestamps would have to guess —
+ * and a guess here silently moves a sailing time. It is rendered as published
+ * and never arithmetic is done on it.
+ */
+export interface CruiseCall {
+  call_date: string;
+  /** Day name as published — `Wednesday`. Empty when the table did not say. */
+  day: string;
+  /** Time in port exactly as published. See the note above. */
+  window: string;
+  vessel: string;
+  cruise_line: string;
+  /** Berth or pier as published, e.g. `PORTZANTE`. */
+  pier: string;
+  inaugural: boolean;
+  /**
+   * **Null means unknown, and the published table writes unknown as `0`.**
+   *
+   * The parser converts it. Rendering a published `0` as "0 passengers" would
+   * state something SCASPA did not — the same class of error as a berth
+   * occupancy tile showing zero when the feed simply does not report it.
+   */
+  pax: number | null;
+  capacity: number | null;
+}
+
+export interface CruiseScheduleResponse {
+  source: DataSource;
+  calls: CruiseCall[];
+  /** Calls matching the filter before the limit, so truncation can be stated. */
+  total: number;
+}
 
 export type VesselStatus = 'at_berth' | 'en_route' | 'scheduled' | 'departed' | 'unknown';
 

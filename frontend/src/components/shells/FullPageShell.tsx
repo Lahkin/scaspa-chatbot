@@ -382,9 +382,24 @@ function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
           {children ?? <ChatCore />}
         </main>
 
-        {/* Docked sources at xl only. Below that the sidebar has the width, and
-            a third column would leave the conversation unreadable. */}
-        {isChat ? (
+        {/*
+          Docked sources at xl only. Below that the sidebar has the width, and a
+          third column would leave the conversation unreadable.
+
+          ── AND ONLY WHEN THERE IS EVIDENCE ────────────────────────────────
+          The column used to render whatever happened — so a reader who had not
+          yet asked anything was given a third of a wide screen occupied by the
+          words "Nothing to show yet". A permanent empty panel does not read as
+          "sources will appear here", it reads as a part of the product that is
+          broken.
+
+          The conversation takes that width until an answer earns it. That does
+          mean the layout moves once, when the first cited answer lands, and
+          that movement is the point: it is the evidence arriving. It happens
+          under an answer the reader is about to start reading rather than under
+          their cursor, and only once per conversation.
+        */}
+        {isChat && entries.length > 0 ? (
           <aside
             aria-label="Sources"
             className="hidden w-80 shrink-0 border-l border-border bg-surface-muted xl:block"

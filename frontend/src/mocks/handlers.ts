@@ -18,6 +18,7 @@
 
 import { HttpResponse, http } from 'msw';
 import { config } from '@/lib/config';
+import { addDays, portToday } from '@/lib/portDate';
 import type { ChatRequest } from '@/lib/types';
 import {
   CHAT_RESPONSE,
@@ -47,6 +48,7 @@ import {
   CARD_TICKET,
   CARD_VESSELS,
   FIXTURE_SOURCE,
+  MOCK_CRUISE_OFFSETS,
   MOCK_DIRECTORY,
   MOCK_DISCLAIMER,
   MOCK_FLIGHTS,
@@ -56,6 +58,7 @@ import {
   MOCK_POSITIONS,
   MOCK_TARIFFS,
   MOCK_VESSELS,
+  PUBLISHED_CRUISE_LABEL,
   UNAVAILABLE_SOURCE,
 } from './opsFixtures';
 import { getScenario, sleep } from './scenarios';
@@ -112,6 +115,23 @@ function page<T>(rows: T[], params: URLSearchParams, fallback = 25): T[] {
   const size = Number.isFinite(limit) && limit > 0 ? limit : fallback;
   return rows.slice(start, start + size);
 }
+
+/**
+ * `Date.getUTCDay()` to the day name SCASPA's table publishes.
+ *
+ * Spelled out rather than taken from `Intl`: the real page publishes English
+ * day names whatever locale the reader's browser is set to, and a mock that
+ * localised them would make a German-configured CI run assert on "Mittwoch".
+ */
+const DAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const;
 
 export const handlers = [
   // ── POST /api/chat ─────────────────────────────────────────────────────────
@@ -426,6 +446,80 @@ export const handlers = [
         'is 44.44 East Caribbean dollars.',
     })
   ),
+
+  // ── GET /api/cruise-schedule ───────────────────────────────────────────────
+  //
+  // The only mock whose source is `published` rather than `fixture`, because it
+  // is the only endpoint with a real SCASPA source behind it in production.
+  // `ops_unavailable` still applies: Watchtower can fail to retrieve the
+  // schedule, and "we have not managed to look" is a different sentence from
+  // "SCASPA has published nothing", which is the distinction the page draws.
+  http.get(`${base}/api/cruise-schedule`, ({ request }) => {
+    if (getScenario() === 'ops_unavailable') {
+      return HttpResponse.json({
+        // No `as_of`: the schema forbids a `published` source without one, and
+        // an unavailable one has genuinely never been fetched.
+        source: {
+          kind: 'unavailable',
+          label: PUBLISHED_CRUISE_LABEL,
+          as_of: null,
+          notice:
+            'Pilot has not yet retrieved the published cruise schedule. Nothing is shown ' +
+            'rather than something guessed.',
+        },
+        calls: [],
+        total: 0,
+      });
+    }
+
+    const params = new URL(request.url).searchParams;
+
+    /*
+     * Dates are computed per request, anchored on TODAY IN THE PORT.
+     *
+     * `portToday()`, the same helper the page uses to build `since` and
+     * `until`. Anchoring the mock on UTC instead would put the two four hours
+     * apart, so between 20:00 and midnight in St Kitts the fixture's
+     * `dayOffset: 0` calls would land on the page's *tomorrow* — an evening-only
+     * test failure, which is the worst kind to go looking for.
+     */
+    const today = portToday();
+    const calls = MOCK_CRUISE_OFFSETS.map(({ dayOffset, ...call }) => {
+      const call_date = addDays(today, dayOffset);
+      return {
+        ...call,
+        call_date,
+        day: DAY_NAMES[new Date(`${call_date}T00:00:00Z`).getUTCDay()] ?? '',
+      };
+    });
+
+    const since = params.get('since');
+    const until = params.get('until');
+    const vessel = (params.get('vessel') ?? '').toLowerCase();
+
+    const matching = calls.filter(
+      (call) =>
+        (!since || call.call_date >= since) &&
+        (!until || call.call_date <= until) &&
+        (!vessel || call.vessel.toLowerCase().includes(vessel))
+    );
+
+    // `total` is matches BEFORE the limit. The endpoint does not page — it
+    // truncates and reports — so this is what lets the page say so.
+    const limit = Number(params.get('limit') ?? 25);
+    return HttpResponse.json({
+      source: {
+        kind: 'published',
+        label: PUBLISHED_CRUISE_LABEL,
+        // Stamped now: the claim this source makes is "here is when we last
+        // looked", and a frozen instant would make it a claim about July.
+        as_of: new Date().toISOString(),
+        notice: null,
+      },
+      calls: matching.slice(0, limit),
+      total: matching.length,
+    });
+  }),
 
   // ── GET /api/vessels ───────────────────────────────────────────────────────
   //

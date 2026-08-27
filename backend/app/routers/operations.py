@@ -9,10 +9,12 @@ berth status while the assistant continues to refuse to claim one.
 """
 
 import logging
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from app.ops import cruise
 from app.ops.source import (
     OpsSource,
     filter_flights,
@@ -24,6 +26,7 @@ from app.ops.source import (
 from app.ops.tariffs import build_quote, total_of
 from app.ratelimit import RateLimiter, get_rate_limiter
 from app.schemas import (
+    CruiseScheduleResponse,
     ErrorEnvelope,
     FlightSchedulesResponse,
     GateMapResponse,
@@ -46,6 +49,38 @@ MAX_LIMIT = 100
 
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "-")
+
+
+@router.get(
+    "/cruise-schedule",
+    response_model=CruiseScheduleResponse,
+    summary="Published SCASPA cruise calls",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_cruise_schedule(
+    request: Request,
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    since: Annotated[date | None, Query(description="First call date, inclusive")] = None,
+    until: Annotated[date | None, Query(description="Last call date, inclusive")] = None,
+    vessel: Annotated[str | None, Query(max_length=80, description="Vessel name contains")] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> CruiseScheduleResponse:
+    """Cruise calls as SCASPA publishes them.
+
+    **200 with an empty list when there are no calls in the window**, which is
+    an ordinary answer rather than an error: there are days with no cruise ship
+    in port and the honest response is to say so. `source.kind` tells the two
+    apart — `published` with zero calls means SCASPA has published none for
+    those dates, `unavailable` means Pilot has not managed to retrieve the
+    schedule at all.
+
+    The source is never `live`. It is fetched every six hours by Watchtower and
+    `source.as_of` says when — see `app/ops/cruise.py`.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+    return cruise.schedule(since=since, until=until, vessel=vessel, limit=limit)
 
 
 @router.get(

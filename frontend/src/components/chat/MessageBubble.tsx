@@ -6,6 +6,7 @@ import { reconcile } from '@/features/chat/citations';
 import { AgentStatus } from './AgentStatus';
 import { ChartBlock } from './ChartBlock';
 import { CardBlock } from './CardBlock';
+import { config } from '@/lib/config';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { CitationProvider } from './CitationContext';
 import { EscalationCard } from './EscalationCard';
@@ -13,7 +14,9 @@ import { AnswerCorrectionNotice } from './AnswerCorrectionNotice';
 import { NoAnswerCard } from './NoAnswerCard';
 import { SanitisedQuestion, SanitisedQuestionNotice } from './SanitisedQuestion';
 import { StepLimitCard } from './StepLimitCard';
+import { PilotAvatar } from '@/components/brand/PilotAvatar';
 import { ToolTrace } from './ToolTrace';
+import { VerifiedAnswerFooter } from './VerifiedAnswerFooter';
 import { SpeakButton } from './SpeakButton';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { UngroundedNotice } from './UngroundedNotice';
@@ -80,10 +83,37 @@ export function MessageBubble({
 
   return (
     <div
-      className={cn('flex w-full', isUser ? 'justify-end' : 'justify-start')}
+      className={cn('flex w-full gap-3', isUser ? 'justify-end' : 'justify-start')}
       data-role={message.role}
       data-state={message.refusal ? 'refusal' : grounded ? 'grounded' : 'ungrounded'}
     >
+      {/*
+        Who is speaking, at the left edge of every assistant turn.
+
+        This is the clearest expression of the brand architecture in the whole
+        product: SCASPA owns the information and Pilot is the one talking, so
+        the mark in front of an answer is Pilot's and never the Authority's seal
+        (decisions.md 0035). It also does the plainer job of telling the two
+        sides of the conversation apart at a glance, alongside the alignment.
+
+        Decorative — no label. Every one of these would otherwise announce
+        "Pilot" before an answer a screen reader is about to read out anyway,
+        and the turn is already identified: `AnswerAnnouncer` says so once, in
+        words, when the answer completes.
+
+        The state is the message's own. Thinking while the tokens arrive, and a
+        verified badge once the answer has settled AND the backend reported it
+        grounded — the badge is a claim about verification, so it waits for the
+        thing it is claiming rather than appearing with the first token.
+      */}
+      {!isUser && (
+        <PilotAvatar
+          size={28}
+          state={message.streaming ? 'thinking' : grounded ? 'verified' : 'idle'}
+          className="mt-1"
+        />
+      )}
+
       {/*
         `w-full` is load-bearing, and its absence produced one of the stranger
         defects in this project: **"hi" rendered as "h" over "i".**
@@ -285,6 +315,20 @@ export function MessageBubble({
 
             {!isUser && !grounded && !message.streaming && <UngroundedNotice />}
 
+            {/*
+              Where the answer came from — the thing that used to be "1 tool
+              used · 361 ms".
+
+              Gated on `grounded` as well as on having a citation. An ungrounded
+              answer already carries `UngroundedNotice` above, and putting a
+              "Source: … Verified: …" line under a notice that says the figures
+              could not be verified would be the interface contradicting itself
+              in two consecutive lines.
+            */}
+            {!isUser && grounded && !message.streaming && (
+              <VerifiedAnswerFooter citation={reconciliation.entries[0]?.citation ?? null} />
+            )}
+
             {/* A mid-stream failure. Whatever text arrived stays on screen — it
                 was real, and discarding it wastes the wait. */}
             {message.error && (
@@ -326,7 +370,17 @@ export function MessageBubble({
         )}
 
         {/*
-          Diagnostics — §3.14, collapsed by default.
+          Diagnostics — §3.14, collapsed by default, and now behind a flag.
+
+          It sat beside every answer reading "Diagnostics: answer time 4.02 s".
+          Those figures are about the machine and the Pilot spec asks for them in
+          an internal mode: what a customer gets is `How Pilot verified this`,
+          which says which SOURCES were consulted. Both were on screen at once,
+          which is one evidence expander too many and the wrong one first.
+
+          Gated on DEV *and* an explicit flag rather than DEV alone, because the
+          client demonstration runs on `npm run dev` — the same reasoning that
+          governs the mock controls.
 
           On a settled answer only, and only when the server actually reported a
           time. A panel headed "Diagnostics" whose one figure is unknown is a
@@ -338,7 +392,7 @@ export function MessageBubble({
           cannot reach it. The row is built and waits for the field — see
           `DiagnosticsPanel`.
         */}
-        {!isUser && !message.streaming && message.latency_ms ? (
+        {config.features.diagnostics && !isUser && !message.streaming && message.latency_ms ? (
           <div className="mt-2">
             <DiagnosticsPanel latencyMs={message.latency_ms} recordsSearched={recordsSearched} />
           </div>

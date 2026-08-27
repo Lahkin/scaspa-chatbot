@@ -42,6 +42,22 @@ export const config = {
   features: {
     voice: readBoolean(env.VITE_ENABLE_VOICE, true),
     charts: readBoolean(env.VITE_ENABLE_CHARTS, true),
+    /*
+     * The per-answer diagnostics panel — answer time, records searched.
+     *
+     * Off unless asked for, and gated the same way the mock controls are: DEV
+     * plus an explicit flag, not DEV alone. The reasoning is theirs and applies
+     * unchanged — the client demonstration runs on `npm run dev`, so anything
+     * gated on DEV alone is on screen throughout it.
+     *
+     * These figures are about the machine, not about the ferry. The Pilot spec
+     * asks for them in an internal mode; `How Pilot verified this` is what a
+     * customer gets, and that says which sources were consulted rather than how
+     * many milliseconds it took.
+     *
+     * Set `VITE_SHOW_DIAGNOSTICS=true` when working on latency.
+     */
+    diagnostics: env.DEV && readBoolean(env.VITE_SHOW_DIAGNOSTICS, false),
   },
 
   /**

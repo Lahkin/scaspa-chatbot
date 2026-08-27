@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Icon, Textarea } from '@/components/ui';
+import { PilotAvatar } from '@/components/brand/PilotAvatar';
 import { SCASPA_PHONE_HREF } from '@/components/shells/ScaspaMark';
 import { SCASPA_PHONE_LINES } from '@/features/chat/contact';
 import { formatCountdown, rateLimitMessage } from '@/features/chat/rateLimits';
@@ -207,9 +208,7 @@ export function Composer({
              * field reads "Answering…" rather than the ordinary invitation —
              * §3.2 — so a disabled empty box is never mistaken for a broken one.
              */
-            placeholder={
-              busy ? 'Answering…' : 'Ask about a vessel, a flight, a tariff or a department…'
-            }
+            placeholder={busy ? 'Pilot is answering…' : 'Ask Pilot anything…'}
             value={draft}
             maxRows={6}
             /*
@@ -343,7 +342,13 @@ export function Composer({
             <button
               type="submit"
               disabled={!canSend}
-              aria-label={rateLimited ? `Send — wait ${formatCountdown(cooldownS ?? 0)}` : 'Send'}
+              aria-label={
+                rateLimited
+                  ? `Send — wait ${formatCountdown(cooldownS ?? 0)}`
+                  : busy
+                    ? 'Pilot is answering'
+                    : 'Send'
+              }
               className={cn(
                 'inline-flex size-[34px] shrink-0 items-center justify-center rounded-pill',
                 'transition-colors duration-fast ease-out-soft',
@@ -355,6 +360,24 @@ export function Composer({
             >
               {rateLimited ? (
                 <span className="text-caption font-semibold tabular">{cooldownS}</span>
+              ) : busy ? (
+                /*
+                 * ── PILOT THINKING, IN THE PLACE THE ARROW WAS ───────────────
+                 *
+                 * The spec is specific that the avatar must NOT be the permanent
+                 * Send button, and the reason is worth keeping: the mark means
+                 * "who is speaking" and the button means "what you do", and one
+                 * object cannot carry both without blurring them.
+                 *
+                 * While an answer is generating there is no conflict, because
+                 * the control is inert anyway — `canSend` is false. So for that
+                 * one interval the mark stands in, its beacon pulsing, and the
+                 * arrow returns the moment the answer lands.
+                 *
+                 * The button keeps its own aria-label; the mark is decorative
+                 * here. `AgentStatus` above already announces the wait in words.
+                 */
+                <PilotAvatar size={20} state="thinking" />
               ) : (
                 <Icon name="arrow-up" size={16} />
               )}

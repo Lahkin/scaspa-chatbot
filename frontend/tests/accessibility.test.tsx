@@ -87,7 +87,10 @@ describe('per-route document head', () => {
     it(`${path} sets its own title`, async () => {
       renderRoute(path);
       await waitFor(() => expect(document.title).toContain(fragment));
-      expect(document.title).toContain('SCASPA Assistant');
+      // Every page names the product. It is Pilot now — the Authority's name
+      // belongs to the Authority, and the two stopped being the same thing when
+      // the product got an identity of its own (decisions.md 0035).
+      expect(document.title).toContain('Pilot');
     });
   }
 
@@ -95,7 +98,7 @@ describe('per-route document head', () => {
     renderRoute('/about');
     await waitFor(() => {
       const meta = document.head.querySelector('meta[name="description"]');
-      expect(meta?.getAttribute('content')).toMatch(/SCASPA Assistant/i);
+      expect(meta?.getAttribute('content')).toMatch(/Pilot/i);
     });
   });
 

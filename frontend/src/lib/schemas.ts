@@ -117,7 +117,7 @@ export const responseMetaSchema = z.object({
  * outcome for this particular field.
  */
 export const dataSourceSchema = z.object({
-  kind: z.enum(['live', 'fixture', 'unavailable']),
+  kind: z.enum(['live', 'published', 'fixture', 'unavailable']),
   label: z.string(),
   as_of: z.string().nullable(),
   notice: z.string().nullable(),
@@ -136,6 +136,35 @@ export const facilitySchema = z
   .nullish()
   .catch(null)
   .transform((v) => v ?? null);
+
+/**
+ * A published cruise call.
+ *
+ * Nothing here is `.catch()`ed to a fallback, unlike the status enums below. A
+ * vessel status that arrives unrecognised should render one row oddly rather
+ * than lose the board; a cruise call whose shape has changed is a parser that
+ * has stopped understanding SCASPA's table, and quietly repairing it would hide
+ * exactly the event Watchtower exists to notice.
+ */
+export const cruiseCallSchema = z.object({
+  call_date: z.string(),
+  day: z.string(),
+  window: z.string(),
+  vessel: z.string(),
+  cruise_line: z.string(),
+  pier: z.string(),
+  inaugural: z.boolean(),
+  // Nullable, never defaulted to 0 — the published table writes "unknown" as 0
+  // and the backend converts it. Restoring the zero here would undo that.
+  pax: z.number().nullable(),
+  capacity: z.number().nullable(),
+});
+
+export const cruiseScheduleResponseSchema = z.object({
+  source: dataSourceSchema,
+  calls: z.array(cruiseCallSchema),
+  total: z.number(),
+});
 
 export const vesselArrivalSchema = z.object({
   id: z.string(),

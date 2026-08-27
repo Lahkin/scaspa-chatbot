@@ -124,7 +124,7 @@ export const Route = createFileRoute('/tariffs')({
   component: TariffsRoute,
   head: () => ({
     meta: [
-      { title: 'Port tariffs — SCASPA Assistant' },
+      { title: 'Port tariffs — Pilot' },
       {
         name: 'description',
         content: 'Published SCASPA port charges, aviation fees and cargo levies.',
