@@ -24,7 +24,6 @@ import { describe, expect, it } from 'vitest';
 
 import { PROJECT_ROOT, globFiles } from './source-files';
 
-
 function builtCss(): string | null {
   const dir = resolve(PROJECT_ROOT, 'dist/assets');
   if (!existsSync(dir)) return null;

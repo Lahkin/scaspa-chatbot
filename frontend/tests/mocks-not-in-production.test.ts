@@ -18,7 +18,6 @@ import { describe, expect, it } from 'vitest';
 
 import { PROJECT_ROOT, globFiles } from './source-files';
 
-
 function builtJs(): { file: string; source: string }[] {
   const dir = resolve(PROJECT_ROOT, 'dist/assets');
   if (!existsSync(dir)) return [];
