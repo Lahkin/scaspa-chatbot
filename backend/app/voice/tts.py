@@ -42,6 +42,7 @@ from pathlib import Path
 
 from app.config import Settings, get_settings
 from app.upstream import call_with_retry
+from app.voice.provider import elevenlabs_synthesise, resolve_provider
 
 logger = logging.getLogger(__name__)
 
@@ -276,27 +277,46 @@ def synthesise(
         return path.read_bytes(), CacheEntry(path=path, digest=digest, hit=True)
 
     started = time.perf_counter()
-    client = client or build_speech_client(settings)
+    provider = resolve_provider(settings)
     try:
-        response = call_with_retry(
-            lambda: client.audio.speech.create(
-                model=settings.OPENAI_TTS_MODEL,
-                voice=settings.OPENAI_TTS_VOICE,
-                input=sanitised,
-                response_format="mp3",
-            ),
-            settings=settings,
-        )
-        audio = response.content if hasattr(response, "content") else bytes(response)
+        if provider == "elevenlabs":
+            # `client` is the OpenAI injection point used by the tests; the
+            # ElevenLabs path builds its own per call, because an httpx client
+            # is cheap and holding one open across a process adds a connection
+            # to manage for no benefit at this request rate.
+            audio = call_with_retry(
+                lambda: elevenlabs_synthesise(sanitised, settings), settings=settings
+            )
+        else:
+            speech = client or build_speech_client(settings)
+            response = call_with_retry(
+                lambda: speech.audio.speech.create(
+                    model=settings.OPENAI_TTS_MODEL,
+                    voice=settings.OPENAI_TTS_VOICE,
+                    input=sanitised,
+                    response_format="mp3",
+                ),
+                settings=settings,
+            )
+            audio = response.content if hasattr(response, "content") else bytes(response)
+    except ValueError:
+        # A configuration fault — no voice chosen — not a provider failure. It
+        # travels as ValueError, which the router already renders as a rejected
+        # request rather than as "the provider is down".
+        raise
     except Exception as exc:
-        logger.warning("tts_failed error=%s", type(exc).__name__)
+        logger.warning("tts_failed provider=%s error=%s", provider, type(exc).__name__)
         raise TTSUnavailableError(str(exc)) from exc
 
     elapsed = int((time.perf_counter() - started) * 1000)
     # Characters and latency are logged; the text itself is not, and no
     # identifier ever is — CLAUDE.md rule 9.
     logger.info(
-        "tts_synthesised chars=%d bytes=%d latency_ms=%d", len(sanitised), len(audio), elapsed
+        "tts_synthesised provider=%s chars=%d bytes=%d latency_ms=%d",
+        provider,
+        len(sanitised),
+        len(audio),
+        elapsed,
     )
 
     if use_cache:

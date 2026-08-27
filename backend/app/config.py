@@ -239,6 +239,43 @@ class Settings(BaseSettings):
     # OpsSource implementation and this string, and nothing else.
     OPS_DATA_SOURCE: str = "none"
 
+    # --- Voice ------------------------------------------------------------
+    #
+    # Which provider does speech. Two, because this project's OpenAI key has no
+    # speech-model entitlement at all — `/v1/models` returns nine models and not
+    # one of them can transcribe or synthesise (decisions.md 0047).
+    #
+    #   auto        ElevenLabs when ELEVENLABS_API_KEY is set, else OpenAI.
+    #               The default, so one key is the whole of the configuration.
+    #   openai      /v1/audio/transcriptions and /v1/audio/speech.
+    #   elevenlabs  api.elevenlabs.io — Scribe for speech-to-text, and the
+    #               text-to-speech endpoint for the reply.
+    #
+    # `auto` is resolved once, in `app/voice/provider.py`, and reported by
+    # `/api/health` so nobody has to guess which one a deployment is using.
+    VOICE_PROVIDER: str = "auto"
+
+    # Never committed. `.env` is gitignored; only `.env.example` is tracked.
+    ELEVENLABS_API_KEY: str = ""
+
+    # Model ids in settings rather than in source, for the same reason the
+    # OpenAI ones are — CLAUDE.md rule 2. A provider that renames a model must
+    # be a configuration change, not a code change.
+    ELEVENLABS_TTS_MODEL: str = "eleven_multilingual_v2"
+    ELEVENLABS_STT_MODEL: str = "scribe_v1"
+
+    # ── NO DEFAULT VOICE, DELIBERATELY ────────────────────────────────────
+    #
+    # Every ElevenLabs account has voices and they differ; picking one in source
+    # would choose an accent, a gender and a register for a Caribbean port
+    # authority on the strength of what a developer saw first in a list.
+    #
+    # Blank means text-to-speech is not configured. The availability probe
+    # reports that, the UI hides the control rather than offering one that
+    # fails, and `scripts/voice_smoke.py --voices` prints the account's voices
+    # with their ids so the choice is made by somebody entitled to make it.
+    ELEVENLABS_VOICE_ID: str = ""
+
     # --- Watchtower -------------------------------------------------------
     # Whether the application runs the source monitor on a schedule.
     #

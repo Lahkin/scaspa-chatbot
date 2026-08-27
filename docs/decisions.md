@@ -4368,3 +4368,134 @@ An OpenAI project with access to a transcription model and a speech model.
 Nothing in this repository is in the way — set `OPENAI_TRANSCRIBE_MODEL` and
 `OPENAI_TTS_MODEL` to entitled ids and the controls appear on their own, because
 the probe will find them.
+
+---
+
+## 0048 — ElevenLabs becomes the speech provider, and voice becomes swappable
+
+**Status:** accepted.
+**Follows** 0047, which established that the OpenAI key cannot do speech at all.
+
+### Why a second provider rather than a different model id
+
+0047 measured it: this project's OpenAI key returns nine models and not one can
+transcribe or synthesise. Every audio call comes back `403 — Project proj_… does
+not have access to model`. That is an entitlement, so no model id fixes it.
+
+ElevenLabs was supplied instead. It does both halves — Scribe for speech to
+text, and the text-to-speech endpoint for the reply — so voice is reachable
+without an OpenAI account change.
+
+### What did NOT move, and that is the point
+
+`app/voice/provider.py` is only the provider call. Everything that makes voice
+usable stays exactly where it was:
+
+- the **sanitiser** in `tts.py` — markdown, citation markers, URLs, currency
+  codes, and above all the telephone number, which read as a quantity is "eight
+  hundred sixty-nine million…" and which ends every refusal this product gives;
+- the on-disk **cache**, keyed on sanitised text, so a rehearsed answer is
+  synthesised once;
+- the **logging** that records size and latency and never the audio or the
+  transcript;
+- the **retry and classification** in `app/upstream.py`.
+
+A second provider must not mean a second copy of the thinking. The sanitiser is
+the most valuable code in the voice path and would have been the first thing to
+drift.
+
+### `auto`, so one key is the whole configuration
+
+`VOICE_PROVIDER` defaults to `auto`: ElevenLabs when `ELEVENLABS_API_KEY` is
+set, OpenAI otherwise. Somebody pastes the key they were given and voice works,
+without also having to learn that a second setting exists.
+
+An explicit value always wins, including an explicit `openai` on a deployment
+that also holds an ElevenLabs key — otherwise `auto` would be impossible to
+override and the setting would be a lie. An unrecognised value falls to the
+`auto` rule rather than disabling speech, because a typo in an env var must not
+take a working feature away.
+
+The resolved answer is reported by `/api/health`, so it is never a guess.
+
+### httpx rather than the ElevenLabs SDK
+
+The project already depends on httpx, already has `call_with_retry` with the
+backoff and classification the rest of the product uses, and needs exactly two
+endpoints. An SDK would add a dependency to own two requests and bring a second
+retry policy alongside the one already here.
+
+### The voice has no default, and that is a product decision
+
+`ELEVENLABS_VOICE_ID` is blank in source. Choosing one would pick an accent, a
+gender and a register for a Caribbean port authority on the strength of whatever
+a developer saw first in a list — and it is the voice every caller hears.
+
+Blank is handled as a **half-available** state, which OpenAI has no equivalent
+of: transcription needs no voice and works, synthesis does not. `/api/health`
+reports `stt: true, tts: false`, the speak-aloud control is not drawn, and the
+detail names the command that lists the options:
+
+```bash
+cd backend && uv run python scripts/voice_smoke.py --voices
+```
+
+That command prints every voice on the account with its id, marks the one
+currently configured, and runs in-process against `.env` rather than against a
+running server — it is a configuration question, and answering it should not
+need the API up.
+
+**No voice chosen raises `ValueError`, not a provider error.** Nothing is wrong
+with ElevenLabs, and "voice is unavailable right now" would send somebody to
+look at a service that is working.
+
+### The probe learned a second shape
+
+0047's availability probe listed OpenAI models. The two providers fail
+differently, so it now branches:
+
+| Provider | Probe | Catches |
+| --- | --- | --- |
+| `openai` | list models | The entitlement 403 — an entitled model appears in the list |
+| `elevenlabs` | list voices | Reachability, **and** whether `ELEVENLABS_VOICE_ID` names a voice this account has |
+
+Listing voices doubles as the reachability check: the cheapest authenticated
+call the API has, whose answer is what an operator needs anyway. A voice id
+copied from another account is caught here rather than by a 404 in front of
+somebody waiting to hear an answer.
+
+`checked: false` still means carry on. Unknown is not unavailable, in either
+provider.
+
+### The key travels in a header and appears nowhere else
+
+`xi-api-key`, never in a URL — a URL reaches logs, proxies and error messages
+that a header does not. Asserted: the synthesis test checks the key is in the
+header and *not* in the request URL.
+
+Audio is posted from memory and never written to disk, the same guarantee the
+OpenAI path makes and the reason `stt.py` hands bytes rather than a path. Also
+asserted.
+
+### One shape guard worth naming
+
+ElevenLabs' transcription returns `{"text": …}`. If that field is missing, this
+raises rather than falling back to the response body — otherwise a
+`{"detail": …}` error payload would land in the composer as though the user had
+said it.
+
+### Verified
+
+680 backend tests, 864 frontend, lint, typecheck, prettier, production build.
+With no ElevenLabs key present the resolver correctly reports `openai` and the
+OpenAI entitlement gap, which is the state this repository is in until the key
+is added — at which point `auto` flips with no code change.
+
+`.env.example`, `README.md`, `docs/api-contract.md` and `docs/runbook.md` §7
+updated; the runbook's table now starts from `provider`, because sending
+somebody to the wrong dashboard is the first mistake available.
+
+### Still needed to hear it
+
+The key in `backend/.env` (gitignored), and a voice id chosen from the account.
+Nothing else.

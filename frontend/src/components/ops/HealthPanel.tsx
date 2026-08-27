@@ -78,9 +78,19 @@ export function HealthPanel({
         body: 'Turned off in this build. Speaking and listening are unavailable; typing works.',
       });
     } else if (health.voice.checked && (!health.voice.stt || !health.voice.tts)) {
+      /*
+       * The title names the PROVIDER, because with two of them the first
+       * question an operator has is which one this deployment is using — and it
+       * cannot be inferred from the client, which never sees a key. Sending
+       * somebody to the wrong dashboard is the failure this avoids.
+       *
+       * `detail` carries the rest, including which half works: a reachable
+       * ElevenLabs account with no voice chosen transcribes fine and cannot
+       * speak, which is a real state and not a total outage.
+       */
       rows.push({
         tone: 'caution',
-        title: 'Voice is unavailable on this key',
+        title: `Voice is limited on ${health.voice.provider}`,
         body: health.voice.detail,
       });
     }

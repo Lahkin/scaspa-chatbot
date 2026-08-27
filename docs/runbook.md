@@ -190,10 +190,15 @@ Voice is an enhancement. The text path is unaffected by any voice failure.
 curl -s $URL/api/health | jq .voice
 ```
 
+`provider` tells you which service to go and look at — `openai` or
+`elevenlabs`, with `VOICE_PROVIDER=auto` already resolved. Establish that first;
+the rest depends on it.
+
 | `voice` says | What it means |
 | --- | --- |
-| `checked: true`, `stt`/`tts` **false** | This OpenAI project has no speech-model entitlement. `detail` names the models. **An account change, not a deployment** — redeploying will not fix it, and the microphone is already hidden, so there is nothing to do live. |
-| `checked: true`, both **true** | Voice should work. A failure now is a provider problem; see step 2. |
+| `checked: true`, both **true** | Voice should work. A failure now is a provider problem; see step 3. |
+| `stt: true`, `tts: false`, provider `elevenlabs` | Reachable, but no voice chosen — or `ELEVENLABS_VOICE_ID` names one this account does not have. **The microphone works and reading aloud does not.** Fix: `cd backend && uv run python scripts/voice_smoke.py --voices`, then set the id in `backend/.env`. |
+| `checked: true`, both **false**, provider `openai` | This OpenAI project has no speech-model entitlement. `detail` names the models. **An account change, not a deployment** — redeploying will not fix it, and the controls are already hidden, so there is nothing to do live. |
 | `checked: false` | The backend could not find out. The controls stay visible on purpose, so voice may or may not work. |
 
 1. Microphone button is greyed with "Asking by voice is switched off" → either

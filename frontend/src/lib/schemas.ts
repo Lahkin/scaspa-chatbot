@@ -639,8 +639,18 @@ export const voiceStatusSchema = z
     tts: z.boolean(),
     checked: z.boolean(),
     detail: z.string(),
+    // Defaulted rather than required: a backend that predates the field is not
+    // a broken one, and the value is operator information rather than anything
+    // the UI branches on.
+    provider: z.string().default('openai'),
   })
-  .catch({ stt: true, tts: true, checked: false, detail: 'not reported by this backend' });
+  .catch({
+    stt: true,
+    tts: true,
+    checked: false,
+    detail: 'not reported by this backend',
+    provider: 'openai',
+  });
 
 export const healthResponseSchema = z.object({
   status: z.enum(['ok', 'degraded']),

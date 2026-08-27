@@ -1241,6 +1241,14 @@ class VoiceStatus(BaseModel):
     detail: str = Field(
         description="One line for an operator explaining the state. Never shown to a user"
     )
+    provider: str = Field(
+        default="openai",
+        description=(
+            "Which provider answered — `openai` or `elevenlabs` — with the `auto` "
+            "setting already resolved. Reported so nobody has to infer it from a key "
+            "they cannot see; it is the first thing to establish when voice misbehaves"
+        ),
+    )
 
 
 class HealthResponse(BaseModel):
