@@ -93,6 +93,41 @@ def tmp_settings(tmp_path: Path) -> Settings:
     )
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _no_watchtower_in_tests():
+    """No test run may reach SCASPA's servers.
+
+    ── THREE LAYERS, AND THIS IS THE ONE THAT MATTERS ───────────────────────
+
+    `WATCHTOWER_ENABLED` defaults to True so that a real deployment schedules
+    without anyone remembering a flag. That is the right default for production
+    and exactly the wrong one here, so it is switched off for the whole session
+    before any `Settings` object is built.
+
+    Two other things happen to protect us today and neither is load-bearing:
+    `TestClient(app)` outside a `with` block does not run the lifespan at all,
+    and the scheduler waits a minute before its first sweep. Both are properties
+    of how the tests are written now — one `with TestClient(app) as client` and
+    a slow suite would be enough to start fetching a live schedule from CI.
+
+    `os.environ` rather than a Settings override, because `get_settings()` is
+    `lru_cache`d and `create_app()` calls it directly.
+    """
+    import os
+
+    from app.config import get_settings
+
+    previous = os.environ.get("WATCHTOWER_ENABLED")
+    os.environ["WATCHTOWER_ENABLED"] = "false"
+    get_settings.cache_clear()
+    yield
+    if previous is None:
+        os.environ.pop("WATCHTOWER_ENABLED", None)
+    else:
+        os.environ["WATCHTOWER_ENABLED"] = previous
+    get_settings.cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def _isolate_process_state():
     """Reset the process-wide limiter and spend tracker between tests.

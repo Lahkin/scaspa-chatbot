@@ -32,7 +32,7 @@ import logging
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from app.config import Settings, get_settings
@@ -87,6 +87,22 @@ CREATE TABLE IF NOT EXISTS cruise_calls (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cruise_date ON cruise_calls(call_date);
+
+-- One row, holding whichever process is currently allowed to run a sweep.
+--
+-- `uvicorn --workers 4` builds the application four times, so without this
+-- there would be four schedulers asking SCASPA for the same schedule at the
+-- same moment, four times an hour. That is rude to somebody else's server and
+-- it multiplies every retry storm by the worker count.
+--
+-- A lease rather than a lock: a holder that is killed mid-sweep never releases
+-- anything, and a lock with no expiry would stop the schedule updating forever
+-- with no error anywhere. This one simply runs out.
+CREATE TABLE IF NOT EXISTS scheduler_lease (
+    name       TEXT PRIMARY KEY,
+    owner      TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
 """
 
 
@@ -207,6 +223,58 @@ def change_log(limit: int = 20, settings: Settings | None = None) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+# ── the scheduler lease ──────────────────────────────────────────────────────
+
+
+def acquire_scheduler_lease(
+    owner: str,
+    seconds: int,
+    settings: Settings | None = None,
+    *,
+    name: str = "watchtower",
+) -> bool:
+    """Take or renew the sweep lease. True means this caller may proceed.
+
+    ## Why the whole thing is one statement
+
+    Read-then-write would let two workers both read an expired lease and both
+    conclude they had won it. The `WHERE` clause does the deciding inside a
+    single `INSERT ... ON CONFLICT ... DO UPDATE`, so SQLite's own write lock
+    settles the race and exactly one caller sees a row change.
+
+    A caller wins when the lease is unheld, has expired, or is already theirs —
+    the third case is a renewal, which is what keeps a healthy worker holding it
+    tick after tick instead of handing it round.
+
+    Times are ISO strings in UTC and are compared as strings. That works because
+    `datetime.isoformat()` is lexicographically ordered for a fixed offset, and
+    every timestamp written here comes from `_now()`.
+    """
+    now = _now()
+    expires = (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat()
+    with connect(settings) as db:
+        cursor = db.execute(
+            """
+            INSERT INTO scheduler_lease (name, owner, expires_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                owner = excluded.owner,
+                expires_at = excluded.expires_at
+            WHERE scheduler_lease.expires_at < ?
+               OR scheduler_lease.owner = excluded.owner
+            """,
+            (name, owner, expires, now),
+        )
+        return cursor.rowcount > 0
+
+
+def scheduler_lease(name: str = "watchtower", settings: Settings | None = None) -> dict | None:
+    """Who holds it and until when. For the console and for a person debugging."""
+    with connect(settings) as db:
+        row = db.execute("SELECT * FROM scheduler_lease WHERE name = ?", (name,)).fetchone()
+    return dict(row) if row else None
+
+
 # ── cruise calls ─────────────────────────────────────────────────────────────
 
 
@@ -227,6 +295,9 @@ def replace_cruise_calls(
 
     All of it inside one transaction so a reader never sees the half-second
     where the old rows are gone and the new ones have not landed.
+
+    Returns the number of rows **in the table afterwards**, which is not the
+    number of calls passed in — see the note where it is counted.
     """
     retrieved = _now()
     with connect(settings) as db:
@@ -263,7 +334,22 @@ def replace_cruise_calls(
                 for call in calls
             ],
         )
-    return len(calls)
+        # ── WHAT LANDED, NOT WHAT WE WERE HANDED ────────────────────────────
+        #
+        # These differ, and on real data they differ every time: the primary key
+        # is `(call_date, vessel)` and SCASPA's schedule genuinely contains
+        # repeats — 502 records parsed, 496 rows stored, on the day this was
+        # written. `ON CONFLICT DO UPDATE` folds them, which is the right
+        # behaviour, but returning `len(calls)` then reported a row count that
+        # did not exist anywhere.
+        #
+        # It reached the change log as `rows_parsed` and the log line as
+        # `rows=`, so the one place an operator looks to ask "did that work"
+        # was quietly six ahead of the table. Counted back out of the database.
+        stored = db.execute(
+            "SELECT COUNT(*) AS n FROM cruise_calls WHERE source_id = ?", (source_id,)
+        ).fetchone()["n"]
+    return stored
 
 
 def read_cruise_calls(

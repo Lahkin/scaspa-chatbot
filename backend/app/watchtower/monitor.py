@@ -258,11 +258,21 @@ def check_source(
         source.url,
         new_hash=digest,
         changed=True,
-        outcome="updated",
+        # What is in the table, which is not `len(records)`: the store's key is
+        # `(call_date, vessel)` and SCASPA's schedule contains genuine repeats.
+        # Both numbers are logged because the gap between them is itself worth
+        # seeing — it would grow if the publisher started duplicating rows.
         rows_parsed=written,
+        detail=f"parsed={len(records)} stored={written}" if written != len(records) else None,
         settings=settings,
     )
-    logger.info("watchtower_updated source=%s rows=%d year=%s", source.id, written, year)
+    logger.info(
+        "watchtower_updated source=%s parsed=%d stored=%d year=%s",
+        source.id,
+        len(records),
+        written,
+        year,
+    )
     return CheckResult(source.id, "updated", rows=written)
 
 
