@@ -85,22 +85,80 @@ and sets `ENV=prod`.
 
 ## Configuration checklist
 
-- [ ] `OPENAI_API_KEY` set as a **secret**, never in the image or a committed file.
-- [ ] `ALLOWED_ORIGINS` set to the real frontend origin. A wildcard with
-      `ENV=prod` makes the app refuse to boot — that is intentional.
-- [ ] `ENV=prod`.
-- [ ] `CHROMA_DIR` on a persistent volume, or the index is lost on restart.
-- [ ] `OPERATIONAL_DB_PATH` on that same volume. Losing it loses the cruise
-      schedule *and* the record of when it was last checked, so a restart looks
-      to a reader like a source that was never retrieved.
-- [ ] `LOG_LEVEL=INFO`.
-- [ ] Index built and `/api/health` returns `status: ok`.
+Two services, and the pair is the point: the API and the client are deployed
+separately, and most of what goes wrong is one of them not knowing about the
+other.
+
+### The API (Render reads `render.yaml`)
+
+Four values are `sync: false` and must be set in the dashboard — they are the
+only ones the blueprint cannot carry.
+
+- [ ] `OPENAI_API_KEY` — a **secret**, never in the image or a committed file.
+- [ ] `ADMIN_SECRET` — any long random string. Without it, `/api/admin/stats`
+      does not exist at all, which is the safe default rather than a broken one.
+- [ ] `ALLOWED_ORIGINS` — the **real frontend origin**, e.g.
+      `https://scaspa-demo.vercel.app`. No trailing slash. A wildcard with
+      `ENV=prod` makes the app refuse to boot, deliberately.
+- [ ] `ELEVENLABS_API_KEY` — a **secret**. Without it `VOICE_PROVIDER=auto`
+      falls back to OpenAI, which on this account has no speech models, and
+      every press of the microphone fails.
+- [ ] `ELEVENLABS_VOICE_ID` — not a secret, but it has no default on purpose:
+      it is the voice every caller hears. Blank means transcription works and
+      reading aloud is switched off, reported honestly by `/api/health`.
+
+Carried by the blueprint, worth confirming after the first deploy:
+
+- [ ] `ENV=prod`, `LOG_LEVEL=INFO`.
+- [ ] The **disk is mounted at `/app/state`**. Everything that must survive a
+      deploy lives there — the operational SQLite store, the question log, the
+      TTS cache. Without it the cruise schedule is lost on every deploy and the
+      Vessels page honestly reports it was never retrieved, for up to six hours,
+      which looks exactly like an outage.
+- [ ] The index is baked into the image, so `CHROMA_DIR` needs **no** volume —
+      `decisions.md` 0017. `/api/health` must report `status: ok` and a row
+      count.
 - [ ] `watchtower_scheduler_started` appears in the boot log. If it does not,
-      `WATCHTOWER_ENABLED` is false and **nothing** will refresh the cruise
-      schedule — the page will keep showing whatever was last stored, with a
-      date that quietly ages. Leave it unset unless cron is doing the sweeping.
-- [ ] `uv run python scripts/watchtower.py --status` shows a `last checked`
-      within the last six hours.
+      nothing refreshes the schedule and the "checked" date on screen quietly
+      ages.
+
+### The client (Vercel reads `frontend/vercel.json`)
+
+- [ ] **Root directory: `frontend`.** The repository root builds the API, not
+      the client; pointing the project at the root builds the wrong thing.
+- [ ] `VITE_API_BASE_URL` — the **deployed API origin**, no trailing slash.
+      This is the mirror of `ALLOWED_ORIGINS`, and the two have to name each
+      other. It ships in the bundle and is public; there is no key in the
+      client and never will be.
+- [ ] `VITE_ENABLE_MOCKS` unset or false. The mock code is excluded from a
+      production build entirely, but do not invite the question.
+- [ ] HTTPS — both hosts give it free, and **the microphone does not work
+      without it**. A page served over plain HTTP shows a microphone that
+      silently never records.
+
+Netlify or Cloudflare Pages work as well: build `npm run build` in `frontend`,
+publish `dist`, and add a single SPA rewrite of `/*` to `/index.html`. The
+framing headers in `vercel.json` then have to be reproduced by hand — see
+`docs/embedding.md`, because the widget and the app need **opposite** policies.
+
+## The one that catches everybody
+
+`ALLOWED_ORIGINS` and `VITE_API_BASE_URL` point at each other, and if either is
+wrong the client fails with no explanation: a browser will not tell JavaScript
+that CORS was the cause, so it surfaces as a bare failed fetch while the API
+answers `curl` perfectly.
+
+Check it from the outside, the way a browser asks:
+
+```bash
+cd backend
+uv run python scripts/preflight.py --url https://YOUR-API --origin https://YOUR-FRONTEND
+```
+
+That asserts the CORS reply names the origin, that the streaming POST survives
+its preflight, that `Retry-After` is readable by the client, that voice is
+available and which provider answered, and that Watchtower has actually
+populated the store.
 
 ## Verify after deploying
 

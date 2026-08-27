@@ -2,11 +2,13 @@
 #
 #   1. Push this repo to GitHub.
 #   2. Render -> New -> Blueprint -> pick the repo.
-#   3. Set the secret env vars listed below in the dashboard.
+#   3. Set the four `sync: false` values in the dashboard (they are listed below).
 #   4. Deploy.
+#   5. Verify:  uv run python scripts/preflight.py --url https://YOUR-URL \
+#                   --origin https://YOUR-FRONTEND
 #
-# See README "Deploy" for the full walkthrough, and docs/decisions.md 0017 for why
-# the index is baked into the image rather than mounted.
+# See README "Deploy" for the walkthrough, docs/deploy.md for the checklist, and
+# docs/decisions.md 0017 for why the index is baked into the image.
 services:
   - type: web
     name: scaspa-chatbot-api
@@ -17,15 +19,72 @@ services:
     region: ohio
     healthCheckPath: /api/health
     autoDeploy: true
+
+    # ── THE OPERATIONAL STORE HAS TO SURVIVE A DEPLOY ────────────────────────
+    #
+    # Everything else in the image is either baked in (the Chroma index) or
+    # disposable (logs). The SQLite store is neither: Watchtower writes the
+    # published cruise schedule into it, along with the record of WHEN each
+    # source was last checked.
+    #
+    # Without a disk, both are lost on every deploy and restart. The Vessels
+    # page would then honestly report that the schedule has never been
+    # retrieved — for up to six hours, until the next sweep — which is a
+    # believable-looking outage caused entirely by not mounting this.
+    #
+    # `starter` is the smallest disk Render offers and is enormous for a few
+    # hundred rows. Mount path matches the Dockerfile's writable directory.
+    disk:
+      name: scaspa-state
+      mountPath: /app/state
+      sizeGB: 1
+
     envVars:
-      # --- secrets: set these in the dashboard, sync:false keeps them out of git
+      # ── secrets: set in the dashboard. `sync: false` keeps them out of git ──
       - key: OPENAI_API_KEY
         sync: false
       - key: ADMIN_SECRET
         sync: false
+      # The real frontend origin, e.g. https://scaspa-demo.vercel.app
+      #
+      # There is no safe default. A wildcard with ENV=prod REFUSES TO BOOT, on
+      # purpose — and getting this wrong is the commonest deploy failure there
+      # is, because a blocked request reaches the client as a bare failed fetch
+      # with no reason attached: browsers do not tell JavaScript that CORS was
+      # the cause. `preflight.py --origin` checks it from the outside.
       - key: ALLOWED_ORIGINS
-        sync: false          # the real frontend origin; a wildcard refuses to boot in prod
-      # --- non-secret configuration
+        sync: false
+
+      # Voice. This project's OpenAI key has NO speech-model entitlement, so
+      # ElevenLabs does both halves — decisions.md 0047 and 0048.
+      - key: ELEVENLABS_API_KEY
+        sync: false
+
+      # ── non-secret configuration ────────────────────────────────────────
+      # Not a secret: it names a voice, it does not authorise anything. It has
+      # no default in source because it is the voice every caller hears, and
+      # choosing one belongs to whoever owns the product rather than whoever
+      # wrote the code. Blank means transcription still works and reading aloud
+      # is switched off, reported honestly by /api/health.
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+
+      # `auto` resolves to ElevenLabs whenever its key is set, so this is here
+      # to be explicit rather than to change anything. /api/health reports which
+      # provider was resolved.
+      - key: VOICE_PROVIDER
+        value: auto
+      - key: ELEVENLABS_TTS_MODEL
+        value: eleven_multilingual_v2
+      - key: ELEVENLABS_STT_MODEL
+        value: scribe_v1
+
+      # The source monitor. True is the default; stated here because a
+      # deployment where nobody scheduled it looks identical to one where it is
+      # working, right up until the "checked" date on screen stops moving.
+      - key: WATCHTOWER_ENABLED
+        value: "true"
+
       - key: ENV
         value: prod
       - key: LOG_JSON
@@ -38,11 +97,16 @@ services:
         value: gpt-5.6-terra
       - key: OPENAI_EMBEDDING_MODEL
         value: text-embedding-3-large
+
+      # Only used if VOICE_PROVIDER is forced to `openai`. Left here so that
+      # switching back is a dashboard change; on this account neither model is
+      # entitled, and /api/health would say so rather than failing per press.
       - key: OPENAI_TRANSCRIBE_MODEL
         value: gpt-transcribe
       - key: OPENAI_TTS_MODEL
         value: gpt-4o-mini-tts
       - key: OPENAI_TTS_VOICE
         value: marin
+
       - key: DAILY_SPEND_WARN_USD
         value: "5"

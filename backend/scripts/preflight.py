@@ -70,6 +70,14 @@ def parse_args(argv=None):
     parser.add_argument(
         "--latency-ms", type=int, default=DEFAULT_LATENCY_BUDGET_MS, help="Per-question budget."
     )
+    parser.add_argument(
+        "--origin",
+        default=None,
+        help=(
+            "The frontend origin, e.g. https://scaspa-demo.vercel.app. Checks CORS "
+            "from the outside — the commonest deployment failure there is."
+        ),
+    )
     parser.add_argument("--skip-voice", action="store_true", help="Skip /api/stt and /api/tts.")
     parser.add_argument("--skip-chart", action="store_true", help="Skip the chart question.")
     parser.add_argument("--skip-ratelimit", action="store_true", help="Skip the rate-limit probe.")
@@ -184,6 +192,137 @@ def check_health(client: httpx.Client, report: Report, args) -> dict:  # noqa: A
             warn=True,
         )
     return body
+
+
+def check_cors(client: httpx.Client, report: Report, origin: str) -> None:
+    """Would a browser at `origin` be allowed to call this API?
+
+    ── THE COMMONEST DEPLOYMENT FAILURE, AND THE QUIETEST ───────────────────
+
+    `ALLOWED_ORIGINS` has no safe default and must name the real frontend. Get
+    it wrong and every request fails — but a browser will not tell JavaScript
+    that CORS was the cause, so the client sees a bare failed fetch with no
+    reason attached, and the API answers `curl` perfectly the whole time.
+
+    This asks the way a browser asks: with an `Origin` header, checking that the
+    reply names it back. `curl` without one proves nothing at all.
+    """
+    try:
+        response = client.get("/api/health", headers={"Origin": origin}, timeout=30.0)
+    except httpx.HTTPError as exc:
+        report.add("CORS allows the frontend", False, str(exc)[:60])
+        return
+
+    allowed = response.headers.get("access-control-allow-origin")
+    report.add(
+        "CORS allows the frontend",
+        allowed in (origin, "*"),
+        f"origin {origin} -> access-control-allow-origin: {allowed or '(absent)'}",
+    )
+
+    # The streaming path needs a preflight for its Content-Type, and a POST that
+    # passes on GET can still be refused here.
+    try:
+        pre = client.request(
+            "OPTIONS",
+            "/api/chat/stream",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+            timeout=30.0,
+        )
+        ok = pre.status_code < 400 and pre.headers.get("access-control-allow-origin") in (
+            origin,
+            "*",
+        )
+        report.add("CORS preflight allows streaming POST", ok, f"HTTP {pre.status_code}")
+    except httpx.HTTPError as exc:
+        report.add("CORS preflight allows streaming POST", False, str(exc)[:60])
+
+    # Retry-After is invisible to JavaScript unless exposed, and without it the
+    # client counts down from a guess — see app/main.py EXPOSED_HEADERS.
+    exposed = (response.headers.get("access-control-expose-headers") or "").lower()
+    report.add(
+        "rate-limit headers readable by the client",
+        "retry-after" in exposed,
+        f"access-control-expose-headers: {exposed or '(absent)'}",
+    )
+
+
+def check_secure_context(report: Report, base: str) -> None:
+    """The microphone needs HTTPS, and silently does nothing without it."""
+    https = base.startswith("https://")
+    local = base.startswith(("http://127.0.0.1", "http://localhost"))
+    report.add(
+        "served over HTTPS (the microphone needs it)",
+        https or local,
+        "localhost is a secure context" if local else f"{base.split('://')[0]}://",
+        warn=local,
+    )
+
+
+def check_voice_availability(body: dict, report: Report) -> None:
+    """What the backend says it can do with speech, before anyone presses.
+
+    A deployment can be perfectly healthy and still have no voice — a missing
+    entitlement, or an ElevenLabs key with no voice chosen. That is reported
+    rather than discovered by a user pressing a button that fails.
+    """
+    voice = body.get("voice")
+    if not isinstance(voice, dict):
+        report.add("voice availability reported", False, "no `voice` block — old backend?")
+        return
+
+    provider = voice.get("provider", "?")
+    if not voice.get("checked"):
+        report.add(
+            f"voice availability ({provider})",
+            True,
+            f"not determined: {voice.get('detail', '')[:70]}",
+            warn=True,
+        )
+        return
+
+    both = bool(voice.get("stt")) and bool(voice.get("tts"))
+    report.add(
+        f"voice availability ({provider})",
+        both,
+        voice.get("detail", "")[:80],
+        # Half-available is a real, honest state — the UI hides what cannot
+        # work — so it is a warning rather than a failure.
+        warn=not both,
+    )
+
+
+def check_cruise_schedule(client: httpx.Client, report: Report) -> None:
+    """Has Watchtower actually populated the store on this deployment?
+
+    The first thing a missing persistent disk breaks, and it breaks quietly:
+    the API serves, the page renders, and the schedule is simply empty with an
+    honest notice — which looks like a quiet week rather than a misconfiguration.
+    """
+    try:
+        body = client.get("/api/cruise-schedule", params={"limit": 1}, timeout=30.0).json()
+    except (httpx.HTTPError, ValueError) as exc:
+        report.add("cruise schedule retrieved", False, str(exc)[:60])
+        return
+
+    source = body.get("source", {})
+    kind = source.get("kind")
+    if kind == "unavailable":
+        report.add(
+            "cruise schedule retrieved",
+            False,
+            "never fetched — is the disk mounted and WATCHTOWER_ENABLED true?",
+        )
+        return
+    report.add(
+        "cruise schedule retrieved",
+        kind == "published",
+        f"kind={kind} total={body.get('total')} checked={source.get('as_of')}",
+    )
 
 
 def check_demo_questions(client: httpx.Client, report: Report, args) -> None:  # noqa: ANN001
@@ -370,7 +509,12 @@ def main(argv=None) -> int:
             print(f"  Warm. Cold start was {cold_ms:.0f}ms.")
             return 0
 
-        check_health(client, report, args)
+        health = check_health(client, report, args)
+        check_secure_context(report, base)
+        if args.origin:
+            check_cors(client, report, args.origin.rstrip("/"))
+        check_voice_availability(health, report)
+        check_cruise_schedule(client, report)
         check_demo_questions(client, report, args)
         check_refusal(client, report)
         if not args.skip_chart:

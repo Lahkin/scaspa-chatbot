@@ -311,17 +311,43 @@ search problem.
 The container is defined at the **repository root** (the build needs both
 `backend/` and `data/knowledge/`).
 
-### Render (from GitHub)
+**Two services.** The API and the client deploy separately, and each has to be
+told the other's address. `docs/deploy.md` has the full checklist; this is the
+short version.
+
+### The API — Render (from GitHub)
 
 1. Push this repo to GitHub.
-2. Render → **New** → **Blueprint** → select the repo. It reads `render.yaml`.
+2. Render → **New** → **Blueprint** → select the repo. It reads `render.yaml`,
+   including the disk mounted at `/app/state` that the cruise schedule lives on.
 3. In the dashboard, set these (they are `sync: false`, so they are never in git):
    - `OPENAI_API_KEY`
    - `ADMIN_SECRET` — any long random string
    - `ALLOWED_ORIGINS` — your frontend origin, e.g. `https://scaspa-demo.vercel.app`
+   - `ELEVENLABS_API_KEY` — voice runs on ElevenLabs; see `decisions.md` 0048
+   - `ELEVENLABS_VOICE_ID` — no default on purpose, it is the voice callers hear
 4. **Deploy.** The build embeds the knowledge base into the image, so it takes a
    few minutes.
-5. Verify: `uv run python scripts/preflight.py --url https://YOUR-URL`
+
+### The client — Vercel (or Netlify, Cloudflare Pages)
+
+1. New project → same repo → **root directory `frontend`**. It reads
+   `frontend/vercel.json`.
+2. Set `VITE_API_BASE_URL` to the deployed API origin, no trailing slash. This
+   and `ALLOWED_ORIGINS` name each other; if either is wrong the client fails
+   with no explanation, because browsers do not tell JavaScript that CORS was
+   the cause.
+3. Deploy, then go back and set `ALLOWED_ORIGINS` on Render to the real URL.
+
+### Verify both together
+
+```bash
+cd backend
+uv run python scripts/preflight.py --url https://YOUR-API --origin https://YOUR-FRONTEND
+```
+
+Checks CORS the way a browser asks, that voice is available and which provider
+answered, and that Watchtower has populated the store.
 
 ### Locally with Docker
 
