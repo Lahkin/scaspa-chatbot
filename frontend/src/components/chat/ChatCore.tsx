@@ -7,6 +7,7 @@ import { useHealth } from '@/features/chat/queries';
 import { Composer } from './Composer';
 import { ErrorState } from './ErrorState';
 import { MessageList } from './MessageList';
+import { PilotAvatar } from '@/components/brand/PilotAvatar';
 import { SuggestedQuestions } from './SuggestedQuestions';
 import { ThinkingIndicator } from './ThinkingIndicator';
 
@@ -194,14 +195,28 @@ function EmptyState({ variant }: { variant: ChatVariant }) {
         Both forms keep the load-bearing clause: each answer stands alone. That
         is the expectation the product cannot afford a user to form wrongly.
       */}
-      <h1
-        className={cn(
-          'font-semibold tracking-tight text-ink',
-          widget ? 'text-h3' : 'text-h1 max-lg:text-h2'
-        )}
-      >
-        {widget ? 'What do you need from the port?' : 'What do you need from the port today?'}
-      </h1>
+      {/*
+        Pilot opens the conversation, and is visibly the one doing it.
+
+        The greeting used to be a question from nobody in particular. The mark
+        beside it now says who is asking — the same thing every assistant turn
+        below does — so the first thing on screen establishes the pattern the
+        rest of the conversation follows.
+
+        No mark in the widget: at 380px it costs a line of a greeting that is
+        already shortened to fit, and the widget's own header carries Pilot.
+      */}
+      <div className="flex items-center gap-3">
+        {!widget && <PilotAvatar size={40} />}
+        <h1
+          className={cn(
+            'font-semibold tracking-tight text-ink',
+            widget ? 'text-h3' : 'text-h1 max-lg:text-h2'
+          )}
+        >
+          {widget ? 'How can I help?' : 'Good day! How can Pilot help you today?'}
+        </h1>
+      </div>
       <p className={cn('text-ink-muted', widget ? 'text-label font-normal' : 'text-body')}>
         {widget
           ? 'Ask one thing at a time. Each answer stands alone.'

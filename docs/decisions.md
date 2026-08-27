@@ -3063,3 +3063,135 @@ diff), and two chat manual checks that could not run because the checker serves
 on `http://localhost:4400` and that origin is not in `ALLOWED_ORIGINS`, so the
 page never received an answer to announce. Worth fixing so the check can pass on
 its own terms; it is a backend configuration line, not a frontend defect.
+
+## 0037 — The workspace stops explaining itself in developer terms
+
+**Status:** accepted. Stage 4 of 5 for the Pilot identity.
+**Depends on** 0035 for the mark.
+
+The three-column workspace was already the right structure, so almost nothing
+here is layout. It is about who is speaking, what the interface claims, and
+which of its own internals it puts in front of a traveller.
+
+### Pilot appears where a speaker belongs
+
+The mark now fronts every assistant turn, opens the conversation beside the
+greeting, and heads the sidebar in place of the SCASPA seal. That is the
+architecture from 0035 made visible: the Authority owns the information, Pilot
+does the talking, and the seal stays in the institutional header on the document
+pages.
+
+Decorative in every one of those places — no label. A mark announcing "Pilot"
+before each answer would make a screen reader say the name before every sentence
+it is about to read, and `AnswerAnnouncer` already says it once, in words, when
+the answer completes.
+
+The avatar's state is the message's own: thinking while tokens arrive, and the
+verified badge once the answer has settled **and** the backend reported it
+grounded. The badge is a claim about verification, so it waits for the thing it
+is claiming rather than appearing with the first token.
+
+### "1 tool used · 361 ms" was the most inside-out sentence in the product
+
+A traveller standing on a pier, deciding whether to believe a fact about a
+ferry, was being told how many function calls had run and how long they took.
+
+It is now **"How Pilot verified this"**, and what sits under the answer instead
+is the evidence: `Source: Official SCASPA website — … · Verified: 2026-07-31`,
+with a link to the row. Every word of it comes from the citation through the
+same `sourceTypeLabel` and `entryLabel` helpers the sources rail uses, so a
+source cannot be described one way beside an answer and another way in the
+panel.
+
+The timing was demoted, not deleted. It is inside the collapsed trace, where a
+reader who opened something called "How Pilot verified this" is asking exactly
+that. While tools are still running the count DOES show — "Verifying — 2 of 6
+steps" — because then it is progress rather than trivia.
+
+The footer is gated on `grounded` as well as on having a citation: an ungrounded
+answer already carries `UngroundedNotice`, and a "Verified:" line under a notice
+saying the figures could not be verified is the interface contradicting itself
+in two consecutive lines.
+
+### Diagnostics moved behind a flag
+
+`Answer time`, `records searched` and `rate-limit keys tracked` are facts about
+the machine. They sat beside every answer, next to the new verification footer —
+one evidence expander too many, and the wrong one first.
+
+Gated on `DEV` **and** `VITE_SHOW_DIAGNOSTICS`, not on `DEV` alone, and the
+reasoning is borrowed wholesale from the mock controls: the client demonstration
+runs on `npm run dev`, so anything gated on DEV alone is on screen throughout it.
+
+### The sources rail has to be earned
+
+It used to render whatever happened, so a reader who had not yet asked anything
+was given a third of a wide screen occupied by the words "Nothing to show yet".
+A permanent empty panel does not read as "sources will appear here" — it reads as
+a part of the product that is broken.
+
+The conversation holds that width until an answer earns it. The layout does move
+once, when the first cited answer lands, and that movement is the point: it is
+the evidence arriving. It happens under an answer the reader is about to start
+reading, not under their cursor, and once per conversation.
+
+### ALL CITED is aqua, and that is a semantic change
+
+It was green. Green in this product means berthed, on time, settled — an
+operational state — so a verification result was wearing the status vocabulary,
+where a reader scanning a screen could reasonably take it for another piece of
+live information.
+
+Aqua is Pilot's hue and belongs to claims about Pilot's own work. Its ink is
+`--color-ink-on-aqua`, because aqua is bright in both themes.
+
+### The navigation stopped naming its own implementation
+
+**ASSISTANT**, **OPERATIONS** and **CONDITIONAL** became **Ask Pilot** and
+**Services**. The first two are jargon; the third is not a category at all — it
+is a note to the developer that a route may not exist. "Conditional" as a
+heading above a customer's navigation is the clearest possible sign of an
+interface labelled from the inside out.
+
+Console joined Services rather than keeping a group of its own: a heading
+reading "Console" above a single item called "Console" says nothing twice. It is
+still filtered out when its route is absent, which was the only real content of
+the old label.
+
+### A person is permanently on screen
+
+`HumanHelpCard` in the sidebar foot. `EscalationBlock` already offers a number at
+the moment Pilot cannot answer, and that is right for that moment. This is a
+different job: it is there BEFORE anything goes wrong, so a traveller who is
+late, or anxious, or simply does not want to type at a machine can see that a
+person exists without first failing a conversation to find out.
+
+### A guard of mine fired on the wrong thing
+
+`pilot-brand.test.tsx` asserts nothing merges the seal into the Pilot mark. It
+matched module NAMES, and immediately reported `Composer` — which imports
+`SCASPA_PHONE_HREF`, a phone-number constant that happens to be exported from
+`ScaspaMark.tsx`, and draws no seal at all.
+
+Tightened to actual rendering. A guard that fires on a file's neighbours rather
+than on what it does is worse than no guard: it gets suppressed, and then it is
+not watching.
+
+### Verified end to end, against the running backend
+
+One real question, one real answer: the rail appeared only once there was
+evidence, two Pilot marks on screen with exactly one carrying the verified
+badge, the source footer present, "How Pilot verified this" present, and
+`Diagnostics` and "N tools used" both absent. 0 contrast failures across the
+answered conversation.
+
+809 tests. Six of them asserted the old wording and were moved to the new intent
+rather than loosened to accept either.
+
+### What this does not cover
+
+The voice control's behaviour. The button is styled with the rest of the
+composer and its logic is untouched — it already degrades honestly, announcing
+"The spoken version is not available just now" rather than breaking, which was
+confirmed while investigating the missing speech models. It is waiting on
+project access to `gpt-4o-mini-tts` and `gpt-transcribe`, not on this work.

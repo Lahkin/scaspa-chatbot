@@ -522,7 +522,7 @@ describe('the empty state', () => {
     renderWithProviders(<FullPageShell />);
 
     expect(
-      await screen.findByRole('heading', { name: 'What do you need from the port today?' })
+      await screen.findByRole('heading', { name: 'Good day! How can Pilot help you today?' })
     ).toBeInTheDocument();
 
     /*
@@ -576,7 +576,7 @@ describe('nothing writes to browser storage', () => {
     // turned off. A scroll offset is not message content — but rule 5 permits
     // only `conversation_id` there, and the rule is absolute.
     renderWithProviders(<FullPageShell />);
-    await screen.findByRole('heading', { name: 'What do you need from the port today?' });
+    await screen.findByRole('heading', { name: 'Good day! How can Pilot help you today?' });
 
     const allowed = new Set(['conversation_id']);
     const sessionKeys = Object.keys(window.sessionStorage);

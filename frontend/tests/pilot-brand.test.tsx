@@ -181,7 +181,17 @@ describe('SCASPA and Pilot are two brands', () => {
     const offenders: string[] = [];
     for (const file of globFiles('src/**/*.tsx')) {
       const source = readFileSync(resolve(PROJECT_ROOT, file), 'utf8');
-      const usesSeal = /scaspa-logo|LogoLockup|ScaspaMark/.test(source);
+      /*
+       * RENDERS the seal, not merely imports something from the file it lives
+       * in. The first version of this matched module names and immediately
+       * produced a false positive: `Composer` imports `SCASPA_PHONE_HREF`, a
+       * phone-number constant that happens to be exported from `ScaspaMark.tsx`,
+       * and was reported for merging two brand marks it does not draw.
+       *
+       * A guard that fires on a file's neighbours rather than on what it does is
+       * worse than no guard: it gets suppressed, and then it is not watching.
+       */
+      const usesSeal = /<LogoLockup|<ScaspaMark|from '@\/assets\/scaspa-logo/.test(source);
       const drawsMark = /PilotAvatar\s*\/?>|from '@\/components\/brand\/PilotAvatar'/.test(source);
       // The gallery is the one place both legitimately appear, side by side and
       // labelled as two different things.

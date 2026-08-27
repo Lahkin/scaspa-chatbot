@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from 'react';
 import { cn } from '@/lib/cn';
-import { LogoLockup } from '@/components/brand/LogoLockup';
+import { PilotBrand } from '@/components/brand/PilotBrand';
+import { HumanHelpCard } from '@/components/chat/HumanHelpCard';
 import { DataSourceCard } from '@/components/ops/DataSourceCard';
 import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -62,29 +63,40 @@ interface NavGroup {
 }
 
 /**
- * The three groups, in the handoff's order.
+ * Two groups, named for what a reader is doing rather than for how the routes
+ * were classified.
  *
- * Console and Admin are filtered out below unless the route exists. Admin has
- * no route in this build and therefore no entry — and, per §2.8, nothing in the
- * search returns it either.
+ * They used to read **ASSISTANT**, **OPERATIONS** and **CONDITIONAL**. The
+ * first two are jargon and the third is not even a category — it is a note to
+ * the developer that the route may not exist. "Conditional" as a heading above
+ * a customer's navigation is the clearest possible sign of an interface that
+ * was labelled from the inside out, and the Pilot spec names all three
+ * explicitly as things to stop showing.
+ *
+ * Console joined Services rather than keeping a group of its own, because a
+ * group heading reading "Console" above a single item called "Console" is a
+ * heading that says nothing twice. It is still filtered out below when its
+ * route does not exist — that behaviour was the only real content of the old
+ * "Conditional" label, and it is a property of the item, not something a
+ * reader needs a heading to be told.
+ *
+ * Admin has no route in this build and therefore no entry — and, per §2.8,
+ * nothing in the search returns it either.
  */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
-    label: 'Assistant',
+    label: 'Ask Pilot',
     items: [{ label: 'Chat', href: '/chat', icon: 'sparkle' }],
   },
   {
-    label: 'Operations',
+    label: 'Services',
     items: [
       { label: 'Vessels', href: '/vessels', icon: 'ship' },
       { label: 'Flights', href: '/flights', icon: 'plane' },
       { label: 'Tariffs', href: '/tariffs', icon: 'receipt' },
       { label: 'Support', href: '/support', icon: 'headset' },
+      { label: 'Console', href: '/ops', icon: 'chart' },
     ],
-  },
-  {
-    label: 'Conditional',
-    items: [{ label: 'Console', href: '/ops', icon: 'chart' }],
   },
 ];
 
@@ -163,9 +175,17 @@ export function Sidebar({
 
   return (
     <div className="flex h-full min-h-0 flex-col border-r border-border bg-surface-2 pt-4 pr-3 pb-3 pl-3">
-      {/* 1 ── the lockup, and the control that narrows the panel ───────────── */}
-      <div className="flex shrink-0 items-center gap-2 px-0.5 pb-4">
-        <LogoLockup />
+      {/* 1 ── who is talking, and the control that narrows the panel ───────── */}
+      <div className="flex shrink-0 items-start gap-2 px-0.5 pb-1">
+        {/*
+          PILOT, not the SCASPA seal.
+
+          This panel sits beside a conversation, and the thing at the top of it
+          reads as the identity of whoever is answering. That is Pilot. The
+          Authority's seal is in the institutional header on the document pages,
+          where it says who owns the service — decisions.md 0035.
+        */}
+        <PilotBrand />
 
         {/*
           `aria-expanded` + `aria-controls` describe the region it operates, so
@@ -189,6 +209,20 @@ export function Sidebar({
           </button>
         ) : null}
       </div>
+
+      {/*
+        Online, and it means the interface — not the backend.
+
+        A dot that claimed to know the server was reachable would be a claim
+        this component cannot make and would be wrong for the several seconds
+        after a connection drops. `HealthBanner` owns the real answer and says
+        so loudly when it is bad. This is the quieter thing the mock-up asks
+        for: Pilot is here and listening.
+      */}
+      <p className="flex shrink-0 items-center gap-2 px-0.5 pb-4 text-label text-ink-muted">
+        <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-positive" />
+        Online
+      </p>
 
       {/* 2 ── search ────────────────────────────────────────────────────────── */}
       <div className="shrink-0">
@@ -311,14 +345,19 @@ export function Sidebar({
         </ul>
       </div>
 
-      {/* 5 ── where the figures come from ───────────────────────────────────── */}
+      {/* 5 ── a person, permanently on screen ───────────────────────────────── */}
+      <div className="shrink-0 pt-3">
+        <HumanHelpCard />
+      </div>
+
+      {/* 6 ── where the figures come from ───────────────────────────────────── */}
       {dataSource ? (
         <div className="shrink-0 pt-3">
           <DataSourceCard source={dataSource} />
         </div>
       ) : null}
 
-      {/* 6 ── the demonstration profile, or nothing at all ──────────────────── */}
+      {/* 7 ── the demonstration profile, or nothing at all ──────────────────── */}
       {profile ? <DemoProfileRow profile={profile} /> : null}
     </div>
   );

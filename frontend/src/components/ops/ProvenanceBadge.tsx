@@ -54,6 +54,22 @@ const FILL = {
   caution: 'bg-caution text-ink-on-bright',
   critical: 'bg-critical text-ink-on-bright',
   absent: 'bg-absent text-ink-on-bright',
+  /*
+   * Pilot's own hue, and the only badge that wears it.
+   *
+   * ALL CITED is a claim about VERIFICATION, not about operations. Green in
+   * this product means berthed, on time, settled — an operational state — and
+   * borrowing it here put a verification result into the status vocabulary,
+   * where a reader scanning a screen could reasonably read it as another piece
+   * of live information.
+   *
+   * The ink is `--color-ink-on-aqua`, not `--color-ink-on-bright`: aqua is
+   * bright in BOTH themes, so its ink is dark in both, where ink-on-bright is
+   * the canvas and therefore near-white on the light ground. The approved
+   * mock-up draws this badge as white on aqua at 2.71:1; the hue is kept and
+   * the ink is the one that passes. decisions.md 0034.
+   */
+  aqua: 'bg-aqua text-ink-on-aqua',
   brand: 'bg-brand-400 text-on-navy-primary',
   /** Unfilled — the quiet surface with muted ink. The quietest of the family. */
   quiet: 'bg-surface-muted text-ink-muted',
@@ -134,7 +150,7 @@ const VOLATILITY: Record<VolatilityBadgeValue, Treatment> = {
 
 /** Whether the prose's every claim traced back to a retrieved row. */
 const GROUNDING = {
-  all: { label: 'All cited', icon: 'check', className: FILL.positive },
+  all: { label: 'All cited', icon: 'check', className: FILL.aqua },
   partial: { label: 'Partly cited', icon: 'alert', className: FILL.caution },
   none: { label: 'No source', icon: 'x', className: FILL.critical },
   unchecked: { label: 'Not checked', icon: 'info', className: FILL.quiet },
