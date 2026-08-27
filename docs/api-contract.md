@@ -625,6 +625,12 @@ Unknown values are `null`, never `0` — a client must not read "never built" as
     "embedding_model": "text-embedding-3-large",
     "web_docs": 0,
     "message": null
+  },
+  "voice": {
+    "stt": false,
+    "tts": false,
+    "checked": true,
+    "detail": "this OpenAI project has no access to gpt-transcribe, gpt-4o-mini-tts — an account entitlement, not a code fault"
   }
 }
 ```
@@ -634,6 +640,32 @@ With no index built, `status` is `degraded`, `index.ready` is `false`, and
 
 `models` appears here and **only** here. It never appears in a chat response or
 an error.
+
+### `voice` — whether speech can work at all
+
+The client cannot work this out for itself. `VITE_ENABLE_VOICE` is set by
+whoever builds the frontend and defaults to on; the speech-model entitlement
+belongs to whoever holds the API key. On a project without one, the microphone
+and the speak-aloud button were rendered for every user and failed on every
+press.
+
+Determined by listing models once an hour and looking for the two configured
+ids — free, fast, and definitive for the failure it catches, which is a `403`
+saying the project has no access to the model.
+
+**`checked: false` means carry on, not stop.** It is the backend saying it could
+not find out — no key, no network, a transient upstream — and `stt`/`tts` beside
+it are then optimistic defaults rather than findings. A client must not disable
+anything on the strength of them: hiding a working microphone because one probe
+failed is a worse and far quieter mistake than showing one that fails.
+
+**`voice` never changes `status`.** A deployment with no speech models is fully
+functional — this product answers in text — and reporting it as `degraded` would
+put a permanent amber light on a working service, which is how a status field
+stops being read.
+
+`detail` is written for an operator and names the missing models. It is never
+shown to a user; the client has its own copy for that.
 
 ---
 

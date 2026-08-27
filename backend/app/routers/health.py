@@ -15,7 +15,8 @@ from fastapi import APIRouter, Depends, Request
 
 from app.config import Settings, get_settings
 from app.rag.ingest import index_meta_path, read_index_meta
-from app.schemas import HealthResponse, IndexStatus, ModelNames
+from app.schemas import HealthResponse, IndexStatus, ModelNames, VoiceStatus
+from app.voice.availability import voice_availability
 
 router = APIRouter(tags=["health"])
 
@@ -26,6 +27,24 @@ def _models(settings: Settings) -> ModelNames:
         embedding=settings.OPENAI_EMBEDDING_MODEL,
         transcribe=settings.OPENAI_TRANSCRIBE_MODEL,
         tts=settings.OPENAI_TTS_MODEL,
+    )
+
+
+def _voice(settings: Settings) -> VoiceStatus:
+    """What this deployment can do with speech.
+
+    Deliberately does NOT influence `status`. Voice is an accessibility
+    affordance over a product whose whole job is answering in text: a
+    deployment with no speech models is fully functional, and reporting it as
+    `degraded` would put a permanent amber light on a service that is working —
+    which is how a status field stops being read.
+    """
+    availability = voice_availability(settings)
+    return VoiceStatus(
+        stt=availability.stt,
+        tts=availability.tts,
+        checked=availability.checked,
+        detail=availability.detail,
     )
 
 
@@ -60,6 +79,7 @@ async def get_health(
             request_id=getattr(request.state, "request_id", "-"),
             models=_models(settings),
             index=index,
+            voice=_voice(settings),
         )
 
     ready = meta.kb_rows_indexed > 0
@@ -83,4 +103,5 @@ async def get_health(
         request_id=getattr(request.state, "request_id", "-"),
         models=_models(settings),
         index=index,
+        voice=_voice(settings),
     )

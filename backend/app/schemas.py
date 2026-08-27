@@ -1214,6 +1214,35 @@ class IndexStatus(BaseModel):
     message: str | None = Field(default=None, description="Explanation when the index is not ready")
 
 
+class VoiceStatus(BaseModel):
+    """Whether this deployment can do voice, as `/api/health` reports it.
+
+    ## Why the client needs this and cannot work it out
+
+    `VITE_ENABLE_VOICE` is set by whoever builds the frontend; the speech-model
+    entitlement belongs to whoever holds the API key. They are different people
+    and the flag defaults to on, so the microphone was rendered for every user
+    of a project with no speech models and failed on every press.
+
+    A control that always fails is worse than an absent one — it is a promise
+    the product cannot keep, made to somebody who may be standing on a pier
+    trying to use it. This is how the backend says so before the press.
+    """
+
+    stt: bool = Field(description="Transcription is expected to work")
+    tts: bool = Field(description="Speech synthesis is expected to work")
+    checked: bool = Field(
+        description=(
+            "Whether availability was actually determined. False means `stt` and "
+            "`tts` are optimistic defaults, not findings — a client must not "
+            "disable anything on the strength of them."
+        )
+    )
+    detail: str = Field(
+        description="One line for an operator explaining the state. Never shown to a user"
+    )
+
+
 class HealthResponse(BaseModel):
     """GET /api/health payload."""
 
@@ -1224,6 +1253,7 @@ class HealthResponse(BaseModel):
     request_id: str = Field(description="Request id stamped by the request-ID middleware")
     models: ModelNames = Field(description="Configured model ids")
     index: IndexStatus = Field(description="Knowledge index status")
+    voice: VoiceStatus = Field(description="Whether speech input and output can work here")
 
 
 # -------------------------------------------------------------------- admin

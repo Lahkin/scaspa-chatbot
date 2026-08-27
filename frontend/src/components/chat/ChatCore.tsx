@@ -4,6 +4,7 @@ import { useChatSessionContext } from '@/features/chat/ChatSessionContext';
 import { setDraft } from '@/features/chat/draft';
 import { takePendingQuestion } from '@/features/chat/pending';
 import { useHealth } from '@/features/chat/queries';
+import { publishVoiceStatus } from '@/features/voice/availability';
 import { Composer } from './Composer';
 import { ErrorState } from './ErrorState';
 import { MessageList } from './MessageList';
@@ -41,6 +42,21 @@ export function ChatCore({ variant = 'full' }: { variant?: ChatVariant } = {}) {
   const health = useHealth();
   const { state, busy, offline, send, stop, dismissError, openSource, thinkingSince } =
     useChatSessionContext();
+
+  /*
+   * Publish whether voice can work, once, from the one component that already
+   * holds health.
+   *
+   * The microphone and the speak button both need it, and the speak button is a
+   * leaf rendered per assistant message — subscribing each of those to the
+   * health query would make a presentational component require a
+   * `QueryClientProvider` and put one subscription per message on screen. So
+   * they read a small external store instead, the same shape
+   * `features/voice/speech.ts` uses, and this is what writes it.
+   */
+  useEffect(() => {
+    publishVoiceStatus(health?.voice);
+  }, [health?.voice]);
 
   /**
    * A question chosen on the landing page is sent on arrival.

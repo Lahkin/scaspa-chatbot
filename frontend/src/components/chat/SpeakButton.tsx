@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from 'react';
 import { cn } from '@/lib/cn';
-import { config } from '@/lib/config';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import {
   getSpeechServerSnapshot,
@@ -9,6 +8,7 @@ import {
   stopSpeech,
   subscribeToSpeech,
 } from '@/features/voice/speech';
+import { useVoiceAvailability } from '@/features/voice/availability';
 
 /**
  * Read this answer aloud — the speak button of §3.13, all seven states.
@@ -101,7 +101,12 @@ const TREATMENT: Record<VisualState, string> = {
 export function SpeakButton({ messageId, text }: { messageId: string; text: string }) {
   const speech = useSyncExternalStore(subscribeToSpeech, getSpeechState, getSpeechServerSnapshot);
 
-  const voiceOff = !config.features.voice;
+  /*
+   * Same two gates as the microphone: the build flag says "may we", health says
+   * "can we". See `features/voice/availability.ts` — an unresolved or unchecked
+   * health report means carry on, never hide.
+   */
+  const voiceOff = !useVoiceAvailability().speak;
   const mine = speech.messageId === messageId;
   const status = mine ? speech.status : 'idle';
   const failed = mine && speech.error !== null;

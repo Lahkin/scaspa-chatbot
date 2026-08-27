@@ -625,6 +625,23 @@ export const indexStatusSchema = z.object({
   message: z.string().nullable(),
 });
 
+/**
+ * Whether this deployment can do voice.
+ *
+ * `.catch()`ed to the optimistic default as a whole, because an older backend
+ * does not send this key at all and the client must not respond by taking the
+ * microphone away from a deployment where it works. Absent means unknown, and
+ * unknown means carry on — the same rule the backend applies to a failed probe.
+ */
+export const voiceStatusSchema = z
+  .object({
+    stt: z.boolean(),
+    tts: z.boolean(),
+    checked: z.boolean(),
+    detail: z.string(),
+  })
+  .catch({ stt: true, tts: true, checked: false, detail: 'not reported by this backend' });
+
 export const healthResponseSchema = z.object({
   status: z.enum(['ok', 'degraded']),
   env: z.string(),
@@ -633,6 +650,7 @@ export const healthResponseSchema = z.object({
   request_id: z.string(),
   models: modelNamesSchema,
   index: indexStatusSchema,
+  voice: voiceStatusSchema,
 });
 
 // ── Voice ────────────────────────────────────────────────────────────────────

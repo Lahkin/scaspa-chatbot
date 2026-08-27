@@ -128,6 +128,40 @@ def _no_watchtower_in_tests():
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _no_voice_probe_in_tests():
+    """No test run may list models against the real OpenAI project.
+
+    `/api/health` now reports whether this deployment has speech models, and it
+    finds out by listing them. Every health test would therefore make a real
+    upstream call on a developer's machine — slow, billable in attention if not
+    in money, and exactly the kind of thing that works locally and behaves
+    differently in CI, where there is no key.
+
+    Seeding the cache with an *unchecked* result means no test triggers a
+    listing, and unchecked is also the honest answer for a run that never asked.
+    `tests/test_voice_availability.py` clears the cache itself, which is how the
+    probe's own behaviour still gets tested.
+
+    Same shape and same reasoning as `_no_watchtower_in_tests` above.
+    """
+    import time
+
+    from app.voice import availability
+
+    availability._cache = (
+        time.monotonic(),
+        availability.VoiceAvailability(
+            stt=True,
+            tts=True,
+            checked=False,
+            detail="not probed in tests",
+        ),
+    )
+    yield
+    availability.reset_cache()
+
+
 @pytest.fixture(autouse=True)
 def _isolate_process_state():
     """Reset the process-wide limiter and spend tracker between tests.

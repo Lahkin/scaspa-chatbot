@@ -184,10 +184,26 @@ ships are coming. Failure deliberately keeps the last good data — see
 
 Voice is an enhancement. The text path is unaffected by any voice failure.
 
-1. Microphone button does nothing → not a secure context. See §5 step 4.
-2. `/api/stt` or `/api/tts` returns 503 → provider is down. **Keep going on text.**
+**Ask health first — it now knows:**
+
+```bash
+curl -s $URL/api/health | jq .voice
+```
+
+| `voice` says | What it means |
+| --- | --- |
+| `checked: true`, `stt`/`tts` **false** | This OpenAI project has no speech-model entitlement. `detail` names the models. **An account change, not a deployment** — redeploying will not fix it, and the microphone is already hidden, so there is nothing to do live. |
+| `checked: true`, both **true** | Voice should work. A failure now is a provider problem; see step 2. |
+| `checked: false` | The backend could not find out. The controls stay visible on purpose, so voice may or may not work. |
+
+1. Microphone button is greyed with "Asking by voice is switched off" → either
+   `VITE_ENABLE_VOICE=false` in the build, or health says the models are not
+   available. The table above tells you which. **This is the designed state, not
+   a fault** — do not try to fix it during a demonstration.
+2. Microphone button does nothing at all → not a secure context. See §5 step 4.
+3. `/api/stt` or `/api/tts` returns 503 → provider is down. **Keep going on text.**
    Do not comment on it.
-3. Audio sounds wrong (a phone number read as a huge integer):
+4. Audio sounds wrong (a phone number read as a huge integer):
    ```bash
    curl -s -X POST $URL/api/tts/preview -H 'Content-Type: application/json' \
      -d '{"text":"THE ANSWER TEXT"}' | jq -r .text
