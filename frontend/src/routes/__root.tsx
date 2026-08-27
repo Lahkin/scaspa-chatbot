@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { RouteErrorBoundary } from '@/components/shells/RouteErrorBoundary';
+import { ScaspaInstitutionalHeader } from '@/components/brand/ScaspaInstitutionalHeader';
 import { createRootRoute, HeadContent, Link, Outlet, useRouterState } from '@tanstack/react-router';
 
 /**
@@ -168,37 +169,21 @@ function RootLayout() {
        * the life of the project without anything saying so. The routes are in
        * its list now.
        */}
+      {/*
+        The Authority's header.
+
+        Seal, statutory name, navigation, language and accessibility — the
+        institutional chrome, above whatever the page is. Pilot's own identity
+        appears INSIDE the page, which is the brand architecture in decisions.md
+        0035: SCASPA owns the information, Pilot does the talking.
+
+        The nav used to read "SCASPA Assistant / Chat / About / Privacy" as plain
+        text links. Privacy has moved into the footer, where a policy link
+        conventionally lives and where it is still one tap away; the header now
+        carries the three destinations the approved design names.
+      */}
       <header className="border-b border-border">
-        <nav
-          aria-label="Main"
-          className="mx-auto flex max-w-3xl items-center gap-2 px-4 text-small"
-        >
-          <Link
-            to="/"
-            className="inline-flex min-h-touch items-center rounded-sm font-semibold text-blue-700"
-          >
-            SCASPA Assistant
-          </Link>
-          <span className="flex-1" />
-          <Link
-            to="/chat"
-            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
-          >
-            Chat
-          </Link>
-          <Link
-            to="/about"
-            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
-          >
-            About
-          </Link>
-          <Link
-            to="/privacy"
-            className="inline-flex min-h-touch min-w-touch items-center justify-center rounded-sm px-2 text-ink-muted hover:text-ink"
-          >
-            Privacy
-          </Link>
-        </nav>
+        <ScaspaInstitutionalHeader />
       </header>
 
       <main
@@ -217,9 +202,20 @@ function RootLayout() {
       <footer className="border-t border-border px-4 py-4 text-center text-small text-ink-muted">
         <p>
           Not sure, or in a hurry? Call SCASPA on{' '}
-          <a href="tel:+18694658121" className="font-medium text-blue-700 underline">
+          <a href="tel:+18694658121" className="font-medium text-brand-300 underline">
             869-465-8121
           </a>
+        </p>
+        {/*
+          Privacy moved here out of the header, which the approved design gives
+          to three destinations. A policy link conventionally lives in a footer,
+          this footer is on every document page, and it is still one tap away —
+          which the phone number above it has to be as well, and is.
+        */}
+        <p className="mt-1">
+          <Link to="/privacy" className="text-ink-subtle underline">
+            Privacy
+          </Link>
         </p>
       </footer>
 

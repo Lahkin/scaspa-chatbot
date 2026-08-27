@@ -2957,3 +2957,109 @@ it into the sidebar, in front of every assistant message, and into the composer'
 generating state is stage 4. The browser title and PWA name (`Pilot | SCASPA
 Digital Guide`) are terminology and arrive in stage 5 with the rest of the
 renaming.
+
+## 0036 — The landing page becomes a gateway, and keeps the one thing worth reading
+
+**Status:** accepted. Stage 3 of 5 for the Pilot identity.
+**Depends on** 0034 (themes) and 0035 (the Pilot mark).
+
+### The shape the spec asked for, and the one place this departs from it
+
+Hero, four journeys, one call to action, four trust signals, into the
+application. "It should not require five screens of scrolling before reaching
+the assistant." The long "what it can help with" list and the full-length trust
+section are gone — compressed into the four cards and the strip, with `/about`
+still carrying the expanded version for a reader who came to find it.
+
+**The example answer stayed, against the spec's own list of sections.** It is the
+one thing on the page a visitor actually reads, it is `kb-192` as retrieved
+rather than copy, and `tests/matrix.test.tsx` guards it under T-18 because this
+page once invented a sailing time. Shortening a page by deleting its only
+verified content is the wrong trade on a product whose entire argument is that it
+does not invent things. It is one compact block and the page is still two
+screens.
+
+### The four cards ask questions the knowledge base can answer
+
+Each card sends one of the four labels already in
+`features/chat/suggestions.ts`, every one annotated there with the rows behind
+it. A card that opened a conversation and got "I do not have that" would be the
+worst possible first impression, and it is avoidable by not inventing new
+phrasings on a marketing page. `tests/landing.test.tsx` asserts every card's
+question is one the suggestion set vouches for.
+
+The question travels through the in-memory `pendingQuestion` store, not the URL —
+a query string would put it in history, in the address bar and in every
+screenshot taken during a demonstration.
+
+### The hero photograph: two exposures, chosen in JS
+
+Daylight and blue hour, the same scene. This is what `useResolvedTheme` was
+written for: a difference that is not a colour and therefore cannot be a token.
+
+A `<source media="(prefers-color-scheme: dark)">` would have been fewer lines and
+is **wrong** here — the theme can be set explicitly in `/settings`, and a media
+query cannot see that choice. A reader who picked Light on a dark phone would
+have got the light interface with the night photograph inside it.
+
+### Fitting the budget, decided by looking
+
+`scripts/bundle-budget.mjs` allows 100 kB per image and 250 kB across the build.
+The SCASPA seal already spends 45.8 kB, leaving 204 kB for four hero files
+(two themes x two widths). They come to 193 kB; the build reports 240.3 kB total.
+
+**1200 wide, not 1440, and that was settled by rendering both.** At the same
+~74 kB, 1440 needs quality 39 and visibly smears the traveller's shirt and the
+hillside buildings; 1200 holds together at quality 59. The hero occupies roughly
+900–960 CSS px at desktop, so 1200 is still comfortably over 1x. Arithmetic said
+"more pixels"; the crops said otherwise.
+
+A fixed height at desktop rather than an aspect ratio, because the two
+photographs are not the same shape — 1200x640 light, 1200x675 dark. Under
+`aspect-[...]` the column would change height when a reader switched theme,
+moving everything below it.
+
+### The accessible name was garbled, and only a browser said so
+
+The cards announced **"Ferry & NevisSchedules, terminalsand travel
+information"**. Accessible-name computation concatenates the title, the line
+break and the two description lines with no separator, so every join in the card
+produced a run-together word.
+
+Invisible on screen and invisible in jsdom, which computes no accessible name at
+all. Fixed with an explicit `aria-label` that states the name once in the order a
+listener needs it, and asserted on the attribute rather than on the computed
+name — because the test environment cannot see the thing that was wrong.
+
+### The header is the Authority's, and Privacy moved
+
+Seal, statutory name, three destinations, language, accessibility. Pilot's
+identity appears inside the page, where the product begins — the architecture
+from 0035.
+
+`Privacy` moved from the header into the footer, where a policy link
+conventionally lives and where it is still one tap away on every document page.
+The approved design gives the header three destinations and this is which three.
+
+**"EN" is a link to `/settings#language`, not a dropdown, and that is a
+departure.** `LanguagePicker` is radios rather than a `<select>` because on iOS a
+native select opens a modal wheel that does not commit until "Done" — so a reader
+picks a language, sees nothing happen, and picks it again. Rebuilding that
+control in miniature in a header would either repeat the bug or duplicate a
+solved problem in a second place, and two controls writing one preference is how
+they drift.
+
+### Verified
+
+`/` reports **0 axe violations at both mobile and desktop**, and a live audit of
+every text node against its painted background reports 0 contrast failures in
+both themes. 807 tests, lint, typecheck, build and the performance budget all
+clean.
+
+`npm run check:a11y` does report four other failures, all outside this stage:
+two `scrollable-region-focusable` on `/vessels` and `/flights` at mobile, which
+are pre-existing (neither route nor `components/ops/` appears in this branch's
+diff), and two chat manual checks that could not run because the checker serves
+on `http://localhost:4400` and that origin is not in `ALLOWED_ORIGINS`, so the
+page never received an answer to announce. Worth fixing so the check can pass on
+its own terms; it is a backend configuration line, not a frontend defect.
