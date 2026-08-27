@@ -3918,3 +3918,101 @@ at two viewports, `/cargo` included. `check:responsive` is clean on `/cargo` for
 overflow at all five widths; its remaining touch-target failures there are the
 shared sidebar and header chrome, identical on `/vessels` and `/flights`, and
 predate this work.
+
+---
+
+## 0044 — The navigation takes the brief's four groups, and 0037 was half right
+
+**Status:** accepted. Partially supersedes 0037's navigation section.
+
+### ASK PILOT · OPERATIONS · HELP · TOOLS
+
+```
+ASK PILOT      Chat
+OPERATIONS     Vessels · Flights · Tariffs · Cargo
+HELP           Contact SCASPA
+TOOLS          Console
+```
+
+Exactly §4 of the navigation brief, including the order inside OPERATIONS —
+which is not alphabetical and not the order the screens were built in.
+
+### What 0037 got right, and the one thing it did not
+
+0037 replaced **ASSISTANT**, **OPERATIONS** and **CONDITIONAL** with **Ask
+Pilot** and **Services**, on the grounds that the first two were jargon and the
+third was not a category at all: "Conditional" is a note to the developer that a
+route may not exist, and as a heading over a customer's navigation it is the
+clearest possible sign of an interface labelled from the inside out.
+
+That is right about Assistant and unarguable about Conditional. It over-reached
+on the middle one. The brief's list of things to stop showing names **SCASPA
+Assistant**, **Conditional**, **Diagnostics** and "raw developer terminology" —
+it does not name Operations, and the brief's own §4 navigation *uses* OPERATIONS
+as a heading.
+
+So this is not a reversal of a considered decision. It is the correction of a
+misreading, and it is worth being precise about which part was misread, because
+the reasoning 0037 gave was good and should survive: **the test still asserts
+that Assistant, Conditional and Diagnostics never come back.** Only Operations
+left that list.
+
+### Console gets a group, and 0037's objection is answered rather than ignored
+
+0037 folded Console into Services because "a heading reading Console above a
+single item called Console says nothing twice". Correct, and the brief resolves
+it by naming the group **TOOLS** — which says something the item does not: this
+is instrumentation, not a service a traveller came looking for.
+
+Same shape for **HELP** over a single **Contact SCASPA**. A one-item group earns
+its heading when the heading answers "what is this for" and the label does not.
+
+The remaining worry about one-item groups is an empty heading surviving on
+screen, so there is now a test for it: type a search term that matches only
+Vessels, and HELP, TOOLS and ASK PILOT disappear along with their contents.
+
+### "Contact SCASPA", not "Support"
+
+Support is what a software company calls its help desk. A traveller who wants a
+person wants to contact the Authority — and the label now says which authority,
+which matters on a page that also carries an airline's name and a cruise line's.
+
+The route is unchanged at `/support`. `tests/settings.test.tsx` checks that pair
+explicitly, so a rename that moved the label and the href apart would fail.
+
+### Not touched
+
+`ConsoleShell` still has an internal link reading "Contact support", and the
+institutional header still reads "Contact". Both are different surfaces with
+their own context and the Console has its own section in the brief (§22), which
+is a later piece of work.
+
+Nav labels are not routed through `features/i18n`; they are literals in
+`NAV_GROUPS`. That predates this change and is unchanged by it.
+
+### The suite stopped being trustworthy, and that is fixed here too
+
+Not part of the navigation work, but found by it and not worth leaving.
+
+Across the Vessels, Airport and Cargo pages the suite gained roughly thirty-five
+tests that render a **whole route**: mount the router, resolve a lazy chunk, let
+MSW answer, settle React Query. Each is comfortably fast alone. Run 857 of them
+together and a handful drifted past `findBy*`'s one-second default — **a
+different handful each run**, which is the signature of a shared budget rather
+than of any one test being wrong.
+
+Two numbers were fighting each other:
+
+| Setting | Was | Now | Why |
+| --- | --- | --- | --- |
+| `asyncUtilTimeout` | 1s (default) | 5s | The actual cause. Raising assertions one at a time as they flaked would have meant chasing them forever and would have made the number look like a property of each test. |
+| `testTimeout` | 5s (default) | 20s | A silent ceiling on every longer wait in the suite. `gallery.test.tsx` asks `findByRole` to wait 15s for a lazy chunk and `airport-information.test.tsx` waits 8s to outlast a retry policy — **neither could ever reach its own number**, because vitest killed the test at 5s first. The symptom was a test timing out well before the timeout it had been given. |
+
+Neither costs anything on a passing run: a `findBy*` resolves the moment its
+element appears, and a test ends when its assertions finish. The ceiling is only
+ever reached by something that was going to fail, where it buys five seconds
+instead of one — against a suite that had started crying wolf.
+
+Verified by five consecutive full runs with no failure but the environmental
+one (`CLAUDE_CODE_MESSAGING_TOKEN` in the developing shell's environment, which
+`config.test.ts` correctly objects to and which is not in the repository).

@@ -150,42 +150,84 @@ describe('the sidebar drawer', () => {
 // ── 3. The destinations ──────────────────────────────────────────────────────
 
 describe('the navigation', () => {
-  it('groups the destinations in words a customer would use', async () => {
+  it('groups the destinations the way the navigation brief does', async () => {
     /*
-     * These headings used to read ASSISTANT, OPERATIONS and CONDITIONAL.
+     * ── ASK PILOT · OPERATIONS · HELP · TOOLS ────────────────────────────────
      *
-     * The first two are jargon and the third is not a category at all — it is a
-     * note to the developer that the route may not exist. The Pilot spec names
-     * all three as things to stop showing, and "Conditional" above a public
-     * navigation is the clearest possible sign of an interface labelled from
+     * The headings once read ASSISTANT, OPERATIONS and CONDITIONAL. 0037
+     * replaced all three with "Ask Pilot" and "Services", judging the first two
+     * jargon and the third not a category at all — "Conditional" is a note to
+     * the developer that a route may not exist, and above a customer's
+     * navigation it is the clearest possible sign of an interface labelled from
      * the inside out.
      *
-     * Console moved into Services rather than keeping a group of its own: a
-     * heading reading "Console" above a single item called "Console" says
-     * nothing twice. It is still filtered out when its route is absent, which
-     * was the only real content of the old label.
+     * That was right about two of the three. The brief's list of things to stop
+     * showing names SCASPA Assistant, Conditional, Diagnostics and "raw
+     * developer terminology" — it does not name Operations, and the brief's own
+     * §4 navigation uses OPERATIONS as a heading. So this restores the brief's
+     * structure rather than reversing a considered decision (0044).
+     *
+     * What stays forbidden is asserted below, and it is the half of this test
+     * that matters: those three words must never reappear.
      */
     await renderSidebar();
     const nav = screen.getByRole('navigation', { name: 'Sections' });
 
-    for (const label of ['Ask Pilot', 'Services']) {
+    for (const label of ['Ask Pilot', 'Operations', 'Help', 'Tools']) {
       expect(within(nav).getByRole('heading', { name: label })).toBeInTheDocument();
     }
-    for (const gone of ['Assistant', 'Operations', 'Conditional']) {
+
+    /*
+     * The words that must not come back. "Operations" has left this list — it
+     * is a heading the brief asks for — but Assistant, Conditional and
+     * Diagnostics are still how an interface tells a customer about its own
+     * implementation.
+     */
+    for (const gone of ['Assistant', 'Conditional', 'Diagnostics', 'Services']) {
       expect(within(nav).queryByRole('heading', { name: gone })).not.toBeInTheDocument();
     }
+
     const links = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent?.trim());
     /*
      * The exact list, in order, and the exactness is the point: a nav that
      * grows an entry nobody meant to add is how "Diagnostics" and "Conditional"
-     * got in front of customers before. Cargo joined when `/cargo` was built —
-     * §4 of the navigation brief puts it in this group, and it was the last of
-     * the four facilities to get a screen because it was the only one with
-     * nothing to put on it (decisions.md 0043).
+     * got in front of customers before.
+     *
+     * "Contact SCASPA", not "Support" — support is what a software company
+     * calls its help desk, and a traveller who wants a person wants to contact
+     * the Authority.
      */
-    expect(links).toEqual(['Chat', 'Vessels', 'Flights', 'Cargo', 'Tariffs', 'Support', 'Console']);
+    expect(links).toEqual([
+      'Chat',
+      'Vessels',
+      'Flights',
+      'Tariffs',
+      'Cargo',
+      'Contact SCASPA',
+      'Console',
+    ]);
+  });
+
+  it('drops a group heading when nothing in it survives a search', async () => {
+    /*
+     * HELP and TOOLS hold one item each, so this is the shape that decides
+     * whether a one-item group is safe. 0037 folded Console into Services to
+     * avoid "a heading reading Console above a single item called Console";
+     * the brief answers that by naming the group TOOLS, which says something
+     * the item does not — but only if an empty TOOLS never survives on screen.
+     */
+    const user = userEvent.setup();
+    await renderSidebar();
+
+    await user.type(screen.getByRole('searchbox', { name: /search/i }), 'vessel');
+
+    const nav = screen.getByRole('navigation', { name: 'Sections' });
+    expect(within(nav).getByRole('heading', { name: 'Operations' })).toBeInTheDocument();
+    for (const gone of ['Ask Pilot', 'Help', 'Tools']) {
+      expect(within(nav).queryByRole('heading', { name: gone })).not.toBeInTheDocument();
+    }
   });
 
   it('has no Admin entry at all — not a disabled row, not a lock', async () => {
