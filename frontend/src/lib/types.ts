@@ -560,6 +560,52 @@ export interface CruiseScheduleResponse {
   total: number;
 }
 
+/**
+ * One confirmed answer from the knowledge base — `GET /api/guide`.
+ *
+ * ## The same rows the assistant cites, on a page instead of in a sentence
+ *
+ * A traveller opening "Airport Information" does not yet know what to ask, and
+ * a screen that tells them to go and think of a question is a screen that stays
+ * empty. So the verified rows are served directly, with their source and their
+ * verification date attached — no model is involved, so nothing here can be
+ * hallucinated.
+ *
+ * `id` is the same citation anchor the assistant uses. An answer seen here and
+ * the same answer seen in a conversation are one row, not two sources that
+ * happen to agree.
+ */
+export interface GuideEntry {
+  id: string;
+  question: string;
+  answer: string;
+  /** The SCASPA page a researcher verified this against. */
+  source_url: string;
+  /** `YYYY-MM-DD`, when it was last verified. Rendered, never hidden. */
+  as_of: string;
+  /**
+   * How fast this goes stale.
+   *
+   * Shown rather than dropped: somebody deciding whether to telephone and check
+   * is making a different decision for "rarely changes" than for "check before
+   * use", and only one of those two is a question this product can settle.
+   */
+  volatility: Volatility;
+}
+
+/** A subcategory and its answers — the researchers' grouping, not this app's. */
+export interface GuideTopic {
+  name: string;
+  entries: GuideEntry[];
+}
+
+export interface GuideResponse {
+  source: DataSource;
+  category: string;
+  topics: GuideTopic[];
+  total: number;
+}
+
 export type VesselStatus = 'at_berth' | 'en_route' | 'scheduled' | 'departed' | 'unknown';
 
 export interface VesselArrival {

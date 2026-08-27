@@ -424,6 +424,48 @@ class DataSource(BaseModel):
         return self
 
 
+# ── Published answers, served as a page ──────────────────────────────────────
+
+
+class GuideEntry(BaseModel):
+    """One confirmed knowledge-base answer, rendered on a screen.
+
+    Every field is copied from the researchers' export and nothing is composed
+    here. `id` is the same citation anchor the assistant uses, so a reader who
+    sees an answer on the Airport page and the same answer in a conversation is
+    looking at one row rather than at two sources that happen to agree.
+    """
+
+    id: str = Field(description="The knowledge-base row id, e.g. kb-053")
+    question: str
+    answer: str
+    source_url: str = Field(description="The SCASPA page this was verified against")
+    as_of: date = Field(description="When a researcher last verified it")
+    volatility: Literal["low", "medium", "high"] = Field(
+        description=(
+            "How fast this goes stale. Rendered, not hidden: a reader deciding "
+            "whether to telephone and check is making a different decision for "
+            "'rarely changes' than for 'check before use'."
+        )
+    )
+
+
+class GuideTopic(BaseModel):
+    """A subcategory and its answers — the researchers' grouping, not ours."""
+
+    name: str
+    entries: list[GuideEntry]
+
+
+class GuideResponse(BaseModel):
+    """GET /api/guide."""
+
+    source: DataSource
+    category: str
+    topics: list[GuideTopic]
+    total: int = Field(description="Confirmed answers in this category")
+
+
 # ── The published cruise schedule ────────────────────────────────────────────
 
 

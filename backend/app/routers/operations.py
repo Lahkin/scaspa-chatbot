@@ -14,7 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.ops import cruise
+from app.ops import cruise, guide
 from app.ops.source import (
     OpsSource,
     filter_flights,
@@ -30,6 +30,7 @@ from app.schemas import (
     ErrorEnvelope,
     FlightSchedulesResponse,
     GateMapResponse,
+    GuideResponse,
     MarineAdvisoriesResponse,
     OperatorProfileResponse,
     TariffQuote,
@@ -49,6 +50,46 @@ MAX_LIMIT = 100
 
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "-")
+
+
+@router.get(
+    "/guide",
+    response_model=GuideResponse,
+    summary="Confirmed SCASPA answers for one category",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_guide(
+    request: Request,
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    category: Annotated[
+        str,
+        Query(
+            max_length=40,
+            description="airport, cruise, cargo, ferry, marine, general, corporate, access",
+        ),
+    ] = "airport",
+) -> GuideResponse:
+    """The same rows the assistant retrieves from, served straight onto a page.
+
+    **No model is involved.** These are published answers copied out of the
+    researchers' verified export with their source URL and verification date
+    attached, which is why this sits beside `/api/vessels` rather than behind
+    `/api/chat` — nothing here is generated, so nothing here can be
+    hallucinated.
+
+    **`confirmed` rows only**, the same rule the index applies (CLAUDE.md rule
+    8). A page is not a lower standard than a sentence: a screen is scanned and
+    believed without the reader ever forming a question they might have doubted
+    the answer to.
+
+    An unknown category is a 200 with an empty list, not a 404. "SCASPA has
+    published nothing verified about this" is an answer, and the client draws
+    the difference from `source.kind`.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+    return guide.topics(category)
 
 
 @router.get(

@@ -24,6 +24,7 @@
 import type {
   CruiseCall,
   DataSource,
+  GuideTopic,
   Flight,
   GateAssignment,
   MarineAdvisory,
@@ -798,5 +799,60 @@ export const MOCK_CRUISE_OFFSETS: readonly (Omit<CruiseCall, 'call_date' | 'day'
     inaugural: false,
     pax: null,
     capacity: 1100,
+  },
+];
+
+// ── Published answers, as `GET /api/guide` returns them ──────────────────────
+//
+// Shaped like the real payload and worded like a fixture. The real endpoint
+// serves the researchers' verified rows, so a mock that paraphrased a genuine
+// SCASPA answer would be inventing knowledge-base content — the one thing
+// CLAUDE.md rule 5 forbids outright, and the more dangerous for looking
+// plausible.
+//
+// So the questions are shaped like real questions (the layout has to be checked
+// against the shape it will really have) and every answer says, in as many
+// words, that it is placeholder text.
+
+export const MOCK_GUIDE_TOPICS: GuideTopic[] = [
+  {
+    name: 'facilities',
+    entries: [
+      {
+        id: 'kb-901',
+        question: 'What facilities are available at the airport?',
+        answer:
+          'PLACEHOLDER — this is mock text, not a SCASPA answer. The real endpoint serves the ' +
+          "researchers' verified export. Nothing here describes the actual airport.",
+        source_url: 'https://www.scaspa.com/airport-about.html',
+        as_of: '2026-07-31',
+        volatility: 'low',
+      },
+      {
+        id: 'kb-902',
+        question: 'Is there a duty-free shop?',
+        answer: 'PLACEHOLDER — mock text. See kb-901.',
+        source_url: 'https://www.scaspa.com/airport-about.html',
+        // Deliberately much older than the others, so the per-answer date is
+        // visibly doing work rather than printing the same value everywhere.
+        as_of: '2024-05-09',
+        volatility: 'medium',
+      },
+    ],
+  },
+  {
+    name: 'parking',
+    entries: [
+      {
+        id: 'kb-903',
+        question: 'Where can I park at the airport?',
+        answer: 'PLACEHOLDER — mock text. See kb-901.',
+        source_url: 'https://www.scaspa.com/airport-about.html',
+        as_of: '2026-07-31',
+        // The cautious end of the scale, so the badge that matters most on a
+        // page of published answers is rendered by at least one fixture.
+        volatility: 'high',
+      },
+    ],
   },
 ];

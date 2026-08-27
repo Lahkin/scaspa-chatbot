@@ -21,6 +21,7 @@ import {
   errorEnvelopeSchema,
   flightSchedulesResponseSchema,
   gateMapResponseSchema,
+  guideResponseSchema,
   healthResponseSchema,
   marineAdvisoriesResponseSchema,
   operatorProfileResponseSchema,
@@ -43,6 +44,7 @@ import type {
   Facility,
   FlightSchedulesResponse,
   GateMapResponse,
+  GuideResponse,
   HealthResponse,
   MarineAdvisoriesResponse,
   OperatorProfileResponse,
@@ -490,6 +492,25 @@ function queryString(params: object): string {
  * does not page, it truncates at `limit` and reports `total`, so a caller states
  * the truncation rather than pretending to page through it.
  */
+/**
+ * `GET /api/guide` — confirmed knowledge-base answers for one category.
+ *
+ * No model is involved. These are published rows with their source and
+ * verification date attached, which is why they are fetched like operational
+ * data rather than asked for like a question.
+ */
+export async function getGuide(
+  category: string,
+  init?: { signal?: AbortSignal | undefined }
+): Promise<GuideResponse> {
+  const response = await request({
+    path: `/api/guide${queryString({ category })}`,
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(guideResponseSchema, await response.json(), 'guide');
+}
+
 export interface CruiseScheduleQuery {
   since?: string | undefined;
   until?: string | undefined;

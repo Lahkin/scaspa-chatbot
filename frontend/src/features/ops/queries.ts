@@ -3,6 +3,7 @@ import {
   getCruiseSchedule,
   getFlights,
   getGateMap,
+  getGuide,
   getMarineAdvisories,
   getOperatorProfile,
   getSupportDirectory,
@@ -22,6 +23,7 @@ import type {
   CruiseScheduleResponse,
   FlightSchedulesResponse,
   GateMapResponse,
+  GuideResponse,
   MarineAdvisoriesResponse,
   OperatorProfileResponse,
   SupportDirectory,
@@ -98,6 +100,24 @@ export function useCruiseSchedule(params: CruiseScheduleQuery = {}) {
     refetchOnWindowFocus: false,
     retry: shouldRetry,
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Published answers for a category — the Airport page's content.
+ *
+ * An hour, because this is the slowest-moving data in the product: it changes
+ * when the researchers publish a new export and the index is rebuilt, which is
+ * a deploy, not an event. Re-asking every minute would spend rate-limit slots
+ * shared with the chat path to re-learn a spreadsheet nobody has touched.
+ */
+export function useGuide(category: string) {
+  return useQuery<GuideResponse, ApiError>({
+    queryKey: ['guide', category],
+    queryFn: ({ signal }) => getGuide(category, { signal }),
+    staleTime: 60 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: shouldRetry,
   });
 }
 

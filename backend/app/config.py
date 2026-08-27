@@ -205,7 +205,19 @@ class Settings(BaseSettings):
     # the one the other was not configured for gets a bare failed fetch and no
     # reason for it — the browser will not tell JavaScript that CORS was the
     # cause. Cheap to allow both; expensive to debug.
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    #
+    # 4400 is `frontend/scripts/a11y-check.mjs`, which starts its own Vite
+    # server on that port (hardcoded, `strictPort`). It was never in this
+    # default, so two of that script's checks — "the finished answer is
+    # announced" and the citation-chip focus test — failed with a CORS error on
+    # every machine, for anyone who had not hand-edited their `.env`. They were
+    # reported as a known limitation for long enough to become furniture.
+    #
+    # Dev ports only, and this default is dev-only in effect: production must
+    # set the real origin, and a wildcard with ENV=prod refuses to boot.
+    ALLOWED_ORIGINS: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4400,http://127.0.0.1:4400"
+    )
     RATE_LIMIT_PER_MINUTE: int = Field(default=15, gt=0)
     MAX_HISTORY_TURNS: int = Field(default=6, gt=0)
     CONVERSATION_TTL_MINUTES: int = Field(default=60, gt=0)
