@@ -1229,11 +1229,46 @@ describe('the support screen', () => {
   });
 
   it('explains why it asks for nothing about the person', async () => {
-    // §6.4 is "**Required.** Without it, the absence of those fields reads as a
-    // broken form."
+    /*
+     * §6.4 is "**Required.** Without it, the absence of those fields reads as a
+     * broken form."
+     *
+     * "Pilot", not "we" — §21. The change is not cosmetic: "we" on a
+     * SCASPA-branded page reads as the Authority, and the Authority DOES hold
+     * accounts, for berthing and cargo and payments. It is Pilot that does not,
+     * and the old heading invited a reader to conclude something untrue about
+     * the organisation rather than something true about this assistant.
+     */
     renderRoute('/support');
-    expect(await screen.findByText('Why we ask for so little')).toBeInTheDocument();
+    expect(await screen.findByText('Why Pilot asks for so little')).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not require an account, login or personal profile/)
+    ).toBeInTheDocument();
     expect(screen.getByText(/takes no name, no email address/)).toBeInTheDocument();
+  });
+
+  it('does not claim the form takes no attachment while offering one', async () => {
+    /*
+     * ── THE DEFECT THIS PINS ─────────────────────────────────────────────────
+     *
+     * The notice claimed the form "takes no name, no email address, no
+     * telephone number and **no attachment**" — while `EnquiryForm` renders an
+     * "Attach this conversation" checkbox directly below it whenever the
+     * session has a conversation to attach.
+     *
+     * Both halves were written truthfully and separately, and together they
+     * told a reader one of two contradictory things. On a privacy notice that
+     * is the worst available place to be approximately right.
+     *
+     * The claim is now about what the form asks ABOUT THE PERSON, which is what
+     * it was always for, and the paragraph describing the attachment appears
+     * only when the control does.
+     */
+    renderRoute('/support');
+    await screen.findByText('Why Pilot asks for so little');
+
+    const notice = screen.getByText(/takes no name, no email address/);
+    expect(notice.textContent).not.toMatch(/no attachment/);
   });
 
   it('asks for no name, email, telephone or attachment. Ever.', async () => {
@@ -1297,6 +1332,29 @@ describe('the support screen', () => {
     expect(box).not.toBeChecked();
     // §1.4's eighth input: the consequence, not a restatement of the label.
     expect(screen.getByText(/read every question and answer in this session/)).toBeInTheDocument();
+    clearConversationId();
+  });
+
+  it('describes the attachment in the privacy notice only when it is offered', async () => {
+    /*
+     * The notice and the control have to agree in BOTH directions.
+     *
+     * Claiming the form takes "no attachment" while offering one is the defect
+     * fixed above. Describing "the box below" when there is no box is the same
+     * defect pointing the other way — a paragraph about a control that is not
+     * on the screen, on the one panel asking a reader to take a claim about
+     * their privacy on trust.
+     */
+    const withoutConversation = renderRoute('/support');
+    await screen.findByText('Why Pilot asks for so little');
+    expect(screen.queryByText(/The only thing that sends more is the box below/)).toBeNull();
+    withoutConversation.unmount();
+
+    writeConversationId('22222222-2222-4222-8222-222222222222');
+    renderRoute('/support');
+    await screen.findByText('Why Pilot asks for so little');
+    expect(screen.getByText(/The only thing that sends more is the box below/)).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: /Attach this conversation/ })).toBeInTheDocument();
     clearConversationId();
   });
 

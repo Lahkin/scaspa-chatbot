@@ -4134,3 +4134,93 @@ comfortably inside the 60-per-minute operations budget. (Dev doubles each
 through StrictMode's double mount; production does not.) The cruise table and
 its summary tiles share one request on the default range, because their query
 keys match.
+
+---
+
+## 0046 — "Why Pilot asks for so little", and a privacy notice that contradicted the control beneath it
+
+**Status:** accepted. Closes §21 of the navigation brief, and the brief itself.
+
+### Most of §21 was already built
+
+The brief asks to *keep* the emergency banner, the facility contact cards, the
+privacy explanation and the enquiry form; to head the page **Contact SCASPA**;
+to list five named facilities; and to keep **Attach this conversation** "if
+supported".
+
+All of it existed. The heading was already "Contact SCASPA", the five cards come
+from `GET /api/support/directory` with the real switchboard number and postal
+address, and the transcript attachment was built with explicit opt-in, a
+consequence line and a receipt that reports what the server actually did rather
+than what was asked for.
+
+So this is a small change, and its interest is entirely in what looking closely
+turned up.
+
+### "Pilot", not "we", and the change is not cosmetic
+
+§21 asks for the heading **"Why we ask for so little"** to become **"Why Pilot
+asks for so little"**.
+
+"We" on a SCASPA-branded page reads as the Authority — and the Authority *does*
+hold accounts, for berthing, for cargo, for payments. It is Pilot that does not.
+The old heading invited a reader to conclude something untrue about the
+organisation instead of something true about this assistant, on the one panel
+whose whole job is being believed about privacy.
+
+The brief's sentence goes in verbatim: *"Pilot does not require an account,
+login or personal profile to answer public SCASPA questions."*
+
+### The notice claimed the form takes no attachment, above a control offering one
+
+`PrivacyNotice` said the form "takes no name, no email address, no telephone
+number and **no attachment**". `EnquiryForm` renders an **Attach this
+conversation** checkbox directly beneath it, whenever the session has a
+conversation to attach.
+
+Both halves were written truthfully and separately. The notice describes a form
+that asks nothing about the person; the checkbox is an explicit, opt-in,
+clearly-consequenced choice to send this session's questions. Together they told
+a reader one of two contradictory things — and a privacy notice is the worst
+available place to be approximately right, because it is the panel a reader has
+no way to verify for themselves.
+
+The claim is now about what the form asks **about the person**, which is what it
+was always for, and the attachment is described honestly as the one thing that
+sends anything more.
+
+### And the correction had to work in both directions
+
+The obvious fix — a second paragraph describing the attachment — reintroduces
+the same defect pointing the other way, because the control renders **only when
+the session has a conversation**. A paragraph about a box that is not on the
+screen is the same failure as a box the paragraph denies.
+
+So `PrivacyNotice` takes `canAttachTranscript` and the paragraph appears with
+the control. Both directions are asserted:
+
+- the notice never says "no attachment" while the box exists;
+- the paragraph is absent on a first visit and present once there is a
+  conversation, checked by rendering the route in both states.
+
+Verified in a browser as well as in jsdom, because the condition reads
+`sessionStorage` and a test that stubs it proves less than a real session does.
+
+### Not changed
+
+The five facility names keep the backend's casing — "SCASPA — Authority
+headquarters", "Port Zante cruise terminal" — rather than the brief's title
+case. They are the published strings the API serves, the facilities are
+identical, and the product's house style is sentence case. Churning fixtures to
+match capitalisation in a brief would be a change with no reader on the other
+end of it.
+
+The extension directory the original mockup drew — "Operations Tower: Ext.
+2240", "Berthing Office: Ext. 4450", "Security Gate: Ext. 9110" — is still
+absent, and still deliberately: those numbers appear in no verified SCASPA
+source, and a wrong extension for a security gate is worse than no extension.
+
+### Verified
+
+860 frontend tests, lint, typecheck, prettier, production build, and
+`check:a11y` at 0 violations and 0 manual failures.
