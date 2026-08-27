@@ -4224,3 +4224,147 @@ source, and a wrong extension for a security gate is worse than no extension.
 
 860 frontend tests, lint, typecheck, prettier, production build, and
 `check:a11y` at 0 violations and 0 manual failures.
+
+---
+
+## 0047 — Voice: the blocker is real, and the product now says so before the press
+
+**Status:** accepted.
+
+### What I actually checked, rather than remembered
+
+"Voice is blocked on the OpenAI project lacking `gpt-4o-mini-tts` and
+`gpt-transcribe`" had been repeated for a while on the strength of one 403. It
+is worth confirming a claim that decides whether a feature ships.
+
+`/v1/models` on this key returns **nine models**:
+
+```
+gpt-4o · gpt-5.4-pro-2026-03-05 · gpt-5.5 · gpt-5.5-pro
+gpt-5.6-luna · gpt-5.6-sol · gpt-5.6-terra
+gpt-realtime-2.1-mini · text-embedding-3-large
+```
+
+Not one is a speech model. Probing the audio endpoints directly:
+
+| Model | `/v1/audio/transcriptions` | `/v1/audio/speech` |
+| --- | --- | --- |
+| `whisper-1` | 403 no access | — |
+| `gpt-4o-mini-transcribe` | 403 no access | — |
+| `tts-1` | — | 403 no access |
+| `gpt-4o-mini-tts` | — | 403 no access |
+| `gpt-realtime-2.1-mini` | 404 Invalid URL | 404 Invalid URL |
+
+The 403s carry OpenAI's own envelope — *"Project `proj_…` does not have access
+to model"* — so this is an entitlement, not a bad request.
+
+**`gpt-realtime-2.1-mini` is the only near-miss and it is not one.** It is a
+realtime speech model reached over a WebSocket, and the audio REST endpoints
+reject it outright. `frontend/CLAUDE.md` rule 1 is "there are no WebSockets", so
+adopting it is an architecture change and not a configuration one.
+
+So the blocker stands, it is an account change, and no amount of code will move
+it. What follows is everything that *can* be done without it.
+
+### The real defect was not the missing model
+
+`VITE_ENABLE_VOICE` defaults to **true** and is set by whoever builds the
+frontend. The entitlement belongs to whoever holds the API key. They are
+different people, and nothing connected them — so the microphone and the
+speak-aloud button were rendered for **every user**, and failed on **every
+press**, after a round trip and a wait, with "Voice is unavailable right now".
+
+A control that always fails is worse than an absent one. It is a promise the
+product cannot keep, offered to somebody who may be standing on a pier with a
+bag in one hand — which is the exact person `docs/api-contract.md` says voice
+exists for.
+
+### The backend now knows, and says
+
+`app/voice/availability.py` lists models once an hour and reports whether the
+two configured ids are present. `/api/health` carries a `voice` block, and the
+frontend hides the controls rather than offering them.
+
+The models list rather than a probe call, because listing is free and instant
+and definitive for exactly this failure: a 403 entitlement error, where an
+entitled model appears in the list. It cannot detect a provider outage and is
+not meant to — that is a different event with its own error path.
+
+**Unknown is not unavailable**, and that is the half worth guarding. If the list
+cannot be read — no key, no network, a transient upstream — the report is
+`checked: false` and the flags beside it are optimistic. Nothing is hidden on
+the strength of them. Taking a working microphone away because one probe failed
+is a worse mistake than the one this fixes and a far quieter one: the control
+simply stops being there, and nobody files a bug about a button they never saw.
+Asserted from both directions, in the backend and in the client.
+
+**`voice` never changes `status`.** A deployment with no speech models is fully
+functional — this product answers in text — and reporting it `degraded` would
+put a permanent amber light on a working service, which is how a status field
+stops being read.
+
+### A store, because the first design made a leaf component fetch
+
+The obvious wiring was `useHealth()` inside each control. `SpeakButton` is a
+**leaf rendered once per assistant message**, so that subscribed every message
+to the health query and made a presentational component require a
+`QueryClientProvider`.
+
+Forty-six tests that render `MessageBubble` bare broke at once, and they were
+right to: it is the same argument `Sidebar` makes about staying router-free so
+it can be tested on its own.
+
+So availability is published once by `ChatCore`, which already holds health, and
+the controls read it through `useSyncExternalStore` — the pattern
+`features/voice/speech.ts` already establishes in this codebase. The default is
+optimistic, so a component rendered with nothing published behaves exactly as it
+did before any of this existed.
+
+### Two smaller things found on the way
+
+**The health panel called both states "switched off".** Turned off in a build is
+a decision somebody can undo; no entitlement is an OpenAI project somebody has
+to go and edit. The one state that needs an account change looked like a
+setting. It now says which, and `detail` names the missing models — because
+"voice is unavailable" sends a person to read code, and "no access to
+gpt-transcribe, gpt-4o-mini-tts" sends them where the fix is.
+
+**A 403 is reported to the client as `UPSTREAM_TIMEOUT`.** `VoiceUnavailableError`
+borrows that code because the taxonomy has no voice-specific one. The
+user-facing message is already correct and voice-specific, and the frontend
+never shows a raw code — so this is a logs-and-operators problem rather than a
+user-facing one, and it is **left alone here** rather than widened into an
+error-taxonomy change on the way past. Recorded so the next person meets it
+deliberately.
+
+### The suite must not probe
+
+`/api/health` now lists models, and the health tests build the app from real
+settings — so on a developer's machine every health test would have made an
+upstream call. `tests/conftest.py` seeds the probe cache with an *unchecked*
+result for the session, which is also the honest answer for a run that never
+asked. Same shape and same reasoning as `_no_watchtower_in_tests`.
+
+### Verified
+
+Against the real key, in a browser: the microphone renders greyed and disabled
+with "Asking by voice is switched off", and `/api/health` reports
+
+```json
+"voice": { "stt": false, "tts": false, "checked": true,
+           "detail": "this OpenAI project has no access to gpt-transcribe, gpt-4o-mini-tts — an account entitlement, not a code fault" }
+```
+
+with `status` still `ok`.
+
+864 frontend tests, 667 backend, lint, typecheck, prettier, production build.
+`docs/api-contract.md` documents the field; `docs/runbook.md` §7 now starts by
+asking health and says plainly that the greyed microphone is the designed state,
+not something to fix during a demonstration.
+
+### What is still needed to ship voice
+
+An OpenAI project with access to a transcription model and a speech model.
+Nothing in this repository is in the way — set `OPENAI_TRANSCRIBE_MODEL` and
+`OPENAI_TTS_MODEL` to entitled ids and the controls appear on their own, because
+the probe will find them.

@@ -33,6 +33,7 @@ import { SpeakButton } from '@/components/chat/SpeakButton';
 import { Composer } from '@/components/chat/Composer';
 import { getDraft, resetDraft, setDraft } from '@/features/chat/draft';
 import { resetSpeech } from '@/features/voice/speech';
+import { publishVoiceStatus, resetVoiceStatus } from '@/features/voice/availability';
 import { setScenario } from '@/mocks/scenarios';
 
 afterEach(() => {
@@ -46,6 +47,70 @@ afterEach(() => {
 });
 
 // ── Task 1: the constraints ──────────────────────────────────────────────────
+
+describe('a control that cannot work is not offered', () => {
+  /*
+   * ── THE DEFECT THESE PIN ─────────────────────────────────────────────────
+   *
+   * `VITE_ENABLE_VOICE` defaults to true and is set by whoever builds the
+   * frontend. The speech-model entitlement belongs to whoever holds the API
+   * key. On this project they disagree: `/v1/models` returns nine models and
+   * not one is a speech model, so the microphone and the speak button were
+   * rendered for every user and failed on every press — after a round trip and
+   * a wait, with "Voice is unavailable right now".
+   *
+   * A control that always fails is worse than an absent one. It is a promise
+   * the product cannot keep, offered to somebody who may be standing on a pier
+   * trying to use it, and it costs them the one thing they came here short of.
+   */
+
+  afterEach(() => resetVoiceStatus());
+
+  const UNAVAILABLE = {
+    stt: false,
+    tts: false,
+    checked: true,
+    detail: 'this OpenAI project has no access to the configured speech models',
+  };
+
+  it('marks the microphone off when the backend says voice cannot work', () => {
+    publishVoiceStatus(UNAVAILABLE);
+    render(<VoiceButton onTranscript={() => {}} />);
+
+    expect(screen.getByRole('button', { name: 'Asking by voice is switched off' })).toBeDisabled();
+  });
+
+  it('marks reading aloud off for the same reason', () => {
+    publishVoiceStatus(UNAVAILABLE);
+    render(<SpeakButton messageId="m1" text="The ferry departs at noon." />);
+
+    expect(screen.getByRole('button', { name: 'Reading aloud is switched off' })).toBeDisabled();
+  });
+
+  it('leaves both alone when the backend could not find out', () => {
+    /*
+     * ── THE HALF THAT IS EASY TO GET WRONG ───────────────────────────────────
+     *
+     * `checked: false` is the backend saying it could not determine
+     * availability — no key, no network, a transient upstream. Treating that as
+     * unavailable would take a working microphone away from a deployment where
+     * it works, and do it silently: the control simply stops being there, and
+     * nobody files a bug about a button they never saw.
+     */
+    publishVoiceStatus({ stt: false, tts: false, checked: false, detail: 'could not list models' });
+    render(<SpeakButton messageId="m1" text="The ferry departs at noon." />);
+
+    expect(screen.queryByRole('button', { name: 'Reading aloud is switched off' })).toBeNull();
+  });
+
+  it('leaves both alone before the first health response arrives', () => {
+    // Nothing published yet, which is every cold load. Blinking the microphone
+    // out of the composer on arrival would be worse than the failure it avoids.
+    render(<SpeakButton messageId="m1" text="The ferry departs at noon." />);
+
+    expect(screen.queryByRole('button', { name: 'Reading aloud is switched off' })).toBeNull();
+  });
+});
 
 describe('format negotiation', () => {
   it('prefers webm-opus, then webm, then mp4 — the iOS Safari case', () => {

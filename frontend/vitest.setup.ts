@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 import { cleanup, configure } from '@testing-library/react';
 import { server } from './src/mocks/server';
 import { setScenario, setTimeScale } from './src/mocks/scenarios';
+import { resetVoiceStatus } from './src/features/voice/availability';
 
 /**
  * `findBy*` waits five seconds, not the one-second default.
@@ -46,6 +47,10 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   setScenario('happy');
+  // Module-level, like the speech store beside it. Without this a test that
+  // publishes "voice unavailable" silently hides the microphone in every test
+  // that runs after it.
+  resetVoiceStatus();
 });
 afterAll(() => server.close());
 

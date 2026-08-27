@@ -739,6 +739,15 @@ const HEALTHY: HealthResponse = {
   uptime_s: 0,
   request_id: 'gallery',
   models: { chat: 'sample-chat', embedding: 'sample-embed', transcribe: '', tts: '' },
+  // The gallery's health fixture has no transcribe or tts model, so the honest
+  // voice block is the unavailable one — which is also what this project's real
+  // key reports, and therefore the state worth having drawn.
+  voice: {
+    stt: false,
+    tts: false,
+    checked: true,
+    detail: 'this OpenAI project has no access to the configured speech models',
+  },
   index: {
     ready: false,
     kb_version: 'v0.0.0',

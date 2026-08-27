@@ -273,6 +273,37 @@ export interface HealthResponse {
   /** `models` appears here and **only** here. Never in a chat response or an error. */
   models: ModelNames;
   index: IndexStatus;
+  voice: VoiceStatus;
+}
+
+/**
+ * Whether this deployment can do voice at all.
+ *
+ * ## Why the client cannot work this out for itself
+ *
+ * `VITE_ENABLE_VOICE` is set by whoever builds the frontend and defaults to
+ * true; the speech-model entitlement belongs to whoever holds the API key.
+ * Those are different people, so the microphone was rendered for every user of
+ * a project with no speech models and failed on every press.
+ *
+ * A control that always fails is worse than an absent one — it is a promise the
+ * product cannot keep, offered to somebody who may be standing on a pier trying
+ * to use it.
+ *
+ * ## `checked: false` means carry on, not stop
+ *
+ * The backend reports that when it could not determine availability — no key,
+ * no network, a transient upstream. `stt` and `tts` are then optimistic
+ * defaults rather than findings, and nothing may be hidden on the strength of
+ * them: taking a working microphone away because one request failed is a worse
+ * and far less visible mistake than the one this exists to fix.
+ */
+export interface VoiceStatus {
+  stt: boolean;
+  tts: boolean;
+  checked: boolean;
+  /** For an operator, in the health panel. Never shown to a traveller. */
+  detail: string;
 }
 
 // ── Errors ───────────────────────────────────────────────────────────────────

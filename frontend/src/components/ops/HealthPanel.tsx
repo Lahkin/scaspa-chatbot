@@ -59,11 +59,29 @@ export function HealthPanel({
         body: 'The assistant cannot answer questions. Vessels, flights and tariffs still work.',
       });
     }
+    /*
+     * ── TWO REASONS VOICE IS OFF, AND AN OPERATOR NEEDS TO TELL THEM APART ───
+     *
+     * Switched off is a decision somebody made and can undo with a build flag.
+     * Unavailable is an OpenAI project with no speech-model entitlement, which
+     * no amount of redeploying will change — it is an account change.
+     *
+     * The panel said "switched off" for both, so the one state that needs
+     * somebody to go and edit an OpenAI project looked like a setting. The
+     * backend now reports which it is, and `detail` says exactly which models
+     * are missing.
+     */
     if (!voiceEnabled) {
       rows.push({
         tone: 'caution',
         title: 'Voice is switched off',
-        body: 'Speaking and listening are unavailable. You can still type your question.',
+        body: 'Turned off in this build. Speaking and listening are unavailable; typing works.',
+      });
+    } else if (health.voice.checked && (!health.voice.stt || !health.voice.tts)) {
+      rows.push({
+        tone: 'caution',
+        title: 'Voice is unavailable on this key',
+        body: health.voice.detail,
       });
     }
     if (rows.length === 0) {

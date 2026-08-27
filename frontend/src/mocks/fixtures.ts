@@ -409,6 +409,12 @@ export const HEALTH: HealthResponse = {
     web_docs: 0,
     message: null,
   },
+  /*
+   * Available, because the fixture describes a HEALTHY deployment and that is
+   * what the demo runs on. `tests/voice.test.tsx` overrides it to the
+   * unavailable case, which is what this project's real key reports.
+   */
+  voice: { stt: true, tts: true, checked: true, detail: 'speech models are available' },
 };
 
 /**
