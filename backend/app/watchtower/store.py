@@ -15,9 +15,9 @@ So: operational rows here, explanatory prose in Chroma, and the agent picks.
 
 The spec permits PostgreSQL and this project has no database at all today —
 Chroma keeps its own SQLite file and everything else is stateless. Introducing a
-server, a connection pool and a migration tool to hold what is currently four
-cruise calls would be the largest operational change in the project, made for
-the smallest table in it. SQLite is a file next to the Chroma one, backed up by
+server, a connection pool and a migration tool to hold what is currently a few
+hundred cruise calls would be the largest operational change in the project,
+made for the smallest table in it. SQLite is a file next to the Chroma one, backed up by
 copying it, and swappable later behind this module.
 
 ## Every row carries where it came from
