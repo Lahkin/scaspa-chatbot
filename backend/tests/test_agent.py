@@ -29,18 +29,25 @@ def indexed(sample_csv, tmp_settings, fake_embeddings):
 # ------------------------------------------------------------------- wiring
 
 
-def test_exactly_six_tools() -> None:
-    """More tools means more confusion, latency and cost. Six is the budget.
+def test_exactly_seven_tools() -> None:
+    """More tools means more confusion, latency and cost. Seven is the budget.
 
-    Was five. `show_card` is the sixth, and it earned the slot by removing a
-    worse option: without it the model's only way to help with "what is arriving
-    today" is prose, and prose about live operations is exactly what rule 10
-    forbids. A tool that attaches a board it cannot read is a narrower
-    capability than the sentence it replaces.
+    Was five, then six. `show_card` earned the sixth slot by removing a worse
+    option: without it the model's only way to help with "what is arriving
+    today" is prose, and prose about live operations is what the live-status
+    rule forbids.
+
+    `get_cruise_schedule` is the seventh and earned it the same way. The
+    published cruise calls are ROWS — dates, piers, passenger counts — and the
+    only alternative was letting the model assemble a schedule out of prose
+    retrieved from the knowledge base, which is how an invented sailing time
+    gets published. A tool that reads the Authority's own table is a narrower
+    capability than the paragraph it replaces.
     """
-    assert len(ALL_TOOLS) == 6
+    assert len(ALL_TOOLS) == 7
     assert {t.name for t in ALL_TOOLS} == {
         "search_scaspa_knowledge",
+        "get_cruise_schedule",
         "search_site_content",
         "make_chart",
         "calculate",

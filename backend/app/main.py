@@ -7,7 +7,8 @@ rag/ and voice/ — CLAUDE.md rule 7.
 import logging
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 
 from fastapi import FastAPI, Request, Response
@@ -21,6 +22,7 @@ from app.errors import AppError, ErrorCode, RateLimitedError, log_app_error
 from app.observability import JsonFormatter
 from app.routers import admin, chat, health, operations, support, voice
 from app.schemas import ErrorDetail, ErrorEnvelope
+from app.watchtower import scheduler
 
 APP_VERSION = "0.1.0"
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -168,13 +170,47 @@ def _friendly_validation_message(exc: RequestValidationError) -> str:
     return "That request could not be read. Please check it and try again."
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Start and stop the Watchtower sweep alongside the application.
+
+    ## Why the scheduler lives in the API process at all
+
+    A separate worker or a system cron would be the textbook answer, and both
+    were considered. This deployment is one container; adding a second process
+    to run one job every six hours would introduce a supervisor, a second image
+    and a second thing that can be down without anybody noticing — to replace a
+    task that is a few lines and cancels cleanly.
+
+    The two things that usually make this a bad idea are handled rather than
+    ignored: multiple workers would each run their own sweep, so
+    `scheduler_lease` in SQLite settles which one does; and the fetch is
+    blocking, so it goes to a thread instead of stalling every in-flight chat
+    stream. See app/watchtower/scheduler.py.
+
+    Nothing here is allowed to prevent the API from serving. If the task cannot
+    be created the application still comes up — a port that answers questions
+    with a stale schedule is worth much more than one that refuses to boot.
+    """
+    task = None
+    try:
+        task = scheduler.start(app.state, get_settings())
+    except Exception:
+        logger.exception("watchtower_scheduler_start_failed")
+    try:
+        yield
+    finally:
+        await scheduler.stop(task)
+
+
 def create_app() -> FastAPI:
     """Build the FastAPI application."""
     settings = get_settings()
     configure_logging(settings)
 
     app = FastAPI(
-        title="SCASPA Assistant API",
+        lifespan=lifespan,
+        title="Pilot API — SCASPA Digital Guide",
         description=(
             "Backend for the SCASPA AI assistant. Answers questions about the Deep Water "
             "Harbour (cargo), Port Zante (cruise), the Basseterre Ferry Terminal and "

@@ -273,6 +273,44 @@ export interface HealthResponse {
   /** `models` appears here and **only** here. Never in a chat response or an error. */
   models: ModelNames;
   index: IndexStatus;
+  voice: VoiceStatus;
+}
+
+/**
+ * Whether this deployment can do voice at all.
+ *
+ * ## Why the client cannot work this out for itself
+ *
+ * `VITE_ENABLE_VOICE` is set by whoever builds the frontend and defaults to
+ * true; the speech-model entitlement belongs to whoever holds the API key.
+ * Those are different people, so the microphone was rendered for every user of
+ * a project with no speech models and failed on every press.
+ *
+ * A control that always fails is worse than an absent one — it is a promise the
+ * product cannot keep, offered to somebody who may be standing on a pier trying
+ * to use it.
+ *
+ * ## `checked: false` means carry on, not stop
+ *
+ * The backend reports that when it could not determine availability — no key,
+ * no network, a transient upstream. `stt` and `tts` are then optimistic
+ * defaults rather than findings, and nothing may be hidden on the strength of
+ * them: taking a working microphone away because one request failed is a worse
+ * and far less visible mistake than the one this exists to fix.
+ */
+export interface VoiceStatus {
+  stt: boolean;
+  tts: boolean;
+  checked: boolean;
+  /** For an operator, in the health panel. Never shown to a traveller. */
+  detail: string;
+  /**
+   * Which provider answered — `openai` or `elevenlabs` — with `auto` resolved.
+   *
+   * The first thing to establish when voice misbehaves, and impossible to infer
+   * from the client, which cannot see the keys.
+   */
+  provider: string;
 }
 
 // ── Errors ───────────────────────────────────────────────────────────────────
@@ -467,8 +505,23 @@ export type StreamEventName = StreamEvent['event'];
 // endpoints serve a feed and state where it came from. A panel may therefore
 // show a berth status that the assistant will not put in a sentence.
 
-/** Where a set of records came from, and how much to trust it. */
-export type SourceKind = 'live' | 'fixture' | 'unavailable';
+/**
+ * Where a set of records came from, and how much to trust it.
+ *
+ * ## `published` is the fourth, and it exists because the other three all lie
+ *
+ * The cruise schedule is real SCASPA information that this service fetched at a
+ * stated time. Calling it `live` would be a lie — it is a snapshot taken every
+ * six hours, and a snapshot presented as live is the claim that makes every
+ * other claim on the screen worth less. Calling it `fixture` would be a worse
+ * lie in the other direction: dressing real Authority data in the sample-data
+ * warning is how readers learn to ignore that warning.
+ *
+ * So: "this is what SCASPA published, and here is when we last looked."
+ * `as_of` carries the second half and the backend's schema refuses to build a
+ * `published` source without it.
+ */
+export type SourceKind = 'live' | 'published' | 'fixture' | 'unavailable';
 
 export interface DataSource {
   kind: SourceKind;
@@ -498,6 +551,98 @@ export interface DataSource {
  */
 export type Facility =
   'deep_water_harbour' | 'port_zante' | 'basseterre_ferry_terminal' | 'rlb_airport';
+
+/**
+ * One published cruise call — `GET /api/cruise-schedule`.
+ *
+ * These are the columns of the table SCASPA publishes on
+ * `cruise-ship-schedule.html`, and nothing else. The endpoint behind it returns
+ * a great deal more — captain, pilot, agent, ship workers, records the Authority
+ * has marked hidden — and none of it has a field here, because a column this
+ * product invented would be indistinguishable on screen from one SCASPA stands
+ * behind.
+ *
+ * ## `window` is a string, and that is not laziness
+ *
+ * `'07:00 - 18:00'`, exactly as published. The page is not consistent about the
+ * format, so a parser that turned it into two timestamps would have to guess —
+ * and a guess here silently moves a sailing time. It is rendered as published
+ * and never arithmetic is done on it.
+ */
+export interface CruiseCall {
+  call_date: string;
+  /** Day name as published — `Wednesday`. Empty when the table did not say. */
+  day: string;
+  /** Time in port exactly as published. See the note above. */
+  window: string;
+  vessel: string;
+  cruise_line: string;
+  /** Berth or pier as published, e.g. `PORTZANTE`. */
+  pier: string;
+  inaugural: boolean;
+  /**
+   * **Null means unknown, and the published table writes unknown as `0`.**
+   *
+   * The parser converts it. Rendering a published `0` as "0 passengers" would
+   * state something SCASPA did not — the same class of error as a berth
+   * occupancy tile showing zero when the feed simply does not report it.
+   */
+  pax: number | null;
+  capacity: number | null;
+}
+
+export interface CruiseScheduleResponse {
+  source: DataSource;
+  calls: CruiseCall[];
+  /** Calls matching the filter before the limit, so truncation can be stated. */
+  total: number;
+}
+
+/**
+ * One confirmed answer from the knowledge base — `GET /api/guide`.
+ *
+ * ## The same rows the assistant cites, on a page instead of in a sentence
+ *
+ * A traveller opening "Airport Information" does not yet know what to ask, and
+ * a screen that tells them to go and think of a question is a screen that stays
+ * empty. So the verified rows are served directly, with their source and their
+ * verification date attached — no model is involved, so nothing here can be
+ * hallucinated.
+ *
+ * `id` is the same citation anchor the assistant uses. An answer seen here and
+ * the same answer seen in a conversation are one row, not two sources that
+ * happen to agree.
+ */
+export interface GuideEntry {
+  id: string;
+  question: string;
+  answer: string;
+  /** The SCASPA page a researcher verified this against. */
+  source_url: string;
+  /** `YYYY-MM-DD`, when it was last verified. Rendered, never hidden. */
+  as_of: string;
+  /**
+   * How fast this goes stale.
+   *
+   * Shown rather than dropped: somebody deciding whether to telephone and check
+   * is making a different decision for "rarely changes" than for "check before
+   * use", and only one of those two is a question this product can settle.
+   */
+  volatility: Volatility;
+}
+
+/** A subcategory and its answers — the researchers' grouping, not this app's. */
+export interface GuideTopic {
+  name: string;
+  entries: GuideEntry[];
+}
+
+export interface GuideResponse {
+  source: DataSource;
+  category: string;
+  topics: GuideTopic[];
+  total: number;
+}
 
 export type VesselStatus = 'at_berth' | 'en_route' | 'scheduled' | 'departed' | 'unknown';
 

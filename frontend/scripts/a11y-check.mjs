@@ -70,11 +70,13 @@ const ROUTES = [
   '/widget',
   '/vessels',
   '/flights',
+  '/cargo',
   '/tariffs',
   '/support',
   '/settings',
   '/ops/vessels',
   '/ops/flights',
+  '/ops/cargo',
   '/about-scaspa',
 ];
 const VIEWPORTS = [

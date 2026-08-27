@@ -23,9 +23,16 @@ import type { SourceKind, VesselPositionSource, Volatility } from '@/lib/types';
  * — see the derivation note on `--color-absent` in tokens.css, where the spec's
  * own "no feed" fill had to be lifted to keep it.
  *
- * The one exception is the caution fill, which is light enough that near-black
- * is not the safe ink: white measures 2.29:1 on it, so the ink there is
- * brand-700 at 6.20:1. Asserted in tests/contrast.test.ts.
+ * There used to be one exception. On the dark palette the caution fill was a
+ * bright amber, white measured 2.29:1 on it, and the ink there was brand-700.
+ * The two-theme palette removed the exception rather than doubling it: the
+ * light theme's caution is a DARK amber, on which brand-700 is 2.82:1 — so the
+ * ink that works is the one every other fill already uses.
+ *
+ * `--color-ink-on-bright` is the canvas, which means it is near-white on the
+ * light ground and near-black on the dark one. That is precisely the behaviour
+ * a saturated fill needs, in both directions, and it is why the family can now
+ * be one ink with no exception at all. Asserted in tests/contrast.test.ts.
  */
 
 interface Treatment {
@@ -44,12 +51,46 @@ interface Treatment {
 const FILL = {
   live: 'bg-live text-ink-on-bright',
   positive: 'bg-positive text-ink-on-bright',
-  caution: 'bg-caution text-brand-700',
+  caution: 'bg-caution text-ink-on-bright',
   critical: 'bg-critical text-ink-on-bright',
   absent: 'bg-absent text-ink-on-bright',
-  brand: 'bg-brand-400 text-on-navy-primary',
-  /** Unfilled — the divider colour with muted ink. The quietest of the family. */
-  quiet: 'bg-border text-ink-muted',
+  /*
+   * Pilot's own hue, and the only badge that wears it.
+   *
+   * ALL CITED is a claim about VERIFICATION, not about operations. Green in
+   * this product means berthed, on time, settled — an operational state — and
+   * borrowing it here put a verification result into the status vocabulary,
+   * where a reader scanning a screen could reasonably read it as another piece
+   * of live information.
+   *
+   * The ink is `--color-ink-on-aqua`, not `--color-ink-on-bright`: aqua is
+   * bright in BOTH themes, so its ink is dark in both, where ink-on-bright is
+   * the canvas and therefore near-white on the light ground. The approved
+   * mock-up draws this badge as white on aqua at 2.71:1; the hue is kept and
+   * the ink is the one that passes. decisions.md 0034.
+   */
+  aqua: 'bg-aqua text-ink-on-aqua',
+  /*
+   * ── THIS FILL WAS THE FAMILY'S ONE UNCHECKED EXCEPTION ────────────────────
+   *
+   * It carried `--color-on-navy-primary`, which is the ink for text ON THE NAVY
+   * — a dark ground. Here it is white-ish text on a mid-blue fill, and it
+   * measures **2.97:1 on the dark palette and 2.93:1 on the light one**. The
+   * badge is 11px semibold, so AA asks 4.5:1, and it failed in both themes.
+   *
+   * It survived because `tests/contrast.test.ts` enumerated the fills it
+   * checked and this one was not among them, and because the two badges wearing
+   * it — Operator and Calculated — are rarely on screen. PUBLISHED is not rare:
+   * it is on the cruise schedule every time anybody opens it.
+   *
+   * `--color-ink-on-bright` is the family ink and it is the one that passes:
+   * 5.86:1 dark, 4.95:1 light. The exception is removed rather than special-
+   * cased, which is what the note at the top of this file says the family is
+   * for. Asserted now in tests/contrast.test.ts alongside the others.
+   */
+  brand: 'bg-brand-400 text-ink-on-bright',
+  /** Unfilled — the quiet surface with muted ink. The quietest of the family. */
+  quiet: 'bg-surface-muted text-ink-muted',
   /** Outlined and dashed — a value that is not recorded rather than one that is. */
   dashed: 'border border-dashed border-ink-subtle text-ink-muted',
 } as const;
@@ -58,18 +99,23 @@ const FILL = {
  * `source.kind`, the badge that matters most.
  *
  * Rendered on every operations block. `unavailable` is the PRODUCTION DEFAULT —
- * SCASPA has published no feed — so "No feed" is the badge most users will
- * actually see, and it is a statement about the world rather than a fault.
+ * SCASPA has published no feed — so "Live data unavailable" is the badge most
+ * users will actually see, and it is a statement about the world rather than
+ * a fault in the product.
  *
- * ── FOUR VARIANTS, THREE OF WHICH THE WIRE CAN PRODUCE ──────────────────────
+ * ── FIVE VARIANTS, FOUR OF WHICH THE WIRE CAN PRODUCE ───────────────────────
  *
  * The handoff's Family A draws `none` and `unavailable` as two badges: `none` is
  * the neutral fill with an x reading NO FEED, `unavailable` the divider fill
  * with an info glyph reading NOT CONNECTED. `SourceKind` on the wire is
- * `live | fixture | unavailable` and has no `none`, so the fourth is drawn and
- * unreachable — the same treatment as every other blocked component in
+ * `live | published | fixture | unavailable` and has no `none`, so that one is
+ * drawn and unreachable — the same treatment as every other blocked component in
  * `08-blocked-and-forbidden.md`. It is typed here rather than on `SourceKind`
  * so that adding it cannot make a schema accept a value the backend never sends.
+ *
+ * `published` was the most recent addition and it came from the wire, not from
+ * the handoff: the cruise schedule is real SCASPA data on a six-hour snapshot,
+ * and the board had no badge that was neither a live feed nor a warning.
  *
  * Which of the two `unavailable` takes is settled by the rest of the handoff
  * rather than by the badge table: §5.7 draws the empty vessels table with "the
@@ -81,8 +127,38 @@ type SourceBadgeValue = SourceKind | 'none';
 
 const SOURCE_KIND: Record<SourceBadgeValue, Treatment> = {
   live: { label: 'Live feed', icon: 'lightning', className: FILL.live },
+  /*
+   * ── "PUBLISHED", AND DELIBERATELY NOT GREEN ─────────────────────────────
+   *
+   * Official SCASPA information, fetched at a stated time. It wears the brand
+   * fill rather than `FILL.live` or `FILL.positive` for two separate reasons.
+   *
+   * Not live, because the whole point of the fourth kind is that a six-hourly
+   * snapshot is not a feed, and two badges a shade apart would collapse that
+   * distinction on the one screen where it matters.
+   *
+   * Not positive, because green in this product means berthed, on time,
+   * settled — an operational state. Provenance is not an operational state, and
+   * borrowing the hue would put "where this came from" into the vocabulary a
+   * reader scans for "what is happening".
+   *
+   * The badge says PUBLISHED and the stamp beside it says CHECKED <when>. Both
+   * halves are required: without the second this is a badge claiming authority
+   * with no date on it, which is the failure `as_of` is mandatory to prevent.
+   */
+  published: { label: 'Published', icon: 'file', className: FILL.brand },
   fixture: { label: 'Sample data', icon: 'alert', className: FILL.caution },
-  unavailable: { label: 'No feed', icon: 'x', className: FILL.absent },
+  /*
+   * "Live data unavailable", not "No feed".
+   *
+   * "Feed" is our word for our plumbing. A traveller does not know whether
+   * SCASPA publishes a feed, and "NO FEED" in a badge reads as a fault in the
+   * thing they are looking at rather than as a description of what is and is not
+   * connected. This says what is actually true from the reader's side: the live
+   * data is not available. The panel underneath then says why, and what Pilot
+   * will not do about it.
+   */
+  unavailable: { label: 'Live data unavailable', icon: 'x', className: FILL.absent },
   none: { label: 'Not connected', icon: 'info', className: FILL.quiet },
 };
 
@@ -127,7 +203,7 @@ const VOLATILITY: Record<VolatilityBadgeValue, Treatment> = {
 
 /** Whether the prose's every claim traced back to a retrieved row. */
 const GROUNDING = {
-  all: { label: 'All cited', icon: 'check', className: FILL.positive },
+  all: { label: 'All cited', icon: 'check', className: FILL.aqua },
   partial: { label: 'Partly cited', icon: 'alert', className: FILL.caution },
   none: { label: 'No source', icon: 'x', className: FILL.critical },
   unchecked: { label: 'Not checked', icon: 'info', className: FILL.quiet },

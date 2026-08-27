@@ -76,6 +76,10 @@ class AgentTurnResult:
     answer: str
     tool_calls: list[ToolCallRecord] = field(default_factory=list)
     retrieved: dict[str, RetrievedChunk] = field(default_factory=dict)
+    # Text a tool produced from a structured official source. Figures may be
+    # verified against it; nothing in it may be cited as a kb row. See
+    # TurnContext.evidence.
+    evidence: list[str] = field(default_factory=list)
     prompt_tokens: int = 0
     completion_tokens: int = 0
     model_calls: int = 0
@@ -207,6 +211,7 @@ def _finish(context: TurnContext, answer: str, result: AgentTurnResult) -> Agent
     """Copy turn state onto the result and apply the cap substitution."""
     result.tool_calls = list(context.tool_calls)
     result.retrieved = dict(context.retrieved)
+    result.evidence = list(context.evidence)
     # Taken from the turn, not from model output: make_chart already validated
     # every figure against a retrieved row, and a card request carries no data
     # at all.

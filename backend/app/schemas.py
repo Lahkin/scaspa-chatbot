@@ -359,7 +359,22 @@ class TtsRequest(BaseModel):
 # feed. See docs/decisions.md 0020.
 
 
-SourceKind = Literal["live", "fixture", "unavailable"]
+# ── FOUR STATES, AND "PUBLISHED" IS THE NEW ONE ──────────────────────────────
+#
+# `published` is official SCASPA information that this service FETCHED at a
+# stated time — the cruise schedule off scaspa.com, say. It is neither of the
+# two things it would otherwise have to pretend to be:
+#
+#   `live`         would be a lie. A page fetched every six hours is a snapshot,
+#                  and calling a snapshot live is exactly the claim that makes
+#                  every other claim on the screen worth less.
+#   `fixture`      would be a worse lie in the other direction. This is real
+#                  SCASPA data, and dressing it in the sample-data warning
+#                  teaches readers to ignore that warning.
+#
+# The honest label is "this is what SCASPA published, and here is when we last
+# looked". `as_of` carries the second half and is not optional for this kind.
+SourceKind = Literal["live", "published", "fixture", "unavailable"]
 
 
 class DataSource(BaseModel):
@@ -395,7 +410,107 @@ class DataSource(BaseModel):
         """
         if self.kind in {"fixture", "unavailable"} and not (self.notice or "").strip():
             raise ValueError(f"a {self.kind} source must carry a notice explaining itself")
+
+        # A `published` source must say WHEN it was fetched.
+        #
+        # It carries no notice, because there is nothing to warn about — the data
+        # is real SCASPA information. What it must never do is present a
+        # six-hour-old snapshot with no date on it, which is indistinguishable
+        # from a live feed to anyone reading the screen. The timestamp IS the
+        # honesty here, so the schema refuses to build one without it rather
+        # than leaving it to whoever writes the next source.
+        if self.kind == "published" and self.as_of is None:
+            raise ValueError("a published source must carry as_of — when it was last fetched")
         return self
+
+
+# ── Published answers, served as a page ──────────────────────────────────────
+
+
+class GuideEntry(BaseModel):
+    """One confirmed knowledge-base answer, rendered on a screen.
+
+    Every field is copied from the researchers' export and nothing is composed
+    here. `id` is the same citation anchor the assistant uses, so a reader who
+    sees an answer on the Airport page and the same answer in a conversation is
+    looking at one row rather than at two sources that happen to agree.
+    """
+
+    id: str = Field(description="The knowledge-base row id, e.g. kb-053")
+    question: str
+    answer: str
+    source_url: str = Field(description="The SCASPA page this was verified against")
+    as_of: date = Field(description="When a researcher last verified it")
+    volatility: Literal["low", "medium", "high"] = Field(
+        description=(
+            "How fast this goes stale. Rendered, not hidden: a reader deciding "
+            "whether to telephone and check is making a different decision for "
+            "'rarely changes' than for 'check before use'."
+        )
+    )
+
+
+class GuideTopic(BaseModel):
+    """A subcategory and its answers — the researchers' grouping, not ours."""
+
+    name: str
+    entries: list[GuideEntry]
+
+
+class GuideResponse(BaseModel):
+    """GET /api/guide."""
+
+    source: DataSource
+    category: str
+    topics: list[GuideTopic]
+    total: int = Field(description="Confirmed answers in this category")
+
+
+# ── The published cruise schedule ────────────────────────────────────────────
+
+
+class CruiseCall(BaseModel):
+    """One scheduled cruise call, as SCASPA publishes it.
+
+    The fields are the columns of the table on
+    `scaspa.com/cruise-ship-schedule.html`, and no more than that. Nothing here
+    is derived, inferred or enriched — if SCASPA does not publish it, it is not a
+    field, because a column this service invented would be indistinguishable on
+    screen from one the Authority stands behind.
+
+    `pax` is the one that needs saying out loud: the published table carries 0
+    for calls where the passenger count is not yet known, and 0 is not the same
+    claim as "no passengers". It is kept as published and rendered as unknown.
+    """
+
+    call_date: date = Field(description="Date of the call, as published (DD/MM/YYYY on the page)")
+    day: str = Field(default="", description="Day name as published — Wed, Tue")
+    window: str = Field(
+        default="",
+        description=(
+            "Time in port exactly as published, e.g. '08:00 - 17:00'. Kept as a "
+            "string rather than parsed into two times: the page is not consistent "
+            "about the format, and a parser that guessed would silently move a "
+            "sailing time."
+        ),
+    )
+    vessel: str = Field(description="Vessel name as published")
+    cruise_line: str = Field(default="", description="Operator as published")
+    pier: str = Field(default="", description="Berth or pier as published, e.g. PORTZANTE")
+    inaugural: bool = Field(default=False, description="First call by this vessel, per the table")
+    pax: int | None = Field(
+        default=None,
+        description="Passengers as published. Null when the table published 0, which means unknown",
+    )
+    capacity: int | None = Field(default=None, description="Vessel capacity as published")
+
+
+class CruiseScheduleResponse(BaseModel):
+    """GET /api/cruise-schedule."""
+
+    source: DataSource
+    calls: list[CruiseCall]
+    total: int = Field(description="Calls matching the filter, before paging")
 
 
 VesselStatus = Literal["at_berth", "en_route", "scheduled", "departed", "unknown"]
@@ -1099,6 +1214,43 @@ class IndexStatus(BaseModel):
     message: str | None = Field(default=None, description="Explanation when the index is not ready")
 
 
+class VoiceStatus(BaseModel):
+    """Whether this deployment can do voice, as `/api/health` reports it.
+
+    ## Why the client needs this and cannot work it out
+
+    `VITE_ENABLE_VOICE` is set by whoever builds the frontend; the speech-model
+    entitlement belongs to whoever holds the API key. They are different people
+    and the flag defaults to on, so the microphone was rendered for every user
+    of a project with no speech models and failed on every press.
+
+    A control that always fails is worse than an absent one — it is a promise
+    the product cannot keep, made to somebody who may be standing on a pier
+    trying to use it. This is how the backend says so before the press.
+    """
+
+    stt: bool = Field(description="Transcription is expected to work")
+    tts: bool = Field(description="Speech synthesis is expected to work")
+    checked: bool = Field(
+        description=(
+            "Whether availability was actually determined. False means `stt` and "
+            "`tts` are optimistic defaults, not findings — a client must not "
+            "disable anything on the strength of them."
+        )
+    )
+    detail: str = Field(
+        description="One line for an operator explaining the state. Never shown to a user"
+    )
+    provider: str = Field(
+        default="openai",
+        description=(
+            "Which provider answered — `openai` or `elevenlabs` — with the `auto` "
+            "setting already resolved. Reported so nobody has to infer it from a key "
+            "they cannot see; it is the first thing to establish when voice misbehaves"
+        ),
+    )
+
+
 class HealthResponse(BaseModel):
     """GET /api/health payload."""
 
@@ -1109,6 +1261,7 @@ class HealthResponse(BaseModel):
     request_id: str = Field(description="Request id stamped by the request-ID middleware")
     models: ModelNames = Field(description="Configured model ids")
     index: IndexStatus = Field(description="Knowledge index status")
+    voice: VoiceStatus = Field(description="Whether speech input and output can work here")
 
 
 # -------------------------------------------------------------------- admin

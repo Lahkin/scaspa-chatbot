@@ -6,11 +6,13 @@
  * about any one of them, which is why they live together.
  */
 
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+
+import { PROJECT_ROOT, globFiles } from './source-files';
 
 import { DiagnosticsPanel } from '@/components/chat/DiagnosticsPanel';
 import { TranscriptionResult } from '@/components/chat/TranscriptionResult';
@@ -18,8 +20,6 @@ import { BAD_REQUEST, ERROR_COPY, copyFor } from '@/features/chat/errorCopy';
 import { MarineAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
 import { SourceNotice } from '@/components/ops/SourceNotice';
 import { RATE_LIMITS, formatCountdown, rateLimitMessage } from '@/features/chat/rateLimits';
-
-const PROJECT_ROOT = process.cwd();
 
 // ── Board 15: the diagnostics panel, and the row it is waiting on ────────────
 
@@ -296,7 +296,7 @@ describe('nothing quietly makes a mandatory notice optional', () => {
      * The one legitimate dismiss is `SourceNotice`'s live branch, which is
      * exempted by name and asserted above.
      */
-    const files = globSync('src/**/*.tsx', { cwd: PROJECT_ROOT }).filter(
+    const files = globFiles('src/**/*.tsx').filter(
       (file) =>
         !file.endsWith('SourceNotice.tsx') &&
         // The gallery is a dev catalogue that DESCRIBES these states in prose.
@@ -378,7 +378,7 @@ describe('nothing quietly makes a mandatory notice optional', () => {
 // that one event is being answered twice in different words.
 
 describe('one event, one treatment — board 22', () => {
-  const SOURCE = globSync('src/**/*.tsx', { cwd: PROJECT_ROOT }).map((file) => ({
+  const SOURCE = globFiles('src/**/*.tsx').map((file) => ({
     file,
     // Comments quote the handoff constantly, and a quoted sentence is not a
     // second rendering of it. Same reason the mandatory-notice scan strips them.
@@ -486,9 +486,21 @@ describe('one event, one treatment — board 22', () => {
      * blank cards instead, so the same event had two treatments — and the one
      * that dissolved the table moved every column twice.
      */
-    // Every caller of the console's list state hands it the headings, so the
-    // loading case is `TableSkeleton` rather than the card placeholders.
-    const callers = SOURCE.filter((entry) => /<OpsListState/.test(entry.code));
+    /*
+     * This used to scan `<OpsListState`, the console's own list-state component,
+     * and check that every caller handed it `columns` so the loading case fell
+     * to `TableSkeleton` rather than to blank cards.
+     *
+     * `OpsListState` no longer exists. The console stopped drawing its own
+     * tables — it renders the same sections the public screens do (0045) — and
+     * that left the component with no callers at all, which is how this
+     * assertion found it.
+     *
+     * The RULE is unchanged and so is this test's job: wherever a table is
+     * loading, the headings stay. `TableSkeleton` is now the only thing that
+     * draws that state, so it is the thing to scan.
+     */
+    const callers = SOURCE.filter((entry) => /<TableSkeleton/.test(entry.code));
     expect(callers.length).toBeGreaterThan(0);
     for (const caller of callers) {
       expect(/columns=\{/.test(caller.code), caller.file).toBe(true);

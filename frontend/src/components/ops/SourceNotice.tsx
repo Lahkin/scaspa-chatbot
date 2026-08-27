@@ -102,7 +102,13 @@ const STAMP = new Intl.DateTimeFormat('en-GB', {
 function stamp(kind: DataSource['kind'], asOf: string): string {
   const when = new Date(asOf);
   const text = Number.isNaN(when.getTime()) ? asOf : STAMP.format(when);
-  return kind === 'unavailable' ? `last known ${text}` : `as of ${text}`;
+  if (kind === 'unavailable') return `last known ${text}`;
+  // "checked", not "as of". A published snapshot's timestamp is the moment
+  // Pilot last LOOKED at SCASPA's page, which is not the moment SCASPA last
+  // changed it — and "as of" invites the second reading. The distinction is
+  // the whole reason `published` is not `live`.
+  if (kind === 'published') return `checked ${text}`;
+  return `as of ${text}`;
 }
 
 /**
@@ -126,7 +132,7 @@ export function SourceAge({ source }: { source: DataSource }) {
 
   return (
     <span className="text-caption text-ink-muted">
-      {source.label} · as of{' '}
+      {source.label} · {source.kind === 'published' ? 'checked' : 'as of'}{' '}
       <time dateTime={source.as_of} className="tabular">
         {STAMP.format(when)}
       </time>

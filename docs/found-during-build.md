@@ -45,6 +45,61 @@ contract shape, the sourcing and the design deviation it would need.
 
 ---
 
+## From the operations pages (Watchtower, Vessels, Airport, Cargo)
+
+Findings from building `/vessels`, `/flights` and `/cargo` against the real
+SCASPA site and the real knowledge base.
+
+### 1. SCASPA's cargo FAQ points at a table the page does not contain
+
+`scaspa.com/cargo.html`, inspected in a browser for the `/cargo` build (a second
+look after the one recorded in `decisions.md` 0039, which reached the same
+conclusion from the served HTML).
+
+The page's own FAQ asks **"How do I Check my Cargo Status"** and answers:
+
+> If you know the agent or name of the vessel, you can conduct a search in the
+> search field located at the top right of the Cargo Info table.
+
+**There is no Cargo Info table on that page.** Measured in the live DOM: five
+`<table>` elements, every one a Weebly `wsite-multicol-table` layout block with
+no `<th>` and no data rows; zero `<input>`, `<select>` or `<textarea>`; no
+`<iframe>`; no embedded JSON; 1,156 characters of body text in total. The only
+XHR calls are the site platform's own `CustomerAccounts` and `Membership` RPCs.
+
+Its second FAQ question, **"Is the information updated regularly"**, has no
+answer at all — the field is empty.
+
+So a shipping agent following the Authority's own published instructions reaches
+a dead end. **A question for the client**: was the Cargo Info table removed, is
+it behind a login, or was it never deployed? Pilot's `/cargo` page says plainly
+that cargo status is not published online and routes the reader to the
+telephone, which is the honest thing to do in the meantime — but it is the
+Authority's own page that is currently misleading, and only SCASPA can fix that.
+
+### 2. The public email address is readable on the site after all
+
+`frontend/src/lib/scaspa-facts.ts` carries a **PENDING CLIENT ITEM** saying the
+email "cannot be read off the site" because scaspa.com obfuscates it against
+scrapers, and `SCASPA_EMAIL` is `null` so that `AboutScaspa` omits the row
+rather than inventing a plausible `info@` that might bounce. That reasoning was
+right when it was written.
+
+It is now readable. The cargo page's footer renders **`info@scaspa.com`** in
+plain text once Cloudflare's `email-decode.min.js` has run — which is to say,
+for any ordinary visitor with JavaScript on.
+
+The blocker was "we cannot verify it without guessing", and that no longer
+holds: it is on the page, in the footer, on the Authority's own site. Setting
+`SCASPA_EMAIL` is a one-line change and nothing else has to move.
+
+**Not done here**, because it touches the Support and About screens rather than
+cargo, and because the researchers may prefer to confirm the address is
+monitored before the product starts sending people to it — which was the
+original worry, and is a different question from whether it can be read.
+
+---
+
 ## From M5
 
 ### 28. Answer register — **THE FIRST POST-DEMO ITEM. Do not touch it before the demo.**
@@ -770,6 +825,19 @@ premise is "verified SCASPA information".
 Only one, `kb-045` ("What is the airport code for St. Kitts?"), is `confirmed`,
 so exactly one confirmed row is lost. **A question for the researchers**: source
 that fact from an official page, or accept the loss.
+
+**Update — the loss is now visible to users.** When this was written the only
+consequence was one row missing from the index, which showed up as the assistant
+being unable to answer a question nobody might ask. `GET /api/guide` now renders
+confirmed rows straight onto the Airport Information page, so the airport
+section shows **18 answers where the export contains 19 confirmed rows**, and
+the missing one is "What is the airport code for St. Kitts?" — a question a
+traveller is quite likely to have, on a page that otherwise looks complete.
+
+Nothing about the diagnosis changes: the enum is right to refuse a Wikipedia
+source, and widening it to admit `reference` would let third-party content onto
+a page badged **PUBLISHED**, which is worse than the gap. The fix is still the
+researchers': find `SKB`/`TKPK` on an official page and re-source the row.
 
 ### 8. The plan's `kb_rows_indexed == 116` gate was arithmetically wrong
 

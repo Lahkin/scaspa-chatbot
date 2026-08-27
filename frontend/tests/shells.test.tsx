@@ -54,12 +54,20 @@ describe('FullPageShell', () => {
     expect(row).not.toBeNull();
   });
 
-  it('has one main landmark and a labelled sources region', () => {
+  it('has one main landmark, and no sources region until there is evidence', () => {
+    /*
+     * The docked column used to render whatever happened, so a reader who had
+     * not asked anything yet was given a third of a wide screen occupied by the
+     * words "Nothing to show yet". A permanent empty panel does not read as
+     * "sources will appear here" — it reads as a broken part of the product.
+     *
+     * The conversation holds that width until an answer earns it. Below xl the
+     * panel is a sheet rather than a column, which is why one component serves
+     * both and there is no second copy to drift.
+     */
     render(<FullPageShell />);
     expect(screen.getAllByRole('main')).toHaveLength(1);
-    // The docked panel is present in the DOM and hidden by CSS below lg, which is
-    // why the sheet is the same component rather than a second copy.
-    expect(screen.getByRole('complementary', { name: 'Sources' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Sources' })).not.toBeInTheDocument();
   });
 
   it('offers a way to a person from the header, not buried in a footer', () => {
@@ -169,9 +177,7 @@ describe('WidgetShell', () => {
     render(<WidgetShell />);
     // 20/28 rather than 30/38, and the copy shortens with it — eight chips and
     // a four-line greeting are most of a 480px panel.
-    expect(
-      await screen.findByRole('heading', { name: 'What do you need from the port?' })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'How can I help?' })).toBeInTheDocument();
     expect(screen.getByText(/Each answer stands alone/)).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /Clearing cargo through customs/ })

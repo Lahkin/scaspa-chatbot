@@ -1,7 +1,9 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import {
+  getCruiseSchedule,
   getFlights,
   getGateMap,
+  getGuide,
   getMarineAdvisories,
   getOperatorProfile,
   getSupportDirectory,
@@ -11,14 +13,17 @@ import {
   requestTariffQuote,
   submitSupportTicket,
   type ApiError,
+  type CruiseScheduleQuery,
   type FlightQuery,
   type TariffQuery,
   type VesselQuery,
 } from '@/lib/api';
 import { shouldRetry } from '@/features/chat/queries';
 import type {
+  CruiseScheduleResponse,
   FlightSchedulesResponse,
   GateMapResponse,
+  GuideResponse,
   MarineAdvisoriesResponse,
   OperatorProfileResponse,
   SupportDirectory,
@@ -70,6 +75,52 @@ const STALE_MS = 60_000;
  * honest picture — those are rows, just not yet the filtered ones — and
  * `isPlaceholderData` marks the difference for anything that needs it.
  */
+/**
+ * The published SCASPA cruise schedule.
+ *
+ * ## Why this one is stale for fifteen minutes and the feeds are stale for one
+ *
+ * Watchtower fetches the source every six hours, so a client that re-asked
+ * every sixty seconds would receive the same six-hour-old snapshot 360 times
+ * and spend 360 rate-limit slots doing it — slots shared with the chat path,
+ * which is the surface a user actually notices. Fifteen minutes still catches a
+ * Watchtower run within a quarter of an hour of it landing, which is well
+ * inside the resolution of a schedule published in whole days.
+ *
+ * `keepPreviousData` for the same reason as the tables below: the range
+ * control and the search box are part of the query key, so changing either is a
+ * genuinely new query, and without this the control the reader is operating
+ * unmounts underneath them.
+ */
+export function useCruiseSchedule(params: CruiseScheduleQuery = {}) {
+  return useQuery<CruiseScheduleResponse, ApiError>({
+    queryKey: ['cruise-schedule', params],
+    queryFn: ({ signal }) => getCruiseSchedule(params, { signal }),
+    staleTime: 15 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: shouldRetry,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Published answers for a category — the Airport page's content.
+ *
+ * An hour, because this is the slowest-moving data in the product: it changes
+ * when the researchers publish a new export and the index is rebuilt, which is
+ * a deploy, not an event. Re-asking every minute would spend rate-limit slots
+ * shared with the chat path to re-learn a spreadsheet nobody has touched.
+ */
+export function useGuide(category: string) {
+  return useQuery<GuideResponse, ApiError>({
+    queryKey: ['guide', category],
+    queryFn: ({ signal }) => getGuide(category, { signal }),
+    staleTime: 60 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: shouldRetry,
+  });
+}
+
 export function useVessels(params: VesselQuery = {}) {
   return useQuery<VesselArrivalsResponse, ApiError>({
     queryKey: ['vessels', params],

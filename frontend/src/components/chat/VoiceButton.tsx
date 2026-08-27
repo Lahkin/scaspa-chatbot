@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
-import { config } from '@/lib/config';
 import { ApiError, transcribeAudio } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 import { useRecorder } from '@/features/voice/useRecorder';
+import { useVoiceAvailability } from '@/features/voice/availability';
 import { MAX_RECORDING_MS } from '@/features/voice/capabilities';
 import { TranscriptionResult, type TranscriptionState } from './TranscriptionResult';
 
@@ -78,8 +78,20 @@ export function VoiceButton({ onTranscript }: VoiceButtonProps) {
     [onTranscript]
   );
 
+  /*
+   * `canTranscribe` and not `config.features.voice`, which was the whole of the
+   * gate and is only half the question. The flag is "may we"; the backend's
+   * health report is "can we" — on a project with no speech models the answer
+   * is no, and the microphone used to be rendered anyway and fail on every
+   * press after a round trip and a wait.
+   *
+   * The recorder's own `capability.reason === 'disabled'` branch already draws
+   * the off state and labels it, so nothing below this line changes.
+   */
+  const voice = useVoiceAvailability();
+
   const recorder = useRecorder({
-    enabled: config.features.voice,
+    enabled: voice.transcribe,
     onComplete: handleComplete,
     onError: () => setResult({ kind: 'unavailable' }),
   });
@@ -238,7 +250,7 @@ const TREATMENT: Record<Visual, string> = {
    * `tests/contrast.test.ts` reads a line at a time — a dark brand step as text
    * is legitimate only when the same element supplies the light fill.
    */
-  ending: 'bg-caution text-brand-700',
+  ending: 'bg-caution text-ink-on-bright',
   denied: 'border border-critical-edge bg-critical-tint text-critical-text',
   off: 'border border-dashed border-border disabled:text-ink-disabled',
 };

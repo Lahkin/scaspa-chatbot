@@ -9,10 +9,12 @@ berth status while the assistant continues to refuse to claim one.
 """
 
 import logging
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from app.ops import cruise, guide
 from app.ops.source import (
     OpsSource,
     filter_flights,
@@ -24,9 +26,11 @@ from app.ops.source import (
 from app.ops.tariffs import build_quote, total_of
 from app.ratelimit import RateLimiter, get_rate_limiter
 from app.schemas import (
+    CruiseScheduleResponse,
     ErrorEnvelope,
     FlightSchedulesResponse,
     GateMapResponse,
+    GuideResponse,
     MarineAdvisoriesResponse,
     OperatorProfileResponse,
     TariffQuote,
@@ -46,6 +50,78 @@ MAX_LIMIT = 100
 
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "-")
+
+
+@router.get(
+    "/guide",
+    response_model=GuideResponse,
+    summary="Confirmed SCASPA answers for one category",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_guide(
+    request: Request,
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    category: Annotated[
+        str,
+        Query(
+            max_length=40,
+            description="airport, cruise, cargo, ferry, marine, general, corporate, access",
+        ),
+    ] = "airport",
+) -> GuideResponse:
+    """The same rows the assistant retrieves from, served straight onto a page.
+
+    **No model is involved.** These are published answers copied out of the
+    researchers' verified export with their source URL and verification date
+    attached, which is why this sits beside `/api/vessels` rather than behind
+    `/api/chat` — nothing here is generated, so nothing here can be
+    hallucinated.
+
+    **`confirmed` rows only**, the same rule the index applies (CLAUDE.md rule
+    8). A page is not a lower standard than a sentence: a screen is scanned and
+    believed without the reader ever forming a question they might have doubted
+    the answer to.
+
+    An unknown category is a 200 with an empty list, not a 404. "SCASPA has
+    published nothing verified about this" is an answer, and the client draws
+    the difference from `source.kind`.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+    return guide.topics(category)
+
+
+@router.get(
+    "/cruise-schedule",
+    response_model=CruiseScheduleResponse,
+    summary="Published SCASPA cruise calls",
+    responses={429: {"model": ErrorEnvelope, "description": "Too many requests"}},
+)
+async def get_cruise_schedule(
+    request: Request,
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    since: Annotated[date | None, Query(description="First call date, inclusive")] = None,
+    until: Annotated[date | None, Query(description="Last call date, inclusive")] = None,
+    vessel: Annotated[str | None, Query(max_length=80, description="Vessel name contains")] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> CruiseScheduleResponse:
+    """Cruise calls as SCASPA publishes them.
+
+    **200 with an empty list when there are no calls in the window**, which is
+    an ordinary answer rather than an error: there are days with no cruise ship
+    in port and the honest response is to say so. `source.kind` tells the two
+    apart — `published` with zero calls means SCASPA has published none for
+    those dates, `unavailable` means Pilot has not managed to retrieve the
+    schedule at all.
+
+    The source is never `live`. It is fetched every six hours by Watchtower and
+    `source.as_of` says when — see `app/ops/cruise.py`.
+    """
+    from app.routers.chat import enforce_rate_limit
+
+    enforce_rate_limit(request, limiter, scope="ops")
+    return cruise.schedule(since=since, until=until, vessel=vessel, limit=limit)
 
 
 @router.get(

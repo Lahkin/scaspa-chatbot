@@ -42,6 +42,11 @@ def parse_args(argv=None):
         action="store_true",
         help="Print the sanitised speech text and exit. No provider calls.",
     )
+    parser.add_argument(
+        "--voices",
+        action="store_true",
+        help="List the ElevenLabs account's voices with their ids, and exit.",
+    )
     return parser.parse_args(argv)
 
 
@@ -51,8 +56,71 @@ def show(label: str, value: str) -> None:
     print(value)
 
 
+def list_voices() -> int:
+    """Print the account's voices, so a human can choose one.
+
+    ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
+
+    `ELEVENLABS_VOICE_ID` has no default, deliberately. Picking one in source
+    would choose an accent, a gender and a register for a Caribbean port
+    authority on the strength of whatever a developer saw first in a list —
+    and it is the voice every caller hears.
+
+    So the choice belongs to somebody entitled to make it, and this is what
+    hands them the options. Until one is set, `/api/health` reports synthesis as
+    unavailable and the speak-aloud control is not drawn: a half-configured
+    provider is not offered as a working one.
+
+    Runs in-process against `.env` rather than against a running server, because
+    it is a configuration question and answering it should not need the API up.
+    """
+    from app.config import get_settings
+    from app.voice.provider import VoicesNotPermitted, elevenlabs_voices
+
+    settings = get_settings()
+    if not settings.ELEVENLABS_API_KEY.strip():
+        print("ELEVENLABS_API_KEY is not set in backend/.env", file=sys.stderr)
+        return 1
+
+    try:
+        voices = elevenlabs_voices(settings)
+    except VoicesNotPermitted as exc:
+        # The common case with a properly-scoped key, and NOT a failure: this
+        # key can synthesise and transcribe and simply may not enumerate voices.
+        print(f"cannot list voices: {exc}", file=sys.stderr)
+        print(file=sys.stderr)
+        print("Voices are on the ElevenLabs dashboard: Voices -> the voice -> ID.", file=sys.stderr)
+        print("Then set it in backend/.env:", file=sys.stderr)
+        print(file=sys.stderr)
+        print("    ELEVENLABS_VOICE_ID=<id>", file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001 — a CLI reports rather than raises
+        print(f"could not reach ElevenLabs: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
+    if not voices:
+        print("this account has no voices")
+        return 1
+
+    current = settings.ELEVENLABS_VOICE_ID.strip()
+    print(f"{len(voices)} voice(s) on this account:")
+    print()
+    for voice_id, name in voices:
+        marker = "  <- ELEVENLABS_VOICE_ID" if voice_id == current else ""
+        print(f"  {voice_id}  {name}{marker}")
+    if not current:
+        print()
+        print("Set one in backend/.env:")
+        print()
+        print("    ELEVENLABS_VOICE_ID=<id from above>")
+    return 0
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
+
+    if args.voices:
+        return list_voices()
 
     if not args.audio and not args.text:
         print("error: give an audio file, or --text to skip STT", file=sys.stderr)

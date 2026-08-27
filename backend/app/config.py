@@ -54,10 +54,37 @@ class _EnvFile(DotEnvSettingsSource):
         return {key: value for key, value in super().__call__().items() if not _is_unset(value)}
 
 
+def _dotenv_disabled(dotenv_settings: PydanticBaseSettingsSource) -> bool:
+    """Whether the caller passed `_env_file=None`, meaning "read no file".
+
+    `_env_file` is consumed before the custom sources run and does not survive
+    into `init_kwargs`, and `config["env_file"]` is the CLASS default in both
+    cases. The per-call value lands on the dotenv source's own `env_file`
+    attribute, which `model_config` declares a default for purely so that
+    `None` there is distinguishable from "never configured".
+
+    Defensive about the shape, because it is a detail of the library — and the
+    asymmetry matters: a wrong answer this way costs test isolation, while a
+    wrong answer the other way would stop production reading `.env` at all and
+    take the API key with it. So anything unexpected reads as "not disabled".
+    """
+    if not hasattr(dotenv_settings, "env_file"):
+        return False
+    return dotenv_settings.env_file is None
+
+
 class Settings(BaseSettings):
     """Single source of configuration truth for the backend."""
 
     model_config = SettingsConfigDict(
+        # Declared so that `_env_file=None` is DISTINGUISHABLE from the default.
+        #
+        # The files are actually read by the `_EnvFile` sources below, which
+        # filter blanks; pydantic's own dotenv source is not returned and so
+        # never used. This exists purely as the sentinel: without it,
+        # `config["env_file"]` is None whether or not the caller asked for
+        # isolation, and `settings_customise_sources` cannot tell the two apart.
+        env_file=(BACKEND_ROOT / ".env", REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,
@@ -82,7 +109,24 @@ class Settings(BaseSettings):
         that". Losing an afternoon to that is not a lesson worth teaching twice.
 
         Both are gitignored. Neither is ever committed — CLAUDE.md rule 1.
+
+        ## `_env_file=None` genuinely isolates, and for a while it did not
+
+        `Settings(_env_file=None)` is how every test says "ignore this
+        developer's configuration". These two sources were reading their files
+        regardless, so it said nothing at all — and `tests/conftest.py` carried a
+        comment claiming the opposite.
+
+        It was invisible while no test asserted on a value a developer happened
+        to have set. It surfaced the day `ELEVENLABS_API_KEY` appeared in a real
+        `.env`, because that one flips which speech provider `auto` resolves to:
+        eight tests that had passed for months began failing on a machine where
+        the key existed and would still have passed in CI, which is the worst
+        shape a test failure can take.
         """
+        if _dotenv_disabled(dotenv_settings):
+            return (init_settings, env_settings, file_secret_settings)
+
         return (
             init_settings,
             env_settings,
@@ -194,6 +238,9 @@ class Settings(BaseSettings):
     # file that does not exist and indexed nothing, silently.
     KB_CSV_PATH: Path = Path("../data/knowledge/scaspa_kb_2026-07-31.csv")
     CHROMA_DIR: Path = Path("../data/chroma")
+    # Watchtower's structured store: the operational rows Chroma is the wrong
+    # tool for. A file beside the Chroma one — see app/watchtower/store.py.
+    OPERATIONAL_DB_PATH: Path = Path("../data/operational.sqlite3")
     SCRAPED_DIR: Path = Path("../data/scraped")
 
     # --- Service ----------------------------------------------------------
@@ -202,7 +249,19 @@ class Settings(BaseSettings):
     # the one the other was not configured for gets a bare failed fetch and no
     # reason for it — the browser will not tell JavaScript that CORS was the
     # cause. Cheap to allow both; expensive to debug.
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    #
+    # 4400 is `frontend/scripts/a11y-check.mjs`, which starts its own Vite
+    # server on that port (hardcoded, `strictPort`). It was never in this
+    # default, so two of that script's checks — "the finished answer is
+    # announced" and the citation-chip focus test — failed with a CORS error on
+    # every machine, for anyone who had not hand-edited their `.env`. They were
+    # reported as a known limitation for long enough to become furniture.
+    #
+    # Dev ports only, and this default is dev-only in effect: production must
+    # set the real origin, and a wildcard with ENV=prod refuses to boot.
+    ALLOWED_ORIGINS: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4400,http://127.0.0.1:4400"
+    )
     RATE_LIMIT_PER_MINUTE: int = Field(default=15, gt=0)
     MAX_HISTORY_TURNS: int = Field(default=6, gt=0)
     CONVERSATION_TTL_MINUTES: int = Field(default=60, gt=0)
@@ -223,6 +282,61 @@ class Settings(BaseSettings):
     # There is no "live" value yet because there is no feed. Adding one is a new
     # OpsSource implementation and this string, and nothing else.
     OPS_DATA_SOURCE: str = "none"
+
+    # --- Voice ------------------------------------------------------------
+    #
+    # Which provider does speech. Two, because this project's OpenAI key has no
+    # speech-model entitlement at all — `/v1/models` returns nine models and not
+    # one of them can transcribe or synthesise (decisions.md 0047).
+    #
+    #   auto        ElevenLabs when ELEVENLABS_API_KEY is set, else OpenAI.
+    #               The default, so one key is the whole of the configuration.
+    #   openai      /v1/audio/transcriptions and /v1/audio/speech.
+    #   elevenlabs  api.elevenlabs.io — Scribe for speech-to-text, and the
+    #               text-to-speech endpoint for the reply.
+    #
+    # `auto` is resolved once, in `app/voice/provider.py`, and reported by
+    # `/api/health` so nobody has to guess which one a deployment is using.
+    VOICE_PROVIDER: str = "auto"
+
+    # Never committed. `.env` is gitignored; only `.env.example` is tracked.
+    ELEVENLABS_API_KEY: str = ""
+
+    # Model ids in settings rather than in source, for the same reason the
+    # OpenAI ones are — CLAUDE.md rule 2. A provider that renames a model must
+    # be a configuration change, not a code change.
+    ELEVENLABS_TTS_MODEL: str = "eleven_multilingual_v2"
+    ELEVENLABS_STT_MODEL: str = "scribe_v1"
+
+    # ── NO DEFAULT VOICE, DELIBERATELY ────────────────────────────────────
+    #
+    # Every ElevenLabs account has voices and they differ; picking one in source
+    # would choose an accent, a gender and a register for a Caribbean port
+    # authority on the strength of what a developer saw first in a list.
+    #
+    # Blank means text-to-speech is not configured. The availability probe
+    # reports that, the UI hides the control rather than offering one that
+    # fails, and `scripts/voice_smoke.py --voices` prints the account's voices
+    # with their ids so the choice is made by somebody entitled to make it.
+    ELEVENLABS_VOICE_ID: str = ""
+
+    # --- Watchtower -------------------------------------------------------
+    # Whether the application runs the source monitor on a schedule.
+    #
+    # ── DEFAULT TRUE, DELIBERATELY ────────────────────────────────────────
+    #
+    # `interval_hours=6` sat in the source registry for a while with nothing
+    # calling it, so the Vessels page stamped "checked at 05:12" against a fetch
+    # nobody was going to repeat. A default of False would have left that true
+    # for any deployment whose operator did not know to set a flag — and the
+    # failure is invisible, because the screen keeps looking correct while the
+    # data ages underneath it.
+    #
+    # Off is for a process that must not reach the network: the test suite (see
+    # tests/conftest.py) and any one-shot CLI. Sources still govern their own
+    # cadence, so switching this on does not decide how often anything is
+    # fetched — see app/watchtower/scheduler.py.
+    WATCHTOWER_ENABLED: bool = True
 
     # --- Runtime ----------------------------------------------------------
     ENV: str = "dev"
@@ -250,6 +364,11 @@ class Settings(BaseSettings):
     def chroma_path(self) -> Path:
         """CHROMA_DIR resolved against backend/ so relative defaults work."""
         return (BACKEND_ROOT / self.CHROMA_DIR).resolve()
+
+    @property
+    def operational_db_path(self) -> Path:
+        """OPERATIONAL_DB_PATH resolved against backend/, like the others."""
+        return (BACKEND_ROOT / self.OPERATIONAL_DB_PATH).resolve()
 
     @property
     def kb_csv_path(self) -> Path:

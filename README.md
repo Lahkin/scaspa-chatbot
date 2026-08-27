@@ -29,7 +29,7 @@ Most of this README is the backend. The frontend has its own
 ## Contents
 
 - [Quick start](#quick-start-under-10-minutes) · [Run both halves](#run-both-halves) · [Environment](#environment-variables)
-- [Build the index](#build-the-index) · [Run](#run-the-server) · [Evaluate](#run-the-evaluation)
+- [Build the index](#build-the-index) · [Cruise schedule](#fetch-the-published-cruise-schedule) · [Run](#run-the-server) · [Evaluate](#run-the-evaluation)
 - [Deploy](#deploy) · [Keep warm](#keep-warm) · [Before a demo](#before-a-demo)
 - [Architecture](#architecture) · [Project structure](#project-structure)
 - [Non-goals](#non-goals) · [Docs](#documentation) · [Credits](#credits)
@@ -174,6 +174,10 @@ tracked. In production, set these in the platform dashboard, never in the repo.
 | `OPENAI_REASONING_EFFORT` | `none` | Compatibility, not preference: OpenAI refuses **function tools with reasoning** on `/v1/chat/completions`, and this assistant is an agent. Use `omit` for a model that rejects the parameter |
 | `RATE_LIMIT_PER_MINUTE` | `15` | The chat budget. Voice gets a third of it; reading vessels/flights/tariffs gets four times it |
 | `OPS_DATA_SOURCE` | `none` | `none` serves an honest empty state; `fixture` serves obviously-fake sample data for development and is **refused at boot when `ENV=prod`** |
+| `VOICE_PROVIDER` | `auto` | `auto` uses ElevenLabs when `ELEVENLABS_API_KEY` is set, else OpenAI. `/api/health` reports which was resolved |
+| `ELEVENLABS_API_KEY` | — | **A secret.** Put it in `backend/.env`, never in `.env.example` |
+| `ELEVENLABS_VOICE_ID` | — | Required for speaking, and deliberately without a default — it is the voice every caller hears. List the account's voices with `uv run python scripts/voice_smoke.py --voices` |
+| `WATCHTOWER_ENABLED` | `true` | Whether the server refreshes the published cruise schedule on its own. Turn it off **only** if cron is running `scripts/watchtower.py` instead — with neither, the schedule silently stops updating while the page keeps printing a date |
 | `PRICE_*_PER_MTOK` | `0.0` | Set from current pricing so the spend estimate means something |
 | `DAILY_SPEND_WARN_USD` | `5.0` | Logs a warning past this |
 
@@ -216,6 +220,43 @@ uv run python scripts/build_index.py --web
 The crawl writes `data/scraped/flagged_for_client.md` — things a human must
 resolve, including the homepage statistics, which are JavaScript counters that
 fetch as **zero** and are never indexed.
+
+---
+
+## Fetch the published cruise schedule
+
+Separate from the index, and worth understanding as a separate thing. The
+knowledge base is prose the researchers verified, embedded into Chroma once per
+export. The cruise schedule is **operational rows fetched from SCASPA**, kept in
+`data/operational.sqlite3`, and it changes without anybody here doing anything.
+
+The running server sweeps it every six hours by itself. This is for populating a
+fresh checkout, and for asking whether it is working:
+
+```bash
+cd backend
+uv run python scripts/watchtower.py --status   # report; fetches nothing
+uv run python scripts/watchtower.py            # check whatever is due
+uv run python scripts/watchtower.py --force    # check everything, now
+```
+
+`--status` prints **`last checked`** and **`last changed`** separately, and the
+distinction is the point: "nobody has looked since Tuesday" is a fault here,
+"SCASPA has not edited the schedule since Tuesday" is an ordinary week. They
+look identical if you only print one of them.
+
+Two things it will not do, both deliberate:
+
+- **A failed fetch never empties the store.** The previous schedule stays exactly
+  where it is. Clearing the table because a request timed out would turn
+  somebody else's brief outage into this product telling a passenger that no
+  ships are coming.
+- **Nothing is ever labelled `live`.** A six-hourly snapshot presented as a live
+  feed is the claim that would make every other claim on the screen worth less.
+  The Vessels page says PUBLISHED, and prints the date it was checked.
+
+Set `WATCHTOWER_ENABLED=false` only if something else — cron, say — is doing the
+sweeping. The CLI and the server share a lease, so running both is safe.
 
 ---
 

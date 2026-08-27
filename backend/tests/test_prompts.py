@@ -46,17 +46,24 @@ def test_all_four_facilities_are_named() -> None:
     [
         ("grounding", "1. GROUNDING."),
         ("citation", "2. CITATION."),
-        ("schedules", "3. SCHEDULES."),
-        ("tariffs", "4. TARIFFS AND FEES."),
-        ("refusals", "5. REFUSALS."),
-        ("audience", "6. AUDIENCE."),
-        ("uncertainty", "7. UNCERTAINTY AND CONFLICT."),
-        ("scope", "8. SCOPE."),
-        ("false premises", "9. FALSE PREMISES."),
-        ("time", "10. TIME AND LIVE STATUS."),
+        # Rule 3 is newer than the rest: the published cruise schedule arrives
+        # through a tool rather than the knowledge base, so it needs its own
+        # citation form — a named source and a checked date, never a [kb-] id.
+        # Everything below it moved down one, which is why this list is the
+        # thing that failed when it was inserted, and why it is a list of exact
+        # numbers rather than a substring match.
+        ("cruise schedule", "3. THE CRUISE SCHEDULE IS A TOOL"),
+        ("schedules", "4. SCHEDULES."),
+        ("tariffs", "5. TARIFFS AND FEES."),
+        ("refusals", "6. REFUSALS."),
+        ("audience", "7. AUDIENCE."),
+        ("uncertainty", "8. UNCERTAINTY AND CONFLICT."),
+        ("scope", "9. SCOPE."),
+        ("false premises", "10. FALSE PREMISES."),
+        ("time", "11. TIME AND LIVE STATUS."),
     ],
 )
-def test_all_ten_rules_are_present(rule: str, marker: str) -> None:
+def test_every_rule_is_present(rule: str, marker: str) -> None:
     assert marker in SYSTEM_PROMPT, f"the {rule} rule is missing"
 
 

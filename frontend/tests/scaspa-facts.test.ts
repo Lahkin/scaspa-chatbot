@@ -25,11 +25,12 @@
  * currency toggle a contract change rather than a display tweak.
  */
 
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const PROJECT_ROOT = process.cwd();
+import { PROJECT_ROOT, globFiles } from './source-files';
+
 const FACTS = 'src/lib/scaspa-facts.ts';
 
 /**
@@ -132,7 +133,7 @@ describe('no production source hardcodes a fee, a rate or a clock time', () => {
    */
   const EXCLUDED = ['src/mocks/', 'src/dev/'];
 
-  const files = globSync('src/**/*.{ts,tsx}', { cwd: PROJECT_ROOT }).filter(
+  const files = globFiles('src/**/*.{ts,tsx}').filter(
     (file) => !file.endsWith('routeTree.gen.ts') && !EXCLUDED.some((dir) => file.startsWith(dir))
   );
 

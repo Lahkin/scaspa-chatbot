@@ -120,12 +120,21 @@ export function QuoteResult({ quote }: { quote: TariffQuote }) {
       <div className="flex items-baseline justify-between gap-3.5 border-t border-border bg-surface-muted px-5 py-3.5">
         <span className="flex flex-col gap-0.5">
           {/*
-           * "Total so far", not "Total". One word, and it is the difference
-           * between a figure someone can budget against and a figure they know
-           * to check.
+           * ── "ESTIMATED CHARGE", NOT "TOTAL" ────────────────────────────────
+           *
+           * "Total" is what appears at the foot of an invoice. This figure is
+           * arithmetic over a published schedule — nobody has been billed, no
+           * account has been debited, and the number can change when the real
+           * charge is raised. The Pilot spec asks that nothing here imply a bill
+           * or a payment, and the single word "Total" implied both.
+           *
+           * "so far" survives the rename and is doing its own job: it is the
+           * difference between a figure someone can budget against and a figure
+           * they know to go and check, and it appears only when a charge could
+           * not be priced.
            */}
           <span className="text-section font-semibold text-ink">
-            {short ? 'Total so far' : 'Total'}
+            {short ? 'Estimated charge so far' : 'Estimated SCASPA charge'}
           </span>
           {short ? (
             <span className="text-caption font-medium text-critical-text">

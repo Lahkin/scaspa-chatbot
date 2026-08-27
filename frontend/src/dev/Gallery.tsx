@@ -65,8 +65,11 @@ import {
 import { config as appConfig } from '@/lib/config';
 import { ScaspaMark } from '@/components/shells/ScaspaMark';
 import { LogoLockup } from '@/components/brand/LogoLockup';
+import { PilotAvatar } from '@/components/brand/PilotAvatar';
+import { PilotBrand } from '@/components/brand/PilotBrand';
 import { Sidebar } from '@/components/shells/Sidebar';
 import { LanguagePicker } from '@/components/settings/LanguagePicker';
+import { ThemePicker } from '@/components/settings/ThemePicker';
 import {
   SettingRow,
   SettingsLinkRow,
@@ -92,6 +95,11 @@ import { TranscriptState } from '@/components/ops/TranscriptState';
 import { PositionMarker } from '@/components/ops/PositionMap';
 import { HealthPanel } from '@/components/ops/HealthPanel';
 import { IndexStatusPanel } from '@/components/ops/IndexStatusPanel';
+import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
+import { SourceAge } from '@/components/ops/SourceNotice';
+import { NothingPublished, ScheduleUnavailable } from '@/components/ops/cruise/CruiseStates';
+import { GuideTopics, NothingVerified } from '@/components/ops/guide/GuideSection';
+import { CargoStatus } from '@/components/ops/cargo/CargoStatus';
 import type { HealthResponse, TariffQuote } from '@/lib/types';
 
 /**
@@ -731,6 +739,16 @@ const HEALTHY: HealthResponse = {
   uptime_s: 0,
   request_id: 'gallery',
   models: { chat: 'sample-chat', embedding: 'sample-embed', transcribe: '', tts: '' },
+  // The gallery's health fixture has no transcribe or tts model, so the honest
+  // voice block is the unavailable one — which is also what this project's real
+  // key reports, and therefore the state worth having drawn.
+  voice: {
+    stt: false,
+    tts: false,
+    checked: true,
+    detail: 'this OpenAI project has no access to the configured speech models',
+    provider: 'openai',
+  },
   index: {
     ready: false,
     kb_version: 'v0.0.0',
@@ -933,6 +951,95 @@ function OperationsTableSection() {
       </Section>
 
       <Section
+        title="The published schedule's two emptinesses"
+        note="An empty table with a retrieved source and an empty table with no source at all are OPPOSITE facts — a quiet week, and an outage. They are the only two states in the product that render identically if you get this wrong, and the cheaper-looking mistake is the expensive one: a passenger told there are no ships stops looking."
+      >
+        <div className="space-y-4">
+          <NothingPublished range="week" onWiden={() => {}} />
+          <ScheduleUnavailable />
+        </div>
+      </Section>
+
+      <Section
+        title="Published answers — the guide entry"
+        note="Every word of content comes off the wire; the only strings this component owns are the topic headings, and those name a grouping rather than assert a fact. Collapsed on arrival: the questions are the index a reader scans, and nineteen open answers is a wall. Provenance sits INSIDE the panel — a date beside a question nobody has read is noise, and the same date beside the answer is what lets them decide whether to trust it."
+      >
+        <div className="max-w-measure">
+          <GuideTopics
+            topics={[
+              {
+                name: 'facilities',
+                entries: [
+                  {
+                    id: 'kb-901',
+                    question: 'What facilities are available? (gallery placeholder)',
+                    answer:
+                      'PLACEHOLDER — gallery text, not a SCASPA answer. The real endpoint serves ' +
+                      "the researchers' verified export.",
+                    source_url: 'https://www.scaspa.com/airport-about.html',
+                    as_of: '2026-07-31',
+                    volatility: 'low',
+                  },
+                  {
+                    id: 'kb-902',
+                    question: 'An answer verified two years ago (gallery placeholder)',
+                    answer: 'PLACEHOLDER — gallery text. See kb-901.',
+                    source_url: 'https://www.scaspa.com/airport-about.html',
+                    as_of: '2024-05-09',
+                    volatility: 'high',
+                  },
+                ],
+              },
+            ]}
+          />
+        </div>
+      </Section>
+
+      <Section
+        title="Cargo status — a feature deliberately not built"
+        note="The brief asks for a search by vessel or agent over a Vessel/Agent/Status/Last-updated card. SCASPA publishes no cargo status anywhere, and a search field over nothing is not a placeholder but a promise: somebody types a vessel name, gets no results, and concludes their cargo is not at the port. This is what stands in its place — decisions.md 0043."
+      >
+        <div className="max-w-measure">
+          <CargoStatus />
+        </div>
+      </Section>
+
+      <Section
+        title="Nothing verified yet"
+        note="Reachable in production: a category the researchers have not covered, or an export where every row for it is still `probable`. It reports that nothing has been VERIFIED — a different and more useful statement than 'nothing was found' — and offers no retry, because there is nothing to retry."
+      >
+        <div className="max-w-measure">
+          <NothingVerified subject="the airport" />
+        </div>
+      </Section>
+
+      <Section
+        title="Provenance — source kinds, including the fourth"
+        note="`published` is real SCASPA data on a six-hour snapshot: neither a live feed nor sample data, and the badge exists because presenting it as either would be a lie in one direction or the other. `none` is drawn and unreachable — the wire has no value for it."
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <ProvenanceBadge kind="source" value="live" />
+          <ProvenanceBadge kind="source" value="published" />
+          <ProvenanceBadge kind="source" value="fixture" />
+          <ProvenanceBadge kind="source" value="unavailable" />
+          <ProvenanceBadge kind="source" value="none" />
+        </div>
+        <p className="mt-3 text-caption text-ink-subtle">
+          The stamp that must accompany PUBLISHED, which is the other half of the same claim:
+        </p>
+        <div className="mt-2">
+          <SourceAge
+            source={{
+              kind: 'published',
+              label: 'Official SCASPA cruise schedule',
+              as_of: '2026-08-27T05:12:00Z',
+              notice: null,
+            }}
+          />
+        </div>
+      </Section>
+
+      <Section
         title="Operational advisory — §5.6's three fills"
         note="Passthrough only. The caution fill is the claim that a named authority published it, so it is gated on attribution; without one the panel drops to the neutral fill. Absent is the third state and it is drawn nowhere: no panel at all."
       >
@@ -997,6 +1104,63 @@ function NavigationSection() {
 
   return (
     <>
+      <Section
+        title="PilotAvatar — the product mark"
+        note="Two brands are on screen at once and they are never merged. SCASPA is the Authority and owns the information; Pilot is the digital guide and is the one that speaks, so an assistant message is fronted by this and never by the seal. The geometry was measured off the approved asset rather than eyeballed — ring radius 0.3045 of the box, compass tip at 0.030, beacon at 0.358 with radius 0.043 — because an eyeballed transcription is close at 96px and wrong at 28px. One artwork in both themes: only the tokens resolve differently."
+      >
+        <div className="flex flex-wrap items-end gap-6">
+          <Figure label="idle — 28px, beside a message">
+            <PilotAvatar size={28} />
+          </Figure>
+          <Figure label="idle — 44px, the sidebar">
+            <PilotAvatar size={44} />
+          </Figure>
+          <Figure label="idle — 84px, the landing hero">
+            <PilotAvatar size={84} />
+          </Figure>
+          <Figure label="thinking — the beacon pulses, 1.6s">
+            <PilotAvatar size={44} state="thinking" />
+          </Figure>
+          <Figure label="listening — the ring pulses, 1.8s">
+            <PilotAvatar size={44} state="listening" />
+          </Figure>
+          <Figure label="verified — a badge, not a different mark">
+            <PilotAvatar size={44} state="verified" />
+          </Figure>
+          <Figure label="attention — likewise">
+            <PilotAvatar size={44} state="attention" />
+          </Figure>
+        </div>
+        <p className="mt-2 text-caption text-ink-subtle">
+          The compass never rotates. A spinning compass reads as a loading spinner, which says
+          waiting where this has to say working. Both keyframe sets start AND end at rest, so the
+          reduced-motion collapse in tokens.css lands on the resting state rather than freezing the
+          beacon half-lit.
+        </p>
+      </Section>
+
+      <Section
+        title="PilotBrand — the lockup"
+        note="Mark, wordmark, descriptor. PILOT is set as text rather than shipped as an image so it inherits the interface font, scales without a second asset, is selectable and is read aloud correctly — and the descriptor translates, which an image would have needed three of. The wordmark takes text-ink, which is a deep navy on the light ground and near-white on the dark one, exactly as the two approved lockups show."
+      >
+        <div className="flex flex-wrap items-end gap-6">
+          <Figure label="sm — the chat sidebar">
+            <PilotBrand />
+          </Figure>
+          <Figure label="md — a page header">
+            <PilotBrand size="md" />
+          </Figure>
+          <Figure label="markOnly — a constrained mobile header">
+            <PilotBrand markOnly />
+          </Figure>
+        </div>
+        <div className="mt-4">
+          <Figure label="lg — the landing hero">
+            <PilotBrand size="lg" />
+          </Figure>
+        </div>
+      </Section>
+
       <Section
         title="LogoLockup"
         note="The seal is dark blue line art on transparency and always sits on a white circular plate — 32 inside 40 in the sidebar, 24 inside 32 in the widget, the 404 and the mobile header. Never recoloured, outlined, cropped or knocked out to white, and never unplated at any size."
@@ -1108,6 +1272,20 @@ function NavigationSection() {
             advisoryCount={2}
           />
         </div>
+      </Section>
+
+      <Section
+        title="Theme picker"
+        note="The second control on /settings with a side effect, and the only one that repaints every screen in the product. Three choices, because System is a real answer and the default one — a reader who picks Dark in the morning needs a route back to following their phone that is not clearing all their settings. Choosing one writes data-theme on the root element, which is the single switch the whole palette hangs off; an inline script in index.html sets the same attribute before first paint, so there is no white flash on a dark phone. No icon chip: the obvious sun, moon and laptop glyphs are not in the spec sprite, and iconPaths.ts is transcribed rather than drawn."
+      >
+        <div className="max-w-2xl rounded-md border border-border p-4">
+          <ThemePicker />
+        </div>
+        <p className="mt-2 text-caption text-ink-subtle">
+          Every colour on this page moves when you choose. Both themes are held to WCAG AA by
+          tests/contrast.test.ts, which measures each pairing twice — once per theme — and
+          tests/theme-parity.test.ts refuses a token declared for one theme and not the other.
+        </p>
       </Section>
 
       <Section

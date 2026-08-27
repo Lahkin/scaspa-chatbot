@@ -17,6 +17,7 @@ import { renderWithProviders as render } from './helpers';
 import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
 import { routeTree } from '@/routeTree.gen';
+import { PROJECT_ROOT } from './source-files';
 import { Button, Chip, IconButton, Input, Sheet } from '@/components/ui';
 
 function renderRoute(path: string) {
@@ -26,6 +27,27 @@ function renderRoute(path: string) {
   });
   render(<RouterProvider router={router as never} />);
   return router;
+}
+
+/**
+ * Every route in the app, read out of the generated tree.
+ *
+ * Parsed from `routeTree.gen.ts` rather than walked at runtime: TanStack builds
+ * the tree lazily, so `routeTree.children` is empty until a router mounts, and
+ * the generated `FileRoutesByFullPath` interface is the one place that lists
+ * every path unconditionally. Reading the file is the same technique
+ * `tests/source-files.ts` uses for the other structural guards.
+ *
+ * Dev-only routes are excluded: `/dev/gallery` and `/dev/rehearsal` are behind
+ * a lazy import and are not screens a user reaches.
+ */
+function routePaths(): string[] {
+  const source = readFileSync(resolve(PROJECT_ROOT, 'src/routeTree.gen.ts'), 'utf8');
+  const block = source.match(/interface FileRoutesByFullPath \{([\s\S]*?)^\}/m)?.[1] ?? '';
+  const paths = [...block.matchAll(/'([^']+)':/g)].map((m) => m[1] as string);
+
+  if (paths.length === 0) throw new Error('no routes parsed — has routeTree.gen.ts changed shape?');
+  return paths.filter((path) => !path.startsWith('/dev'));
 }
 
 describe('landmarks and the skip link', () => {
@@ -55,6 +77,30 @@ describe('landmarks and the skip link', () => {
     expect(screen.getAllByRole('banner')).toHaveLength(1);
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1);
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  });
+
+  /*
+   * ── THE ABOVE CHECKED ONE ROUTE, AND THAT WAS THE HOLE ──────────────────────
+   *
+   * `__root.tsx` keeps `SELF_CHROMED_ROUTES`: screens that supply their own
+   * header, `<main>` and footer, and must therefore NOT be wrapped in the
+   * marketing chrome. A route added to the app but not to that list gets both,
+   * so it renders two `<main>` landmarks — a screen-reader user hears the page
+   * announce two main regions and cannot tell which holds the content.
+   *
+   * That has now happened twice. The first time, `check:responsive` caught it
+   * through the width constraint; `__root.tsx` says so in a comment. The second
+   * time was `/cargo`, and the same check caught it the same way — because the
+   * landmark assertion above only ever rendered `/about`.
+   *
+   * A guard that examines one example is a guard for that example. This one
+   * walks every route in the generated tree, so the next route to forget the
+   * list fails here rather than in a layout check nobody runs before pushing.
+   */
+  it.each(routePaths())('%s has exactly one main landmark', async (path) => {
+    renderRoute(path);
+    await screen.findByRole('main');
+    expect(screen.getAllByRole('main')).toHaveLength(1);
   });
 
   it('the phone number is reachable from every page without scrolling into a menu', async () => {
@@ -87,7 +133,10 @@ describe('per-route document head', () => {
     it(`${path} sets its own title`, async () => {
       renderRoute(path);
       await waitFor(() => expect(document.title).toContain(fragment));
-      expect(document.title).toContain('SCASPA Assistant');
+      // Every page names the product. It is Pilot now — the Authority's name
+      // belongs to the Authority, and the two stopped being the same thing when
+      // the product got an identity of its own (decisions.md 0035).
+      expect(document.title).toContain('Pilot');
     });
   }
 
@@ -95,7 +144,7 @@ describe('per-route document head', () => {
     renderRoute('/about');
     await waitFor(() => {
       const meta = document.head.querySelector('meta[name="description"]');
-      expect(meta?.getAttribute('content')).toMatch(/SCASPA Assistant/i);
+      expect(meta?.getAttribute('content')).toMatch(/Pilot/i);
     });
   });
 

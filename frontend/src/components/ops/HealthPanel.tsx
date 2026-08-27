@@ -59,11 +59,39 @@ export function HealthPanel({
         body: 'The assistant cannot answer questions. Vessels, flights and tariffs still work.',
       });
     }
+    /*
+     * ── TWO REASONS VOICE IS OFF, AND AN OPERATOR NEEDS TO TELL THEM APART ───
+     *
+     * Switched off is a decision somebody made and can undo with a build flag.
+     * Unavailable is an OpenAI project with no speech-model entitlement, which
+     * no amount of redeploying will change — it is an account change.
+     *
+     * The panel said "switched off" for both, so the one state that needs
+     * somebody to go and edit an OpenAI project looked like a setting. The
+     * backend now reports which it is, and `detail` says exactly which models
+     * are missing.
+     */
     if (!voiceEnabled) {
       rows.push({
         tone: 'caution',
         title: 'Voice is switched off',
-        body: 'Speaking and listening are unavailable. You can still type your question.',
+        body: 'Turned off in this build. Speaking and listening are unavailable; typing works.',
+      });
+    } else if (health.voice.checked && (!health.voice.stt || !health.voice.tts)) {
+      /*
+       * The title names the PROVIDER, because with two of them the first
+       * question an operator has is which one this deployment is using — and it
+       * cannot be inferred from the client, which never sees a key. Sending
+       * somebody to the wrong dashboard is the failure this avoids.
+       *
+       * `detail` carries the rest, including which half works: a reachable
+       * ElevenLabs account with no voice chosen transcribes fine and cannot
+       * speak, which is a real state and not a total outage.
+       */
+      rows.push({
+        tone: 'caution',
+        title: `Voice is limited on ${health.voice.provider}`,
+        body: health.voice.detail,
       });
     }
     if (rows.length === 0) {

@@ -315,7 +315,9 @@ def conversational_reply(query: str) -> str | None:
     return None
 
 
-def find_unverified_figures(text: str, chunks: list[RetrievedChunk]) -> list[str]:
+def find_unverified_figures(
+    text: str, chunks: list[RetrievedChunk], evidence: list[str] | None = None
+) -> list[str]:
     """Money and time values in `text` that appear in no retrieved chunk.
 
     CLAUDE.md rule 10. Matching is verbatim by design: a rounded fare, a
@@ -325,7 +327,12 @@ def find_unverified_figures(text: str, chunks: list[RetrievedChunk]) -> list[str
     Returns the offending values. An empty list means every figure in the answer
     was traceable to a retrieved chunk.
     """
-    haystack = "\n".join(chunk.text for chunk in chunks)
+    # `evidence` is text a tool read out of a structured official source. A
+    # sailing window from SCASPA's own published table is at least as
+    # traceable as one recovered from a sentence about it, and without this
+    # every cruise answer was reported ungrounded while being entirely
+    # correct — which trains a reader to ignore the flag.
+    haystack = "\n".join([*(evidence or []), *(chunk.text for chunk in chunks)])
     found: dict[str, None] = {}
 
     for pattern in (MONEY_PATTERN, TIME_PATTERN):
@@ -547,11 +554,17 @@ def finalise_answer(
     best_score: float,
     elapsed_ms: int,
     settings: Settings,
+    evidence: list[str] | None = None,
 ) -> AnswerResult:
     """Verify a completed answer. The single verification path.
 
     Both `answer_question` and the streaming path funnel through this, so the
     two can never drift apart on what counts as grounded.
+
+    `evidence` is text a tool produced from a structured official source — the
+    published cruise schedule. The numeric gate below may verify figures against
+    it, and the citation check above may NOT: those rows have no kb id and an
+    answer must never claim one for them.
     """
     retrieved_ids = {chunk.id for chunk in chunks}
     clean_answer, verified_ids, hallucinated = verify_citations(raw_answer, retrieved_ids)
@@ -566,7 +579,7 @@ def finalise_answer(
 
     citations = build_citations(chunks, verified_ids)
 
-    unverified_figures = find_unverified_figures(clean_answer, chunks)
+    unverified_figures = find_unverified_figures(clean_answer, chunks, evidence)
     for value in unverified_figures:
         logger.warning(
             "unverified_figure value=%r question=%r retrieved=%s",
@@ -581,7 +594,7 @@ def finalise_answer(
     # in a retrieved row. Previously an unverifiable figure only set
     # grounded=false and the answer still shipped — but a flag in a JSON field
     # does not stop anyone reading the number. Now the answer is discarded.
-    numbers = check_numbers(clean_answer, chunks)
+    numbers = check_numbers(clean_answer, chunks, evidence)
     ungrounded_numbers = numbers.values
     answer_replaced = False
     if ungrounded_numbers:
@@ -598,12 +611,19 @@ def finalise_answer(
         citations = []
         verified_ids = []
 
-    grounded = (
-        bool(verified_ids)
-        and not hallucinated
-        and not unverified_figures
-        and not ungrounded_numbers
-    )
+    # ── WHAT COUNTS AS GROUNDED ─────────────────────────────────────────────
+    #
+    # A cited knowledge-base row, OR text a tool read out of a structured
+    # official source. The second is new and is not a loosening: a cruise call
+    # taken from SCASPA's own published table is more precisely traceable than
+    # the same fact recovered from a paragraph about the terminal.
+    #
+    # Without it every cruise answer was reported ungrounded while being
+    # entirely correct, because `verified_ids` only ever holds kb ids and the
+    # cruise tool deliberately produces none — see prompt rule 3. A flag that is
+    # false on correct answers is a flag readers learn to ignore.
+    has_source = bool(verified_ids) or bool(evidence)
+    grounded = has_source and not hallucinated and not unverified_figures and not ungrounded_numbers
 
     if not verified_ids and not answer_replaced:
         logger.warning("uncited_answer question=%r retrieved=%s", query, sorted(retrieved_ids))
@@ -714,6 +734,9 @@ def _from_turn(
     after the third.
     """
     chunks = list(turn.retrieved.values())
+    # Structured tool output — see TurnContext.evidence. Figures may be
+    # verified against it; nothing in it may be cited as a kb row.
+    evidence = list(turn.evidence)
     tool_calls = [ToolCallInfo(name=t.name, summary=t.summary, ms=t.ms) for t in turn.tool_calls]
 
     if turn.hit_tool_limit:
@@ -725,7 +748,7 @@ def _from_turn(
         result.completion_tokens = turn.completion_tokens
         return result
 
-    result = finalise_answer(turn.answer, query, chunks, best_score, elapsed_ms, settings)
+    result = finalise_answer(turn.answer, query, chunks, best_score, elapsed_ms, settings, evidence)
     result.tool_calls = tool_calls
     result.prompt_tokens = turn.prompt_tokens
     result.completion_tokens = turn.completion_tokens

@@ -74,6 +74,12 @@ describe('the console shell', () => {
       '/chat',
       '/ops/vessels',
       '/ops/flights',
+      // The Cargo tab. Note what it is NOT: the test below still asserts the
+      // console offers no "Cargo Tracking", because a link promising to look up
+      // somebody's container is the personal-record refusal wearing a nav
+      // label. `/ops/cargo` leads to what SCASPA has published and to a panel
+      // saying cargo status is not published online — an answer, not a lookup.
+      '/ops/cargo',
       '/tariffs',
       '/support',
       '/about',
@@ -228,8 +234,21 @@ describe('the console panels — board 20', () => {
     expect(screen.getByText('No positions are being reported')).toBeInTheDocument();
     expect(screen.getByText(/No AIS receiver is connected/i)).toBeInTheDocument();
 
-    // Match the badge, not the word.
-    expect(container.textContent).not.toMatch(/live (ais|data|feed|map view)/i);
+    /*
+     * Match the CLAIM, not the word "live".
+     *
+     * This used to be `/live (ais|data|feed|map view)/i`, which was right until
+     * the unavailable badge was reworded from "No feed" to "Live data
+     * unavailable" — at which point a label stating that live data is NOT
+     * available failed a check that exists to catch a label claiming it is.
+     *
+     * The affirmative badges are named instead. A negation containing the word
+     * "live" is the correct thing to show here.
+     */
+    for (const claim of ['Live AIS', 'Live feed', 'Live map view', 'Live data ']) {
+      expect(container.textContent).not.toContain(claim);
+    }
+    expect(screen.getByText('Live data unavailable')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open .*map/i })).toBeNull();
   });
 

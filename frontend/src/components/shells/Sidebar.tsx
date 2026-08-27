@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from 'react';
 import { cn } from '@/lib/cn';
-import { LogoLockup } from '@/components/brand/LogoLockup';
+import { PilotBrand } from '@/components/brand/PilotBrand';
+import { HumanHelpCard } from '@/components/chat/HumanHelpCard';
 import { DataSourceCard } from '@/components/ops/DataSourceCard';
 import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -14,7 +15,7 @@ import type { DataSource, OperatorProfile } from '@/lib/types';
  *
  *   1. the brand lockup, with the panel-collapse control beside it
  *   2. a 36px search field
- *   3. three nav groups — Assistant, Operations, Conditional
+ *   3. four nav groups — Ask Pilot, Operations, Help, Tools
  *   4. the recorded questions, running under a fade
  *   5. the data-source status card
  *   6. the demonstration profile row
@@ -62,28 +63,69 @@ interface NavGroup {
 }
 
 /**
- * The three groups, in the handoff's order.
+ * Four groups, in the navigation brief's §4 order.
  *
- * Console and Admin are filtered out below unless the route exists. Admin has
- * no route in this build and therefore no entry — and, per §2.8, nothing in the
- * search returns it either.
+ * ## What was here before, and why it changed
+ *
+ * The headings once read **ASSISTANT**, **OPERATIONS** and **CONDITIONAL**.
+ * 0037 replaced all three with **Ask Pilot** and **Services**, judging the
+ * first two to be jargon and the third not a category at all — "Conditional" is
+ * a note to the developer that a route may not exist, and as a heading over a
+ * customer's navigation it is the clearest possible sign of an interface
+ * labelled from the inside out.
+ *
+ * That call was right about two of the three and wrong about the middle one.
+ * The brief's list of things to stop showing names **SCASPA Assistant**,
+ * **Conditional**, **Diagnostics** and "raw developer terminology" — it does
+ * not name Operations, and its own §4 navigation uses **OPERATIONS** as a
+ * heading. So the previous pass over-corrected, and this restores the brief's
+ * structure rather than reversing a considered decision. 0044.
+ *
+ * ## Console gets a group after all, and the old objection no longer holds
+ *
+ * 0037 folded Console into Services because "a heading reading Console above a
+ * single item called Console says nothing twice". True, and the brief solves it
+ * by naming the group **TOOLS** — which says something the item does not: this
+ * is instrumentation, not a service a traveller came for.
+ *
+ * The group vanishes with its contents. `groups` below drops any group left
+ * empty, so a search that matches nothing in TOOLS removes the heading too, and
+ * a build without the Console route would do the same.
+ *
+ * ## HELP holds one item, deliberately
+ *
+ * **Contact SCASPA**, not "Support". Support is what a software company calls
+ * its help desk; a traveller who wants a person wants to contact the Authority.
+ * A one-item group is the right shape here for the reason TOOLS is: the heading
+ * answers "what is this for", which the label alone does not.
+ *
+ * Admin has no route in this build and therefore no entry — and, per §2.8,
+ * nothing in the search returns it either.
  */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
-    label: 'Assistant',
+    label: 'Ask Pilot',
     items: [{ label: 'Chat', href: '/chat', icon: 'sparkle' }],
   },
   {
     label: 'Operations',
+    // The brief's order: Vessels, Flights, Tariffs, Cargo. Not alphabetical and
+    // not the order they were built in — it runs from the surfaces with live
+    // published data to the one that has none, which is also roughly the order
+    // a reader is likely to want them.
     items: [
       { label: 'Vessels', href: '/vessels', icon: 'ship' },
       { label: 'Flights', href: '/flights', icon: 'plane' },
       { label: 'Tariffs', href: '/tariffs', icon: 'receipt' },
-      { label: 'Support', href: '/support', icon: 'headset' },
+      { label: 'Cargo', href: '/cargo', icon: 'anchor' },
     ],
   },
   {
-    label: 'Conditional',
+    label: 'Help',
+    items: [{ label: 'Contact SCASPA', href: '/support', icon: 'headset' }],
+  },
+  {
+    label: 'Tools',
     items: [{ label: 'Console', href: '/ops', icon: 'chart' }],
   },
 ];
@@ -163,9 +205,17 @@ export function Sidebar({
 
   return (
     <div className="flex h-full min-h-0 flex-col border-r border-border bg-surface-2 pt-4 pr-3 pb-3 pl-3">
-      {/* 1 ── the lockup, and the control that narrows the panel ───────────── */}
-      <div className="flex shrink-0 items-center gap-2 px-0.5 pb-4">
-        <LogoLockup />
+      {/* 1 ── who is talking, and the control that narrows the panel ───────── */}
+      <div className="flex shrink-0 items-start gap-2 px-0.5 pb-1">
+        {/*
+          PILOT, not the SCASPA seal.
+
+          This panel sits beside a conversation, and the thing at the top of it
+          reads as the identity of whoever is answering. That is Pilot. The
+          Authority's seal is in the institutional header on the document pages,
+          where it says who owns the service — decisions.md 0035.
+        */}
+        <PilotBrand />
 
         {/*
           `aria-expanded` + `aria-controls` describe the region it operates, so
@@ -189,6 +239,20 @@ export function Sidebar({
           </button>
         ) : null}
       </div>
+
+      {/*
+        Online, and it means the interface — not the backend.
+
+        A dot that claimed to know the server was reachable would be a claim
+        this component cannot make and would be wrong for the several seconds
+        after a connection drops. `HealthBanner` owns the real answer and says
+        so loudly when it is bad. This is the quieter thing the mock-up asks
+        for: Pilot is here and listening.
+      */}
+      <p className="flex shrink-0 items-center gap-2 px-0.5 pb-4 text-label text-ink-muted">
+        <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-positive" />
+        Online
+      </p>
 
       {/* 2 ── search ────────────────────────────────────────────────────────── */}
       <div className="shrink-0">
@@ -311,14 +375,19 @@ export function Sidebar({
         </ul>
       </div>
 
-      {/* 5 ── where the figures come from ───────────────────────────────────── */}
+      {/* 5 ── a person, permanently on screen ───────────────────────────────── */}
+      <div className="shrink-0 pt-3">
+        <HumanHelpCard />
+      </div>
+
+      {/* 6 ── where the figures come from ───────────────────────────────────── */}
       {dataSource ? (
         <div className="shrink-0 pt-3">
           <DataSourceCard source={dataSource} />
         </div>
       ) : null}
 
-      {/* 6 ── the demonstration profile, or nothing at all ──────────────────── */}
+      {/* 7 ── the demonstration profile, or nothing at all ──────────────────── */}
       {profile ? <DemoProfileRow profile={profile} /> : null}
     </div>
   );

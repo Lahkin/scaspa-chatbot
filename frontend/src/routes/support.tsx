@@ -101,7 +101,7 @@ function SupportRoute() {
 
         <div className="flex flex-col gap-4">
           {/* ── §6.4 — required, and not a tip ───────────────────────────── */}
-          <PrivacyNotice />
+          <PrivacyNotice canAttachTranscript={conversationId !== null} />
 
           {/* ── §6.5 / §6.6 — the form, then the receipt in its place ─────── */}
           {ticket.data && sentAt ? (
@@ -133,7 +133,7 @@ export const Route = createFileRoute('/support')({
   component: SupportRoute,
   head: () => ({
     meta: [
-      { title: 'Contact support — SCASPA Assistant' },
+      { title: 'Contact SCASPA — Pilot' },
       { name: 'description', content: 'Published SCASPA contact routes, and the support desk.' },
     ],
   }),

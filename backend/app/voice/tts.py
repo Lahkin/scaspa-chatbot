@@ -42,6 +42,7 @@ from pathlib import Path
 
 from app.config import Settings, get_settings
 from app.upstream import call_with_retry
+from app.voice.provider import elevenlabs_synthesise, resolve_provider
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,25 @@ _URL = re.compile(r"https?://\S+|\bwww\.\S+")
 _SCASPA_MULTI = re.compile(r"\b(\d{3})[-.\s](\d{3})[-.\s](\d{4})((?:\s*/\s*\d)+)")
 _PHONE = re.compile(r"(?<!\d)(?:\+?1[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})(?!\d)")
 
+# ── A LOCAL NUMBER, WITH THE AREA CODE STATED ONCE ──────────────────────────
+#
+# `kb-005` reads: "(869) 465-8121, 465-8122, 465-8123, or 465-8124". Only the
+# first of those matches `_PHONE`, because the rest are seven digits with the
+# area code left implicit — so the smoke check produced
+#
+#     8 6 9, 4 6 5, 8 1 2 1, 465-8122, 465-8123, or 465-8124
+#
+# and a listener would have heard "four hundred sixty-five dash eight thousand
+# one hundred twenty-two" for three of the four lines. That is the exact failure
+# the whole sanitiser exists to prevent, on the answer people ring about.
+#
+# Applied ONLY when a full number was already expanded in the same text — see
+# `sanitise_for_speech`. `\d{3}-\d{4}` on its own would also match a range like
+# "berths 100-2000", and turning that into digits is a small degradation where
+# missing a phone number is a real failure. Requiring a phone in context keeps
+# the aggressive reading where it belongs.
+_LOCAL_PHONE = re.compile(r"(?<![\d-])(\d{3})-(\d{4})(?![\d-])")
+
 _CURRENCY_SUFFIX = {
     "XCD": " East Caribbean dollars",
     "EC$": " East Caribbean dollars",
@@ -96,6 +116,11 @@ def _speak_digits(digits: str) -> str:
 def _expand_phone(match: re.Match) -> str:
     area, exchange, line = match.group(1), match.group(2), match.group(3)
     return f"{_speak_digits(area)}, {_speak_digits(exchange)}, {_speak_digits(line)}"
+
+
+def _expand_local_phone(match: re.Match) -> str:
+    """`465-8122` -> `4 6 5, 8 1 2 2`, the area code already having been said."""
+    return f"{_speak_digits(match.group(1))}, {_speak_digits(match.group(2))}"
 
 
 def _expand_scaspa_multi(match: re.Match) -> str:
@@ -163,8 +188,13 @@ def sanitise_for_speech(text: str) -> str:
     text = _URL.sub("the SCASPA website", text)
 
     # Numbers a listener needs to be able to write down.
-    text = _SCASPA_MULTI.sub(_expand_scaspa_multi, text)
-    text = _PHONE.sub(_expand_phone, text)
+    text, multi = _SCASPA_MULTI.subn(_expand_scaspa_multi, text)
+    text, full = _PHONE.subn(_expand_phone, text)
+    if multi or full:
+        # Only now. A bare `465-8122` is a telephone number BECAUSE a full one
+        # was stated beside it; the same digits in a sentence about berth
+        # numbers are not. See the note on `_LOCAL_PHONE`.
+        text = _LOCAL_PHONE.sub(_expand_local_phone, text)
     text = _expand_currency(text)
 
     # Any stray emphasis characters left over.
@@ -276,27 +306,46 @@ def synthesise(
         return path.read_bytes(), CacheEntry(path=path, digest=digest, hit=True)
 
     started = time.perf_counter()
-    client = client or build_speech_client(settings)
+    provider = resolve_provider(settings)
     try:
-        response = call_with_retry(
-            lambda: client.audio.speech.create(
-                model=settings.OPENAI_TTS_MODEL,
-                voice=settings.OPENAI_TTS_VOICE,
-                input=sanitised,
-                response_format="mp3",
-            ),
-            settings=settings,
-        )
-        audio = response.content if hasattr(response, "content") else bytes(response)
+        if provider == "elevenlabs":
+            # `client` is the OpenAI injection point used by the tests; the
+            # ElevenLabs path builds its own per call, because an httpx client
+            # is cheap and holding one open across a process adds a connection
+            # to manage for no benefit at this request rate.
+            audio = call_with_retry(
+                lambda: elevenlabs_synthesise(sanitised, settings), settings=settings
+            )
+        else:
+            speech = client or build_speech_client(settings)
+            response = call_with_retry(
+                lambda: speech.audio.speech.create(
+                    model=settings.OPENAI_TTS_MODEL,
+                    voice=settings.OPENAI_TTS_VOICE,
+                    input=sanitised,
+                    response_format="mp3",
+                ),
+                settings=settings,
+            )
+            audio = response.content if hasattr(response, "content") else bytes(response)
+    except ValueError:
+        # A configuration fault — no voice chosen — not a provider failure. It
+        # travels as ValueError, which the router already renders as a rejected
+        # request rather than as "the provider is down".
+        raise
     except Exception as exc:
-        logger.warning("tts_failed error=%s", type(exc).__name__)
+        logger.warning("tts_failed provider=%s error=%s", provider, type(exc).__name__)
         raise TTSUnavailableError(str(exc)) from exc
 
     elapsed = int((time.perf_counter() - started) * 1000)
     # Characters and latency are logged; the text itself is not, and no
     # identifier ever is — CLAUDE.md rule 9.
     logger.info(
-        "tts_synthesised chars=%d bytes=%d latency_ms=%d", len(sanitised), len(audio), elapsed
+        "tts_synthesised provider=%s chars=%d bytes=%d latency_ms=%d",
+        provider,
+        len(sanitised),
+        len(audio),
+        elapsed,
     )
 
     if use_cache:

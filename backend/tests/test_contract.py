@@ -34,6 +34,7 @@ ANSWER = "The placeholder one-way fare is XCD 44.44 for an adult ticket [kb-008]
 # name. Mirrored in the frontend's `ToolName`.
 CONTRACT_TOOL_NAMES = {
     "search_scaspa_knowledge",
+    "get_cruise_schedule",
     "search_site_content",
     "make_chart",
     "calculate",

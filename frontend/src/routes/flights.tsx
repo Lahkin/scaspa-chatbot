@@ -1,314 +1,120 @@
-import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { Icon, Segmented } from '@/components/ui';
-import { AirlineAvatar } from '@/components/ops/AirlineAvatar';
-import { OperationalAdvisoryPanel } from '@/components/ops/AdvisoryPanel';
-import { MetricRow, MetricTile } from '@/components/ops/MetricTile';
 import { OpsShell } from '@/components/shells/OpsShell';
-import { SourceNotice } from '@/components/ops/SourceNotice';
-import { OpsCell, OpsRow, OpsRowCard, OpsTable, type Density } from '@/components/ops/OpsTable';
-import {
-  FilteredOutState,
-  NoFeedState,
-  TableError,
-  TableSkeleton,
-} from '@/components/ops/TableStates';
-import { Pagination } from '@/components/ops/console/Pagination';
-import { FlightStatusChip } from '@/components/ops/StatusChip';
-import { FlightTime, GateCell } from '@/components/ops/TimeCell';
-import { useFlights } from '@/features/ops/queries';
-import { FACILITY_FILTERS, facilityParam } from '@/features/ops/facilities';
-import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
-import type { Facility, FlightDirection } from '@/lib/types';
+import { AskPilot } from '@/components/ops/AskPilot';
+import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
+import { TableError } from '@/components/ops/TableStates';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { GuideTopics, NothingVerified } from '@/components/ops/guide/GuideSection';
+import { FlightMovements } from '@/components/ops/flights/FlightMovements';
+import { useGuide } from '@/features/ops/queries';
 
 /**
- * Flights — §5.5, on the primitives of §5.1.
+ * `/flights` — **Airport Information**.
  *
- * Columns: **Flight · From/To · Due · Gate · Airline · Status**. §5.5 names the
- * first four and adds "plus Gate and Airline where width allows" — they are in
- * the table above 640px and fold into the row card below it, which is what
- * "where width allows" describes.
+ * ## What this screen used to be
  *
- * The direction toggle is in the toolbar rather than the page header, because it
- * changes what the TABLE holds and not what the screen is about. Arrivals and
- * departures stay one query parameter rather than two tabs fetching
- * independently: "no arrivals reported" and "no departures reported" are
- * different facts, and a shared tab body would show one for the other.
+ * "Flight movements": a table fed by `GET /api/flights`, with three metric
+ * tiles above it. SCASPA publishes no flight feed, so in production every
+ * visitor saw *Arrivals today —, Departures today —, Delayed —* over a panel
+ * explaining there was nothing. The brief names those three cards by name and
+ * says to remove them, and to show "useful SCASPA-grounded content" instead.
  *
- * ## Three rules this screen exists to keep
+ * ## Where that content comes from, and where it does not
  *
- * - **A revised time shows both figures** — the scheduled one struck through,
- *   the revision in caution. "A passenger who only sees the revised time cannot
- *   tell whether it moved."
- * - **A null gate reads "not reported", never "TBD"**, which sounds like the
- *   Authority has decided and is withholding.
- * - **`landed` and `arrived` differ by glyph and label, never by hue**, so the
- *   two survive greyscale.
+ * **Not from this file.** Not one sentence of SCASPA fact is typed anywhere in
+ * this route or in the components below it. The airport section renders
+ * confirmed rows from the researchers' verified export — the same rows the
+ * assistant cites, with the same ids, sources and verification dates — served
+ * by `GET /api/guide`.
  *
- * ## The three tiles, and the field each one reads
+ * That is CLAUDE.md rule 5 rather than a stylistic preference. A developer
+ * typing "the airport has a duty-free shop and two lounges" into a component
+ * produces text indistinguishable on screen from something the Authority stands
+ * behind, which nobody verified, which no researcher can correct by editing the
+ * spreadsheet, and which drifts silently from the moment it is written.
  *
- * §5.3: "**Flights — three tiles**: Arrivals today · Departures today ·
- * Delayed. Same rules; any null takes the em-dash treatment."
+ * There are 18 confirmed airport answers today, across fourteen of the
+ * researchers' own subcategories — facilities, parking, check-in, security,
+ * immigration among them. They were already in the product; they were only
+ * reachable by knowing what to ask.
  *
- * `FlightMetrics` now carries exactly those three, added in M2. It previously
- * carried only `total_flights`, `on_time_percent`, `gates_active` and
- * `gates_total` — **none of which is one of them** — and this screen rendered
- * `total_flights` under "Arrivals today", relabelling the same figure
- * "Departures today" when the toggle flipped. `total_flights` counts the whole
- * feed in both directions, so on the sample feed it read 4 arrivals where there
- * were 3.
+ * ## Two sections, and the shell gets no `source`
  *
- * Each tile reads its own field now. They render the em dash until a feed fills
- * them, which is §5.3's treatment for a null rather than a placeholder — a
- * wrong number under the handoff's label is worse than the label with no
- * number. The two figures that were standing in belong to the Console
- * (§6.7–6.13), where the handoff puts gate and punctuality statistics.
+ * Same arrangement as `/vessels`, for the same reason. `OpsShell` draws 0032's
+ * sample-data hatch behind the whole screen from the source it is handed, and
+ * there are two sources here: verified published information, and a movements
+ * feed that can be fixtures. Hatching the page would mark the researchers'
+ * verified content as invented, so the hatch lives inside `FlightMovements`.
  */
-
-const COLUMNS = ['Flight', 'From/To', 'Due', 'Gate', 'Airline', 'Status'] as const;
-const PAGE_SIZE = 25;
-
 function FlightsRoute() {
-  const [search, setSearch] = useState('');
-  const [direction, setDirection] = useState<FlightDirection>('arrival');
-  const [facility, setFacility] = useState<Facility | 'all'>('all');
-  const [density, setDensity] = useState<Density>('comfortable');
-  const [offset, setOffset] = useState(0);
-
-  // Settles 300ms after typing stops — see the note in `routes/vessels.tsx`.
-  const q = useDebouncedValue(search.trim());
-
-  const facilityFilter = facilityParam(facility);
-
-  const query = useFlights({
-    limit: PAGE_SIZE,
-    offset,
-    direction,
-    ...(q ? { q } : {}),
-    ...(facilityFilter ? { facility: facilityFilter } : {}),
-  });
-
-  const data = query.data;
-  const source = data?.source;
-  const flights = data?.flights ?? [];
-
-  const toolbar = (
-    <>
-      <div className="flex h-11 w-60 max-w-full items-center gap-2.5 rounded-input border border-border bg-surface-muted px-3 focus-within:border-brand-500 sm:h-9">
-        <Icon name="search" size={16} className="text-ink-muted" />
-        <label htmlFor="flight-search" className="sr-only">
-          Search flight number or airline
-        </label>
-        <input
-          id="flight-search"
-          type="search"
-          value={search}
-          placeholder="Flight number or airline"
-          onChange={(event) => {
-            setSearch(event.target.value);
-            // Back to the first page: staying on page 3 of a new result set
-            // shows an empty table for a search that matched plenty.
-            setOffset(0);
-          }}
-          className="h-full w-full bg-transparent text-label text-ink outline-none placeholder:text-ink-disabled"
-        />
-      </div>
-
-      <Segmented
-        label="Direction"
-        size="sm"
-        value={direction}
-        onChange={(next) => {
-          setDirection(next);
-          setOffset(0);
-        }}
-        options={[
-          { value: 'arrival', label: 'Arrivals' },
-          { value: 'departure', label: 'Departures' },
-        ]}
-      />
-
-      <label htmlFor="flight-facility" className="sr-only">
-        Filter by facility
-      </label>
-      <select
-        id="flight-facility"
-        value={facility}
-        onChange={(event) => {
-          setFacility(event.target.value as Facility | 'all');
-          setOffset(0);
-        }}
-        className="h-11 rounded-input border border-border bg-surface-muted px-3 text-label text-ink sm:h-9"
-      >
-        {FACILITY_FILTERS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-
-      <span className="flex-1" />
-
-      <Segmented
-        label="Density"
-        size="sm"
-        value={density}
-        onChange={setDensity}
-        options={[
-          { value: 'comfortable', label: 'Comfortable' },
-          { value: 'compact', label: 'Compact' },
-        ]}
-      />
-    </>
-  );
+  const guide = useGuide('airport');
+  const source = guide.data?.source;
 
   return (
     <OpsShell
-      title="Flight movements"
-      intro="Arrivals and departures at R. L. Bradshaw International."
-      // As on `/vessels` — the table is not a provenance card, so the hatch
-      // comes from the shell.
-      source={source}
+      title="Airport Information"
+      intro="Published information for R. L. Bradshaw International Airport."
     >
-      {/* §5.2's banner — one per screen, rendered here now that the shell
-          carries no data of its own. See the note in `routes/vessels.tsx`. */}
-      {source ? <SourceNotice source={source} /> : null}
+      <section className="space-y-4" aria-labelledby="airport-guide-heading">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h2 id="airport-guide-heading" className="text-section font-semibold text-ink">
+            What SCASPA publishes about the airport
+          </h2>
+          {source ? <ProvenanceBadge kind="source" value={source.kind} /> : null}
+        </div>
+
+        {/*
+          ── NO PAGE-LEVEL DATE, AND THAT IS THE CONSIDERED CHOICE ────────────
+
+          `source.as_of` is the OLDEST verification in the set, because that is
+          the only claim true of everything on screen. Rendered as a single
+          stamp it would be actively misleading in the other direction: the
+          oldest airport row was verified in May 2024 and most were verified in
+          July 2026, so one page-level date would either advertise the best case
+          or condemn month-old content as two years stale.
+
+          The per-answer date is the one a reader acts on, and every answer
+          carries it. This says that, and says nothing it cannot support.
+        */}
+        <p className="text-caption text-ink-muted">
+          Every answer here was verified against a SCASPA source and shows the date it was checked.
+          Nothing on this page is generated.
+        </p>
+
+        {guide.isPending ? (
+          <div className="space-y-2" role="status">
+            <span className="sr-only">Loading published airport information</span>
+            <Skeleton className="h-12" />
+            <Skeleton className="h-12" />
+            <Skeleton className="h-12" />
+          </div>
+        ) : guide.error ? (
+          // A failed request is not an empty knowledge base. Rendering it as one
+          // would say SCASPA has verified nothing about its own airport.
+          <TableError error={guide.error} onRetry={() => void guide.refetch()} />
+        ) : (guide.data?.total ?? 0) === 0 ? (
+          <NothingVerified subject="the airport" />
+        ) : (
+          <GuideTopics topics={guide.data?.topics ?? []} />
+        )}
+
+        {/* §25's bridge: the page answers what SCASPA published, the assistant
+            answers the follow-up it did not anticipate. */}
+        <div className="flex flex-wrap gap-2">
+          <AskPilot question="How early should I arrive at the airport?" />
+          <AskPilot question="How do I get from the airport to Basseterre?" />
+        </div>
+      </section>
 
       {/*
-        §5.3: three tiles, and any null takes the em-dash treatment.
-        UNBLOCKED in M2 — `arrivals_today`, `departures_today` and `delayed` are
-        on `FlightMetrics` now, and each tile reads its own field rather than
-        the nearest figure. They render the em dash until a feed fills them,
-        which is §5.3's own treatment for a null and not a placeholder.
+        A rule rather than a margin. Everything below it is a different kind of
+        claim from everything above — verified published information against a
+        live feed that is not connected — and a visible line is the cheapest way
+        to say so.
       */}
-      <MetricRow columns={3}>
-        <MetricTile label="Arrivals today" value={data?.metrics.arrivals_today ?? null} />
-        <MetricTile label="Departures today" value={data?.metrics.departures_today ?? null} />
-        <MetricTile label="Delayed" value={data?.metrics.delayed ?? null} />
-      </MetricRow>
+      <hr className="border-border" />
 
-      {/*
-        §5.6, passthrough only. The full caution fill is gated on attribution —
-        "always attributed to whoever published it, with a time" — and
-        `OperationalAdvisory` carries neither, so this renders the neutral fill
-        until `published_by` and `published_at` land. Absent means no panel at
-        all; there is no empty container in this position.
-      */}
-      <OperationalAdvisoryPanel advisory={data?.advisory ?? null} />
-
-      {query.isPending ? (
-        <TableSkeleton columns={COLUMNS} density={density} />
-      ) : query.error ? (
-        <TableError error={query.error} onRetry={() => void query.refetch()} />
-      ) : source?.kind === 'unavailable' && flights.length === 0 ? (
-        // A statement about the SERVICE, not about the query. Airport Operations
-        // rather than Marine: this is an arrivals board, not a harbour.
-        <NoFeedState noun="flight" department="Airport Operations" />
-      ) : flights.length === 0 ? (
-        // A statement about the QUERY. Different remedy, different panel.
-        /*
-         * Every filter that can empty the table has to appear here, and this is
-         * not a nicety: **the toolbar lives inside `OpsTable`**, so when the
-         * table is replaced by this panel the controls go with it. A filter the
-         * panel does not list is a filter with no way back — the reader is left
-         * on an empty screen whose only remedy is a reload.
-         *
-         * Facility was exactly that until M5. It could empty the table (Port
-         * Zante matches no flight — every one of them is at the airport) while
-         * "Clear filters" reset only the search box, so clearing appeared to do
-         * nothing at all.
-         */
-        <FilteredOutState
-          noun="flights"
-          filters={[
-            ...(search.trim()
-              ? [
-                  {
-                    label: `“${search.trim()}”`,
-                    onRemove: () => {
-                      setSearch('');
-                      setOffset(0);
-                    },
-                  },
-                ]
-              : []),
-            ...(facility === 'all'
-              ? []
-              : [
-                  {
-                    label:
-                      FACILITY_FILTERS.find((option) => option.value === facility)?.label ??
-                      facility,
-                    onRemove: () => {
-                      setFacility('all');
-                      setOffset(0);
-                    },
-                  },
-                ]),
-          ]}
-          onClear={() => {
-            setSearch('');
-            setFacility('all');
-            setOffset(0);
-          }}
-        />
-      ) : (
-        <OpsTable
-          caption="Flight movements"
-          columns={COLUMNS}
-          toolbar={toolbar}
-          density={density}
-          footer={
-            <Pagination
-              offset={offset}
-              limit={PAGE_SIZE}
-              total={data?.total ?? 0}
-              onOffsetChange={setOffset}
-              noun="flights"
-            />
-          }
-          cards={flights.map((flight) => (
-            <OpsRowCard
-              key={flight.id}
-              title={`${flight.flight_no} · ${flight.port}`}
-              status={<FlightStatusChip status={flight.status} size="sm" />}
-              fields={[
-                {
-                  label: 'Due',
-                  value: (
-                    <FlightTime
-                      scheduled={flight.scheduled_time}
-                      estimated={flight.estimated_time}
-                    />
-                  ),
-                },
-                { label: 'Gate', value: <GateCell gate={flight.gate} /> },
-              ]}
-            />
-          ))}
-        >
-          {flights.map((flight) => (
-            <OpsRow key={flight.id} density={density}>
-              <OpsCell first numeric>
-                {flight.flight_no}
-              </OpsCell>
-              <OpsCell>{flight.port || '—'}</OpsCell>
-              <OpsCell numeric>
-                <FlightTime scheduled={flight.scheduled_time} estimated={flight.estimated_time} />
-              </OpsCell>
-              <OpsCell numeric>
-                <GateCell gate={flight.gate} />
-              </OpsCell>
-              <OpsCell>
-                <AirlineAvatar code={flight.airline_code} airline={flight.airline} />
-              </OpsCell>
-              <OpsCell>
-                <FlightStatusChip status={flight.status} size="sm" />
-              </OpsCell>
-            </OpsRow>
-          ))}
-        </OpsTable>
-      )}
+      <FlightMovements />
     </OpsShell>
   );
 }
@@ -317,10 +123,12 @@ export const Route = createFileRoute('/flights')({
   component: FlightsRoute,
   head: () => ({
     meta: [
-      { title: 'Flight movements — SCASPA Assistant' },
+      { title: 'Airport Information — Pilot' },
       {
         name: 'description',
-        content: 'Flight arrivals and departures at R. L. Bradshaw International Airport.',
+        content:
+          'Published SCASPA information for R. L. Bradshaw International Airport — ' +
+          'facilities, parking, check-in, security and immigration.',
       },
     ],
   }),

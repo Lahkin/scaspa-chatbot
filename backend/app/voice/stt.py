@@ -27,6 +27,7 @@ from dataclasses import dataclass
 
 from app.config import Settings, get_settings
 from app.upstream import call_with_retry
+from app.voice.provider import elevenlabs_transcribe, resolve_provider
 
 logger = logging.getLogger(__name__)
 
@@ -209,21 +210,27 @@ def transcribe(
     """
     settings = settings or get_settings()
     started = time.perf_counter()
-    client = client or build_transcription_client(settings)
+    provider = resolve_provider(settings)
 
     try:
-        response = call_with_retry(
-            lambda: client.audio.transcriptions.create(
-                model=settings.OPENAI_TRANSCRIBE_MODEL,
-                file=(filename, data),
-                language=LANGUAGE_HINT,
-                prompt=VOCABULARY_PROMPT,
-                response_format="text",
-            ),
-            settings=settings,
-        )
+        if provider == "elevenlabs":
+            response = call_with_retry(
+                lambda: elevenlabs_transcribe(data, filename, settings), settings=settings
+            )
+        else:
+            transcriber = client or build_transcription_client(settings)
+            response = call_with_retry(
+                lambda: transcriber.audio.transcriptions.create(
+                    model=settings.OPENAI_TRANSCRIBE_MODEL,
+                    file=(filename, data),
+                    language=LANGUAGE_HINT,
+                    prompt=VOCABULARY_PROMPT,
+                    response_format="text",
+                ),
+                settings=settings,
+            )
     except Exception as exc:
-        logger.warning("stt_failed error=%s", type(exc).__name__)
+        logger.warning("stt_failed provider=%s error=%s", provider, type(exc).__name__)
         raise STTUnavailableError(str(exc)) from exc
 
     text = response if isinstance(response, str) else getattr(response, "text", str(response))
@@ -232,5 +239,11 @@ def transcribe(
     elapsed = int((time.perf_counter() - started) * 1000)
     # Size and latency only. Never the audio, never the transcript, never an
     # identifier — CLAUDE.md rule 9.
-    logger.info("stt_transcribed bytes=%d chars=%d latency_ms=%d", len(data), len(text), elapsed)
+    logger.info(
+        "stt_transcribed provider=%s bytes=%d chars=%d latency_ms=%d",
+        provider,
+        len(data),
+        len(text),
+        elapsed,
+    )
     return text

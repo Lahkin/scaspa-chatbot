@@ -150,17 +150,84 @@ describe('the sidebar drawer', () => {
 // ── 3. The destinations ──────────────────────────────────────────────────────
 
 describe('the navigation', () => {
-  it('lists the handoff’s groups and destinations, in order', async () => {
+  it('groups the destinations the way the navigation brief does', async () => {
+    /*
+     * ── ASK PILOT · OPERATIONS · HELP · TOOLS ────────────────────────────────
+     *
+     * The headings once read ASSISTANT, OPERATIONS and CONDITIONAL. 0037
+     * replaced all three with "Ask Pilot" and "Services", judging the first two
+     * jargon and the third not a category at all — "Conditional" is a note to
+     * the developer that a route may not exist, and above a customer's
+     * navigation it is the clearest possible sign of an interface labelled from
+     * the inside out.
+     *
+     * That was right about two of the three. The brief's list of things to stop
+     * showing names SCASPA Assistant, Conditional, Diagnostics and "raw
+     * developer terminology" — it does not name Operations, and the brief's own
+     * §4 navigation uses OPERATIONS as a heading. So this restores the brief's
+     * structure rather than reversing a considered decision (0044).
+     *
+     * What stays forbidden is asserted below, and it is the half of this test
+     * that matters: those three words must never reappear.
+     */
     await renderSidebar();
     const nav = screen.getByRole('navigation', { name: 'Sections' });
 
-    for (const label of ['Assistant', 'Operations', 'Conditional']) {
+    for (const label of ['Ask Pilot', 'Operations', 'Help', 'Tools']) {
       expect(within(nav).getByRole('heading', { name: label })).toBeInTheDocument();
     }
+
+    /*
+     * The words that must not come back. "Operations" has left this list — it
+     * is a heading the brief asks for — but Assistant, Conditional and
+     * Diagnostics are still how an interface tells a customer about its own
+     * implementation.
+     */
+    for (const gone of ['Assistant', 'Conditional', 'Diagnostics', 'Services']) {
+      expect(within(nav).queryByRole('heading', { name: gone })).not.toBeInTheDocument();
+    }
+
     const links = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent?.trim());
-    expect(links).toEqual(['Chat', 'Vessels', 'Flights', 'Tariffs', 'Support', 'Console']);
+    /*
+     * The exact list, in order, and the exactness is the point: a nav that
+     * grows an entry nobody meant to add is how "Diagnostics" and "Conditional"
+     * got in front of customers before.
+     *
+     * "Contact SCASPA", not "Support" — support is what a software company
+     * calls its help desk, and a traveller who wants a person wants to contact
+     * the Authority.
+     */
+    expect(links).toEqual([
+      'Chat',
+      'Vessels',
+      'Flights',
+      'Tariffs',
+      'Cargo',
+      'Contact SCASPA',
+      'Console',
+    ]);
+  });
+
+  it('drops a group heading when nothing in it survives a search', async () => {
+    /*
+     * HELP and TOOLS hold one item each, so this is the shape that decides
+     * whether a one-item group is safe. 0037 folded Console into Services to
+     * avoid "a heading reading Console above a single item called Console";
+     * the brief answers that by naming the group TOOLS, which says something
+     * the item does not — but only if an empty TOOLS never survives on screen.
+     */
+    const user = userEvent.setup();
+    await renderSidebar();
+
+    await user.type(screen.getByRole('searchbox', { name: /search/i }), 'vessel');
+
+    const nav = screen.getByRole('navigation', { name: 'Sections' });
+    expect(within(nav).getByRole('heading', { name: 'Operations' })).toBeInTheDocument();
+    for (const gone of ['Ask Pilot', 'Help', 'Tools']) {
+      expect(within(nav).queryByRole('heading', { name: gone })).not.toBeInTheDocument();
+    }
   });
 
   it('has no Admin entry at all — not a disabled row, not a lock', async () => {
@@ -324,13 +391,19 @@ describe('LogoLockup', () => {
     // Decorative: the visible name beside it already says it.
     expect(img).toHaveAttribute('alt', '');
     expect(img).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByText('SCASPA Assistant')).toBeInTheDocument();
+    /*
+     * "SCASPA", not the product name. This is the INSTITUTIONAL lockup — the
+     * Authority's seal, and the Authority beside it. It read "SCASPA Assistant"
+     * while the product WAS the SCASPA Assistant; the product is Pilot now, and
+     * `PilotBrand` is where its name lives.
+     */
+    expect(screen.getByText('SCASPA')).toBeInTheDocument();
   });
 
   it('lets the mark carry the name when the name is hidden', () => {
     const { container } = render(<LogoLockup nameHidden />);
-    expect(container.querySelector('img')).toHaveAttribute('alt', 'SCASPA Assistant');
-    expect(screen.getByAltText('SCASPA Assistant')).toBeInTheDocument();
+    expect(container.querySelector('img')).toHaveAttribute('alt', 'SCASPA');
+    expect(screen.getByAltText('SCASPA')).toBeInTheDocument();
   });
 
   it('never distorts the aspect ratio', () => {
@@ -387,7 +460,7 @@ describe('LogoLockup', () => {
     // `600 15px/20px, white-space: nowrap` — an ellipsis in the Authority's own
     // name is a layout bug shipped as a design.
     render(<LogoLockup />);
-    const name = screen.getByText('SCASPA Assistant');
+    const name = screen.getByText('SCASPA');
     expect(name.className).toContain('whitespace-nowrap');
     expect(name.className).not.toContain('truncate');
     expect(name.className).toContain('text-wordmark');

@@ -27,6 +27,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
 
 from langchain.tools import tool
@@ -75,6 +76,25 @@ class TurnContext:
     # are filled in from the operational feed by `app.ops.cards`, so nothing the
     # model wrote reaches them.
     card: "CardRequest | None" = None
+
+    # Text a tool produced that figures may be VERIFIED against, but which is
+    # not a citable knowledge-base row.
+    #
+    # The distinction is the point. `retrieved` holds rows with kb ids: an
+    # answer may cite them, and the citation chain checks it did. This holds
+    # operational text from a structured source — the published cruise
+    # schedule — which has no kb id and must never be given one.
+    #
+    # Without it the numeric grounding gate discarded every cruise answer, and
+    # correctly: a sailing time from a tool it had never heard of is exactly
+    # the unverifiable figure that gate exists to stop. The fix is to tell the
+    # gate where the figure came from, not to weaken it.
+    evidence: list[str] = field(default_factory=list)
+
+    def record_evidence(self, text: str) -> None:
+        """Register tool output as something figures may be checked against."""
+        if text:
+            self.evidence.append(text)
 
     def record_chunks(self, chunks: list[RetrievedChunk]) -> None:
         """Accumulate retrieved rows across every search in this turn.
@@ -664,8 +684,127 @@ def show_card(
         )
 
 
+@tool
+def get_cruise_schedule(
+    when: Annotated[
+        str,
+        "today, tomorrow, week, or a single date as YYYY-MM-DD. Use week for vague "
+        "questions like 'this week' or 'what is coming'.",
+    ] = "week",
+    vessel: Annotated[
+        str,
+        "Optional vessel name to filter by, e.g. 'Allure'. Leave empty for all calls.",
+    ] = "",
+) -> str:
+    """Cruise calls SCASPA has published for Port Zante and the piers.
+
+    **Use this instead of search_scaspa_knowledge for any question about which ships
+    are arriving, when, or how many passengers.** The knowledge base holds explanatory
+    material about the cruise terminal; this holds the actual schedule, as rows, from
+    SCASPA's own published source.
+
+    Returns the calls with the date the schedule was last retrieved. Quote that date —
+    the schedule is fetched periodically and is not a live feed.
+
+    **An empty result is a real answer.** There are days with no cruise ship in port,
+    and saying so is correct. Do not fall back to searching the knowledge base for a
+    schedule it does not contain, and never estimate an arrival.
+    """
+    label = (when or "week").strip().lower()
+    name = (vessel or "").strip()
+
+    with _timed(
+        "get_cruise_schedule",
+        f"Reading the published SCASPA cruise schedule — {label}" + (f", {name}" if name else ""),
+    ):
+        from app.ops import cruise
+
+        today = datetime.now(UTC).date()
+        if label == "today":
+            since = until = today
+        elif label == "tomorrow":
+            since = until = today + timedelta(days=1)
+        elif label == "week":
+            since, until = today, today + timedelta(days=7)
+        else:
+            try:
+                since = until = date.fromisoformat(label)
+            except ValueError:
+                # A date the model invented a format for. Widen rather than
+                # guess: a week of real calls answers the question, where a
+                # coerced date could answer a different one confidently.
+                since, until = today, today + timedelta(days=7)
+
+        result = cruise.schedule(since=since, until=until, vessel=name or None, limit=40)
+
+        if result.source.kind == "unavailable":
+            return (
+                "The published cruise schedule has not been retrieved yet, so there is "
+                "nothing to report. Say so and offer SCASPA's contact details."
+            )
+
+        checked = (
+            result.source.as_of.strftime("%d %b %Y at %H:%M UTC")
+            if result.source.as_of
+            else "an unknown time"
+        )
+        page = cruise.source_page()
+
+        if not result.calls:
+            empty = (
+                f"SCASPA has published NO cruise calls for {label} "
+                f"({since.isoformat()} to {until.isoformat()}). This is a real answer, not a "
+                f"failure — tell the user there are none scheduled. "
+                f"Source: Official SCASPA cruise schedule, checked {checked}. {page}"
+            )
+            # The checked date is a figure the answer is required to quote,
+            # so the grounding gate has to have seen it.
+            current_turn().record_evidence(empty)
+            return empty
+
+        lines = []
+        for call in result.calls:
+            pax = (
+                f"{call.pax} passengers"
+                if call.pax is not None
+                else "passenger count not published"
+            )
+            lines.append(
+                f"- {call.call_date.isoformat()} ({call.day}) {call.window}: {call.vessel}"
+                f" — {call.cruise_line}, pier {call.pier}, {pax}"
+            )
+
+        more = (
+            f"\n({result.total} calls match in total; the first {len(result.calls)} are listed.)"
+            if result.total > len(result.calls)
+            else ""
+        )
+        listed = "\n".join(lines)
+        answer = (
+            f"Published SCASPA cruise calls for {label}:\n"
+            + listed
+            + more
+            + f"\n\nSource: Official SCASPA cruise schedule, checked {checked}. {page}\n"
+            + "This is published information retrieved periodically, NOT a live feed. "
+            + "Quote the checked date in your answer."
+        )
+        # ── EVERY FIGURE HERE MUST BE VERIFIABLE ───────────────────────
+        #
+        # Dates, sailing windows and passenger counts are exactly the
+        # values the numeric grounding gate discards an answer for when it
+        # cannot find them. Before this line it could not: the gate reads
+        # retrieved knowledge-base rows, and these came from a structured
+        # source it had never heard of, so every cruise answer was replaced
+        # by the "could not verify" message. Recording the tool's own
+        # output tells the gate where the figures came from rather than
+        # weakening it.
+        current_turn().record_evidence(answer)
+        return answer
+
+
 ALL_TOOLS = [
     search_scaspa_knowledge,
+    get_cruise_schedule,
     search_site_content,
     make_chart,
     calculate,
@@ -682,6 +821,7 @@ __all__ = [
     "calculate",
     "current_turn",
     "escalate_to_human",
+    "get_cruise_schedule",
     "make_chart",
     "safe_eval",
     "search_scaspa_knowledge",

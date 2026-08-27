@@ -15,6 +15,8 @@ changes, this file changes in the same pull request.
 | `POST /api/tts`              | Synthesise text to MP3 audio                     |
 | `POST /api/tts/preview`      | Show what TTS would say, free                    |
 | `GET /api/vessels`           | Vessel arrivals and berth occupancy              |
+| `GET /api/cruise-schedule`   | Cruise calls as SCASPA publishes them            |
+| `GET /api/guide`             | Verified published answers, without asking        |
 | `GET /api/flights`           | Flight arrivals and departures                   |
 | `GET /api/tariffs`           | Published schedule of port charges               |
 | `POST /api/tariffs/quote`    | Estimate charges from published rates            |
@@ -485,6 +487,7 @@ The five tools, so you can pick an icon per `name`:
 | `name`                    | What it means                                  |
 | ------------------------- | ---------------------------------------------- |
 | `search_scaspa_knowledge` | Searching the verified knowledge base          |
+| `get_cruise_schedule`     | Reading the published SCASPA cruise schedule    |
 | `search_site_content`     | Searching scaspa.com pages and PDFs            |
 | `make_chart`              | Building a chart                               |
 | `calculate`               | Doing arithmetic on retrieved figures          |
@@ -622,6 +625,13 @@ Unknown values are `null`, never `0` — a client must not read "never built" as
     "embedding_model": "text-embedding-3-large",
     "web_docs": 0,
     "message": null
+  },
+  "voice": {
+    "stt": true,
+    "tts": true,
+    "checked": true,
+    "detail": "ElevenLabs is reachable; speaking as 'Marin'",
+    "provider": "elevenlabs"
   }
 }
 ```
@@ -631,6 +641,50 @@ With no index built, `status` is `degraded`, `index.ready` is `false`, and
 
 `models` appears here and **only** here. It never appears in a chat response or
 an error.
+
+### `voice` — whether speech can work at all
+
+The client cannot work this out for itself. `VITE_ENABLE_VOICE` is set by
+whoever builds the frontend and defaults to on; the speech-model entitlement
+belongs to whoever holds the API key. On a project without one, the microphone
+and the speak-aloud button were rendered for every user and failed on every
+press.
+
+**`provider` is `openai` or `elevenlabs`**, with the `VOICE_PROVIDER=auto`
+setting already resolved — `auto` picks ElevenLabs when `ELEVENLABS_API_KEY` is
+set. It is reported because the first question when voice misbehaves is which
+provider a deployment is using, and the client cannot infer it: it never sees a
+key.
+
+How availability is determined depends on which one answered, because they fail
+differently:
+
+| Provider | Probe | What it catches |
+| --- | --- | --- |
+| `openai` | list models, once an hour | The entitlement `403` — an entitled model appears in the list |
+| `elevenlabs` | list voices, once an hour | Reachability, **and** whether `ELEVENLABS_VOICE_ID` names a voice this account actually has |
+
+**ElevenLabs has a half-available state that OpenAI does not.** A reachable
+account with no voice chosen transcribes perfectly and cannot speak, so `stt` is
+true and `tts` is false. `ELEVENLABS_VOICE_ID` has no default on purpose:
+choosing one in source would pick an accent, a gender and a register for a
+Caribbean port authority on the strength of whatever was first in a list, and it
+is the voice every caller hears. `detail` then names the command that lists the
+options.
+
+**`checked: false` means carry on, not stop.** It is the backend saying it could
+not find out — no key, no network, a transient upstream — and `stt`/`tts` beside
+it are then optimistic defaults rather than findings. A client must not disable
+anything on the strength of them: hiding a working microphone because one probe
+failed is a worse and far quieter mistake than showing one that fails.
+
+**`voice` never changes `status`.** A deployment with no speech models is fully
+functional — this product answers in text — and reporting it as `degraded` would
+put a permanent amber light on a working service, which is how a status field
+stops being read.
+
+`detail` is written for an operator and names the missing models. It is never
+shown to a user; the client has its own copy for that.
 
 ---
 
@@ -824,6 +878,89 @@ So a panel may show "EN ROUTE" — because a named feed said so at a stated time
 while the assistant continues to decline to say it in a sentence. Both are true
 at once, and the `source` object is what makes that so.
 
+### `GET /api/guide` — verified answers, without asking a question
+
+The knowledge base already reaches users through the assistant, with a citation
+and a verified date attached. That is the right shape for a question somebody
+actually has, and the wrong shape for a screen: a traveller opening "Airport
+Information" does not yet know what to ask, and telling them to go and think of
+a question is how a page ends up empty.
+
+This serves the same rows the assistant retrieves from, unchanged.
+
+| Parameter  | Type     | Default   | Notes                                                                              |
+| ---------- | -------- | --------- | ---------------------------------------------------------------------------------- |
+| `category` | `string` | `airport` | `ferry`, `cargo`, `cruise`, `airport`, `general`, `marine`, `payments`, `access`, `jobs`, `corporate` |
+
+```json
+{
+  "source": {
+    "kind": "published",
+    "label": "Verified SCASPA published information",
+    "as_of": "2024-05-09T00:00:00Z",
+    "notice": null
+  },
+  "category": "airport",
+  "topics": [
+    {
+      "name": "facilities",
+      "entries": [
+        {
+          "id": "kb-053",
+          "question": "What facilities are available at the airport?",
+          "answer": "…",
+          "source_url": "https://www.scaspa.com/airport-about.html",
+          "as_of": "2026-07-31",
+          "volatility": "medium"
+        }
+      ]
+    }
+  ],
+  "total": 18
+}
+```
+
+**No model is involved anywhere in this path.** Nothing is generated, so nothing
+can be hallucinated — which is exactly why it sits beside `/api/vessels` rather
+than behind `/api/chat`.
+
+**Only `confidence == "confirmed"` rows are served.** The same rule the index
+applies (CLAUDE.md rule 8), and a page is not a lower standard than a sentence:
+a screen is scanned and believed without the reader ever forming a question they
+might have doubted the answer to. There is no follow-up in which an unverified
+claim gets challenged. On the live export that is 18 of the 19 confirmed airport
+rows — see the note on rejected rows in `docs/found-during-build.md`.
+
+**`id` is the citation anchor the assistant uses.** An answer met on the Airport
+page and the same answer met in a conversation are one row, not two sources that
+happen to agree.
+
+**`source.as_of` is the OLDEST verification in the set**, not the newest. It is
+the only date true of everything returned; stamping the newest would advertise
+the best case. Clients should generally render the **per-entry** `as_of`
+instead: on the live airport data the oldest row was verified in May 2024 and
+most in July 2026, so a single page-level date either flatters the set or
+condemns month-old content as two years stale. `/flights` renders per-entry
+dates and no page-level one at all.
+
+**An unknown or uncovered category is a `200` with `total: 0` and
+`source.kind: "unavailable"`, never a 404.** "Nothing has been verified about
+this" is information; a 404 would mean the endpoint does not exist and would put
+an error on screen where the correct rendering is an honest empty state. Note
+the two are genuinely different: `published` with entries means researchers have
+verified something, `unavailable` means they have not — and `published` with
+zero entries is impossible, because the schema refuses a `published` source
+without an `as_of`.
+
+**`volatility` must be rendered, not dropped.** "Rarely changes" and "check
+before use" lead a reader to different actions, and only one of those is a
+question this product can settle. An unrecognised value resolves to `medium` —
+the cautious case — never to `low`.
+
+**The export is re-read when the file changes.** The service caches parsed rows
+on the CSV's path *and* modification time, so a researcher correcting an answer
+and redeploying does not need a restart to take effect.
+
 ### The four `/api/ops/*` endpoints
 
 Added so the design's map, gate and advisory panels have something behind them.
@@ -916,7 +1053,7 @@ complete set with a total. Do not send `limit` or `offset` to them.
 
 | Field    | Type                                   | Notes                                                   |
 | -------- | -------------------------------------- | ------------------------------------------------------- |
-| `kind`   | `"live" \| "fixture" \| "unavailable"` | Which of the three you are looking at                   |
+| `kind`   | `"live" \| "published" \| "fixture" \| "unavailable"` | Which of the four you are looking at        |
 | `label`  | `string`                               | Human-readable origin, safe to render                   |
 | `as_of`  | `string \| null`                       | When the data was produced. **Not** when you fetched it |
 | `notice` | `string \| null`                       | **Render this whenever present**                        |
@@ -926,6 +1063,25 @@ complete set with a total. Do not send `limit` or `offset` to them.
 > vessel arrivals is believed on sight, and nothing in the rows tells a reader
 > whether they are looking at a real feed or at development sample data. This
 > string is the only thing that does.
+
+#### `kind: "published"` — official information, fetched periodically
+
+Official SCASPA information that this service **retrieved at a stated time** —
+the cruise schedule, today. It is deliberately neither of the two things it
+would otherwise have to pretend to be:
+
+- **not `live`.** A page fetched every six hours is a snapshot, and calling a
+  snapshot live is the claim that makes every other claim on the screen worth
+  less. Never label it LIVE in a UI.
+- **not `fixture`.** This is real SCASPA data, and dressing it in the
+  sample-data warning teaches readers to ignore that warning.
+
+`as_of` is **mandatory** for this kind and is when Pilot last fetched it — the
+server refuses to build a `published` source without it. Render it: "Checked 27
+Aug 2026 at 05:12 UTC" is the honest label, and a published snapshot with no
+date on it is indistinguishable from a live feed.
+
+`notice` is null, because there is nothing to warn about.
 
 `kind: "unavailable"` is the **production default** and is a **200 with an empty
 list**, not an error. SCASPA has published no feed; that is a fact about the

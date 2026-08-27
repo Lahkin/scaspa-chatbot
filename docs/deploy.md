@@ -38,6 +38,26 @@ uv run python scripts/build_index.py --csv ../data/knowledge/scaspa_kb_YYYY-MM-D
 Ship `data/chroma/` and `data/index_meta.json` to the host's persistent volume,
 or run the build as a release step against the mounted volume.
 
+## Populate the operational store at release time
+
+Separate from the index, and on the same volume. The knowledge base is prose in
+Chroma; the cruise schedule is rows in `data/operational.sqlite3`, fetched from
+SCASPA rather than built from the researchers' export.
+
+```bash
+cd backend
+uv run python scripts/watchtower.py --force
+```
+
+The running application sweeps every six hours on its own, so this is not
+strictly required — but a container that has just started waits a minute before
+its first sweep, and a **brand new volume has nothing at all**. Without this
+step the Vessels page correctly, and unhelpfully, tells the first visitors that
+the published cruise schedule has not been retrieved.
+
+`--force` overrides the six-hour interval, which is what you want once, at
+release. It is not something to put on a timer.
+
 ## Docker
 
 ```bash
@@ -70,8 +90,17 @@ and sets `ENV=prod`.
       `ENV=prod` makes the app refuse to boot — that is intentional.
 - [ ] `ENV=prod`.
 - [ ] `CHROMA_DIR` on a persistent volume, or the index is lost on restart.
+- [ ] `OPERATIONAL_DB_PATH` on that same volume. Losing it loses the cruise
+      schedule *and* the record of when it was last checked, so a restart looks
+      to a reader like a source that was never retrieved.
 - [ ] `LOG_LEVEL=INFO`.
 - [ ] Index built and `/api/health` returns `status: ok`.
+- [ ] `watchtower_scheduler_started` appears in the boot log. If it does not,
+      `WATCHTOWER_ENABLED` is false and **nothing** will refresh the cruise
+      schedule — the page will keep showing whatever was last stored, with a
+      date that quietly ages. Leave it unset unless cron is doing the sweeping.
+- [ ] `uv run python scripts/watchtower.py --status` shows a `last checked`
+      within the last six hours.
 
 ## Verify after deploying
 

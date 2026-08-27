@@ -221,28 +221,55 @@ const STEP = (over: Partial<ToolActivity> = {}): ToolActivity => ({
 });
 
 describe('ToolTrace', () => {
+  /*
+   * ── THE LABEL STOPPED BEING A COUNT OF FUNCTION CALLS ──────────────────────
+   *
+   * It read "3 tools used · 361 ms". A traveller deciding whether to believe a
+   * fact about a ferry was being told how many function calls had run and how
+   * long they took — the most inside-out sentence in the product.
+   *
+   * The detail did not go anywhere. It is still in the panel, under a heading
+   * that says what the panel is for, one click away instead of on the face of
+   * every answer. These tests moved with the label rather than being loosened
+   * to accept either wording.
+   */
+  const HEADING = /how pilot verified this/i;
+
   it('arrives collapsed — evidence, not answer', () => {
     render(<ToolTrace activity={[STEP()]} />);
-    expect(screen.getByRole('button', { name: /1 tool used/ })).toHaveAttribute(
-      'aria-expanded',
-      'false'
-    );
+    expect(screen.getByRole('button', { name: HEADING })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('names what it is, and never the machinery, once settled', () => {
+    render(<ToolTrace activity={[STEP()]} />);
+    const label = screen.getByRole('button', { name: HEADING }).textContent ?? '';
+    expect(label).not.toMatch(/tool/i);
+    expect(label, 'no duration on the face of an answer').not.toMatch(/\d+\s*(ms|s)\b/i);
+  });
+
+  it('does show progress while tools are still running', () => {
+    // Then the count is progress rather than trivia: "0 of 1" is the difference
+    // between working and stuck, and it disappears the moment it settles.
+    render(<ToolTrace activity={[STEP({ ms: null, done: false })]} />);
+    expect(screen.getByRole('button', { name: /verifying — 0 of 1 steps/i })).toBeInTheDocument();
   });
 
   it('shows name, the backend summary and a duration — and no payloads', async () => {
     const user = userEvent.setup();
     render(<ToolTrace activity={[STEP()]} />);
-    await user.click(screen.getByRole('button', { name: /1 tool used/ }));
+    await user.click(screen.getByRole('button', { name: HEADING }));
 
     expect(screen.getByText('search_scaspa_knowledge')).toBeInTheDocument();
     expect(screen.getByText(/Searching SCASPA knowledge base/)).toBeInTheDocument();
+    // The timing is demoted, not deleted: a reader who opened something called
+    // "How Pilot verified this" is asking exactly this.
     expect(screen.getByText('240 ms')).toBeInTheDocument();
   });
 
   it('marks a running tool rather than showing it as instant', async () => {
     const user = userEvent.setup();
     render(<ToolTrace activity={[STEP({ ms: null, done: false })]} />);
-    await user.click(screen.getByRole('button', { name: /0 of 1 tools used/ }));
+    await user.click(screen.getByRole('button', { name: /verifying/i }));
     // `0 ms` would read as instant, which is the opposite of what is true.
     expect(screen.getByText('running')).toBeInTheDocument();
     expect(screen.queryByText('0 ms')).not.toBeInTheDocument();
@@ -252,12 +279,12 @@ describe('ToolTrace', () => {
     const user = userEvent.setup();
     const six = Array.from({ length: 6 }, (_, i) => STEP({ id: `t${i}`, name: `tool_${i}` }));
     const { unmount } = render(<ToolTrace activity={six} />);
-    await user.click(screen.getByRole('button', { name: /6 tools used/ }));
+    await user.click(screen.getByRole('button', { name: HEADING }));
     expect(screen.getByText(/most that can run for one question/i)).toBeInTheDocument();
     unmount();
 
     render(<ToolTrace activity={[STEP()]} />);
-    await user.click(screen.getByRole('button', { name: /1 tool used/ }));
+    await user.click(screen.getByRole('button', { name: HEADING }));
     // On a one-tool trace it would imply a limit was hit when none was.
     expect(screen.queryByText(/most that can run/i)).not.toBeInTheDocument();
   });

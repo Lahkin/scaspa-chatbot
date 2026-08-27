@@ -53,6 +53,20 @@ export const fr: Strings = {
     onThisPage: 'Sur cette page',
     backToAssistant: 'Assistant',
 
+    appearance: {
+      heading: 'Apparence',
+      lead: 'Si cette application s’affiche en clair ou en sombre. Cela ne change pas les réponses.',
+      legend: 'Thème',
+      options: {
+        light: { label: 'Clair', hint: 'Fond clair' },
+        dark: { label: 'Sombre', hint: 'Fond sombre' },
+        system: { label: 'Système', hint: 'Suivre mon appareil' },
+      },
+      saved: 'Thème enregistré sur cet appareil.',
+      storedNote:
+        'Conservé uniquement sur cet appareil. Rien concernant votre choix n’est envoyé à SCASPA.',
+    },
+
     language: {
       heading: 'Langue',
       lead: 'La langue des boutons, des menus et des libellés de cette application.',

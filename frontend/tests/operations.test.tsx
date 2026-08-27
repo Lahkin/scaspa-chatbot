@@ -126,19 +126,22 @@ describe('the fee calculator result', () => {
     expect(note).toHaveTextContent('869-465-8121');
   });
 
-  it('labels the figure a total, and never a charge that is due', () => {
+  it('labels the figure an estimate, and never a charge that is due', () => {
     /*
-     * "Total", not "Estimated total".
+     * "Estimated SCASPA charge", not "Total".
      *
-     * §5.11 gives the block one label and changes it in exactly one case:
-     * "The word 'Total' changes to 'Total so far' ONLY when the flag is
-     * present — do not infer it by string-matching." A second qualifier in the
-     * label makes that change one word among two rather than the whole signal,
-     * and the estimate is already stated by the disclaimer below, which is the
-     * one string on this screen that may never be collapsed or truncated.
+     * §5.11 gives the block one label and changes it in exactly one case: the
+     * "so far" qualifier appears ONLY when the unpriced flag is present — never
+     * inferred by string-matching. That rule is unchanged; the word it modifies
+     * is not.
+     *
+     * "Total" is what appears at the foot of an invoice, and this figure is
+     * arithmetic over a published schedule. The Pilot spec asks that nothing
+     * here imply a bill or a payment. The disclaimer below still carries the
+     * full statement and is still the one string that may never be collapsed.
      */
     render(<QuoteResult quote={QUOTE} />);
-    expect(screen.getByText('Total')).toBeInTheDocument();
+    expect(screen.getByText('Estimated SCASPA charge')).toBeInTheDocument();
     // Scoped past the disclaimer, which says "not an invoice" — a search over
     // the whole render matches the sentence that exists to prevent exactly the
     // reading this is checking for.
@@ -208,11 +211,27 @@ describe('the fee calculator result', () => {
 describe('a quote missing a published rate', () => {
   const SHORT = { ...QUOTE, unpriced: ['SMP-BTH'] };
 
-  it('says "Total so far", not "Total"', () => {
+  it('says "so far", and never the word Total', () => {
     render(<QuoteResult quote={SHORT} />);
-    expect(screen.getByText(/Total so far/)).toBeInTheDocument();
-    // And the ordinary wording is gone, rather than both appearing.
-    expect(screen.queryByText('Estimated total')).not.toBeInTheDocument();
+    expect(screen.getByText(/Estimated charge so far/)).toBeInTheDocument();
+    // And the settled wording is gone, rather than both appearing.
+    expect(screen.queryByText('Estimated SCASPA charge')).not.toBeInTheDocument();
+  });
+
+  it('never calls the figure a total, because nobody has been billed', () => {
+    /*
+     * "Total" is what appears at the foot of an invoice. This figure is
+     * arithmetic over a published schedule: no account has been debited and the
+     * number can change when the real charge is raised. The Pilot spec asks
+     * that nothing here imply a bill or a payment, and the single word implied
+     * both.
+     */
+    const { container, unmount } = render(<QuoteResult quote={SHORT} />);
+    expect(container.textContent).not.toMatch(/\bTotal\b/);
+    unmount();
+
+    const complete = render(<QuoteResult quote={QUOTE} />);
+    expect(complete.container.textContent).not.toMatch(/\bTotal\b/);
   });
 
   it('names the missing code in the lines, above the total', () => {
@@ -242,8 +261,8 @@ describe('a quote missing a published rate', () => {
   it('a complete quote shows none of it', () => {
     render(<QuoteResult quote={QUOTE} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Total so far/)).not.toBeInTheDocument();
-    expect(screen.getByText('Total')).toBeInTheDocument();
+    expect(screen.queryByText(/so far/)).not.toBeInTheDocument();
+    expect(screen.getByText('Estimated SCASPA charge')).toBeInTheDocument();
   });
 
   it('the disclaimer is still rendered — it never substitutes for the warning', () => {
@@ -554,8 +573,12 @@ describe('the operations table — board 17', () => {
      * filter, and one empty because of a filter is not a fault in the service.
      */
     const { unmount } = render(<NoFeedState noun="vessel" />);
-    expect(screen.getByText('No vessel feed is connected')).toBeInTheDocument();
-    expect(screen.getByText('No feed')).toBeInTheDocument();
+    expect(screen.getByText('Live vessel movements are currently unavailable')).toBeInTheDocument();
+    // The limitation, stated as a rule the product holds itself to.
+    expect(screen.getByText(/Pilot will not invent operational data/)).toBeInTheDocument();
+    // No badge in the panel: `SourceNotice` above carries it, and two identical
+    // labels a few centimetres apart halve the message rather than doubling it.
+    expect(screen.queryByText('Live data unavailable')).toBeNull();
     // It names the one action that helps: a telephone number, not a filter.
     expect(screen.getByRole('link', { name: /869/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /clear filters/i })).toBeNull();
@@ -659,7 +682,7 @@ describe('the operations table — board 17', () => {
     // §5.7 writes the vessel copy. The flights screen inherited it verbatim, so
     // an empty arrivals board told a passenger to ring the harbour.
     render(<NoFeedState noun="flight" department="Airport Operations" />);
-    expect(screen.getByText(/Telephone Airport Operations/)).toBeInTheDocument();
+    expect(screen.getByText(/telephone Airport Operations/)).toBeInTheDocument();
     expect(screen.queryByText(/Marine Operations/)).toBeNull();
   });
 
@@ -1058,9 +1081,18 @@ describe('the vessels screen', () => {
   });
 
   it('says the feed is missing, not that the filters are wrong', async () => {
+    /*
+     * The panel names AIS, and it names it on purpose.
+     *
+     * "No feed is connected" is our word for our plumbing. A reader who has ever
+     * opened a ship-tracking website knows what AIS is, and is entitled to know
+     * that this product is not reading one — the sentence is a statement about
+     * the world rather than a fault report about the page.
+     */
     setScenario('ops_unavailable');
     renderRoute('/vessels');
-    expect(await screen.findByText('No vessel feed is connected')).toBeInTheDocument();
+    expect(await screen.findByText('Live vessel positions are not connected')).toBeInTheDocument();
+    expect(screen.getByText(/live AIS vessel positions are not currently available/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
   });
 });
@@ -1102,7 +1134,7 @@ describe('the console screen', () => {
     expect(screen.getByText(/No AIS receiver is connected/)).toBeInTheDocument();
     // The strip carries §6.7's `NO FEED` badge — the console's own version had
     // no meta strip at all.
-    expect(screen.getAllByText('No feed').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Live data unavailable').length).toBeGreaterThan(0);
   });
 
   it('reports the service and the index without offering to rebuild either', async () => {
@@ -1144,8 +1176,16 @@ describe('the console screen', () => {
      * the figure has been believed, and the first thing lost when the column is
      * narrow. It was flagged on board 17 and is board 20's screen.
      */
+    /*
+     * The table is now the public screen's own `VesselMovements`, so its caption
+     * reads "Vessel movements" rather than "Vessel arrivals" — the console
+     * stopped drawing a second implementation of it (0045). The assertion is
+     * kept on the CONSOLE route rather than folded into the `/vessels` tests,
+     * because the two-column rule was broken on the console specifically and a
+     * guard is worth keeping where the defect actually happened.
+     */
     renderRoute('/ops/vessels');
-    const table = within(await screen.findByRole('table', { name: /Vessel arrivals/ }));
+    const table = within(await screen.findByRole('table', { name: /Vessel movements/ }));
     expect(table.getByRole('columnheader', { name: 'ETA' })).toBeInTheDocument();
     expect(table.getByRole('columnheader', { name: 'ATA' })).toBeInTheDocument();
     expect(table.queryByRole('columnheader', { name: 'Arrival' })).toBeNull();
@@ -1189,11 +1229,46 @@ describe('the support screen', () => {
   });
 
   it('explains why it asks for nothing about the person', async () => {
-    // §6.4 is "**Required.** Without it, the absence of those fields reads as a
-    // broken form."
+    /*
+     * §6.4 is "**Required.** Without it, the absence of those fields reads as a
+     * broken form."
+     *
+     * "Pilot", not "we" — §21. The change is not cosmetic: "we" on a
+     * SCASPA-branded page reads as the Authority, and the Authority DOES hold
+     * accounts, for berthing and cargo and payments. It is Pilot that does not,
+     * and the old heading invited a reader to conclude something untrue about
+     * the organisation rather than something true about this assistant.
+     */
     renderRoute('/support');
-    expect(await screen.findByText('Why we ask for so little')).toBeInTheDocument();
+    expect(await screen.findByText('Why Pilot asks for so little')).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not require an account, login or personal profile/)
+    ).toBeInTheDocument();
     expect(screen.getByText(/takes no name, no email address/)).toBeInTheDocument();
+  });
+
+  it('does not claim the form takes no attachment while offering one', async () => {
+    /*
+     * ── THE DEFECT THIS PINS ─────────────────────────────────────────────────
+     *
+     * The notice claimed the form "takes no name, no email address, no
+     * telephone number and **no attachment**" — while `EnquiryForm` renders an
+     * "Attach this conversation" checkbox directly below it whenever the
+     * session has a conversation to attach.
+     *
+     * Both halves were written truthfully and separately, and together they
+     * told a reader one of two contradictory things. On a privacy notice that
+     * is the worst available place to be approximately right.
+     *
+     * The claim is now about what the form asks ABOUT THE PERSON, which is what
+     * it was always for, and the paragraph describing the attachment appears
+     * only when the control does.
+     */
+    renderRoute('/support');
+    await screen.findByText('Why Pilot asks for so little');
+
+    const notice = screen.getByText(/takes no name, no email address/);
+    expect(notice.textContent).not.toMatch(/no attachment/);
   });
 
   it('asks for no name, email, telephone or attachment. Ever.', async () => {
@@ -1257,6 +1332,29 @@ describe('the support screen', () => {
     expect(box).not.toBeChecked();
     // §1.4's eighth input: the consequence, not a restatement of the label.
     expect(screen.getByText(/read every question and answer in this session/)).toBeInTheDocument();
+    clearConversationId();
+  });
+
+  it('describes the attachment in the privacy notice only when it is offered', async () => {
+    /*
+     * The notice and the control have to agree in BOTH directions.
+     *
+     * Claiming the form takes "no attachment" while offering one is the defect
+     * fixed above. Describing "the box below" when there is no box is the same
+     * defect pointing the other way — a paragraph about a control that is not
+     * on the screen, on the one panel asking a reader to take a claim about
+     * their privacy on trust.
+     */
+    const withoutConversation = renderRoute('/support');
+    await screen.findByText('Why Pilot asks for so little');
+    expect(screen.queryByText(/The only thing that sends more is the box below/)).toBeNull();
+    withoutConversation.unmount();
+
+    writeConversationId('22222222-2222-4222-8222-222222222222');
+    renderRoute('/support');
+    await screen.findByText('Why Pilot asks for so little');
+    expect(screen.getByText(/The only thing that sends more is the box below/)).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: /Attach this conversation/ })).toBeInTheDocument();
     clearConversationId();
   });
 
@@ -1438,7 +1536,7 @@ describe('the tariffs screen', () => {
     expect(cargo.queryByLabelText(/currency/i)).toBeNull();
   });
 
-  it('works out a total, and never shows it without the disclaimer', async () => {
+  it('works out an estimate, and never shows it without the disclaimer', async () => {
     const user = userEvent.setup();
     renderRoute('/tariffs');
     const cargo = within(await screen.findByRole('form', { name: 'Cargo charges' }));
@@ -1446,8 +1544,8 @@ describe('the tariffs screen', () => {
     await user.type(cargo.getByLabelText('Units'), '2');
     await user.click(cargo.getByRole('button', { name: /Work out the charge/ }));
 
-    // The total, with its currency, and the subtotal as a separate row.
-    expect(await screen.findByText('Total')).toBeInTheDocument();
+    // The estimate, with its currency, and the subtotal as a separate row.
+    expect(await screen.findByText('Estimated SCASPA charge')).toBeInTheDocument();
     expect(screen.getByText('Subtotal')).toBeInTheDocument();
     // Last child, never collapsed, never truncated.
     expect(screen.getByRole('note')).toHaveTextContent(/not an invoice/);

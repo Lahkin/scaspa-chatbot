@@ -21,7 +21,7 @@ export const Route = createFileRoute('/about-scaspa')({
   component: AboutScaspaRoute,
   head: () => ({
     meta: [
-      { title: `About ${SCASPA_IDENTITY.shortName} — SCASPA Assistant` },
+      { title: `About ${SCASPA_IDENTITY.shortName} — Pilot` },
       {
         name: 'description',
         content:

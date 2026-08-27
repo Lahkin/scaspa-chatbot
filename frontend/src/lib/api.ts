@@ -17,9 +17,11 @@
 import { config } from './config';
 import {
   chatResponseSchema,
+  cruiseScheduleResponseSchema,
   errorEnvelopeSchema,
   flightSchedulesResponseSchema,
   gateMapResponseSchema,
+  guideResponseSchema,
   healthResponseSchema,
   marineAdvisoriesResponseSchema,
   operatorProfileResponseSchema,
@@ -37,10 +39,12 @@ import type {
   ApiErrorBody,
   Category,
   ChatResponse,
+  CruiseScheduleResponse,
   ErrorCode,
   Facility,
   FlightSchedulesResponse,
   GateMapResponse,
+  GuideResponse,
   HealthResponse,
   MarineAdvisoriesResponse,
   OperatorProfileResponse,
@@ -478,6 +482,52 @@ function queryString(params: object): string {
   }
   const encoded = search.toString();
   return encoded ? `?${encoded}` : '';
+}
+
+/**
+ * `GET /api/cruise-schedule`.
+ *
+ * Dates are ISO `YYYY-MM-DD` and both bounds are **inclusive** — the backend
+ * compares them against `call_date` directly. There is no `offset`: the endpoint
+ * does not page, it truncates at `limit` and reports `total`, so a caller states
+ * the truncation rather than pretending to page through it.
+ */
+/**
+ * `GET /api/guide` — confirmed knowledge-base answers for one category.
+ *
+ * No model is involved. These are published rows with their source and
+ * verification date attached, which is why they are fetched like operational
+ * data rather than asked for like a question.
+ */
+export async function getGuide(
+  category: string,
+  init?: { signal?: AbortSignal | undefined }
+): Promise<GuideResponse> {
+  const response = await request({
+    path: `/api/guide${queryString({ category })}`,
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(guideResponseSchema, await response.json(), 'guide');
+}
+
+export interface CruiseScheduleQuery {
+  since?: string | undefined;
+  until?: string | undefined;
+  vessel?: string | undefined;
+  limit?: number | undefined;
+}
+
+export async function getCruiseSchedule(
+  params: CruiseScheduleQuery = {},
+  init?: { signal?: AbortSignal | undefined }
+): Promise<CruiseScheduleResponse> {
+  const response = await request({
+    path: `/api/cruise-schedule${queryString(params)}`,
+    timeoutMs: config.requestTimeoutMs,
+    signal: init?.signal,
+  });
+  return parseOrThrow(cruiseScheduleResponseSchema, await response.json(), 'cruise schedule');
 }
 
 export interface VesselQuery {

@@ -4,7 +4,7 @@ import { SCASPA_PHONE_LINES } from '@/features/chat/contact';
 /**
  * Privacy, written to be read.
  *
- * Short, concrete and in the first person. Not a legal document \u2014 nobody reads
+ * Short, concrete and in the first person. Not a legal document — nobody reads
  * those, and a privacy page nobody reads protects nobody. Every claim here is one
  * the code actually enforces, and several of them are asserted by tests: no
  * message content in browser storage, no cookies, no analytics, no beacon.
@@ -30,9 +30,9 @@ function Privacy() {
           answers, not a half-written message you decided against.
         </p>
         <p className="text-ink-muted">
-          One thing is kept, and only one: a <strong>conversation id</strong> \u2014 a random code
-          the server generates so a follow-up question can be matched to the one before it. It is
-          held only for the current browser tab and disappears when you close it.
+          One thing is kept, and only one: a <strong>conversation id</strong> — a random code the
+          server generates so a follow-up question can be matched to the one before it. It is held
+          only for the current browser tab and disappears when you close it.
         </p>
         <p className="text-ink-muted">
           It is <strong>not a login and not an account</strong>. It grants no access to anything, it
@@ -44,18 +44,18 @@ function Privacy() {
       <section className="space-y-2">
         <h2 className="text-h3 font-semibold">What SCASPA sees</h2>
         <p className="text-ink-muted">
-          Your questions are sent to SCASPA\u2019s server to be answered, and are recorded so the
-          information available can be improved \u2014 if many people ask something the assistant
-          cannot answer, that is worth knowing.
+          Your questions are sent to SCASPA’s server to be answered, and are recorded so the
+          information available can be improved — if many people ask something the assistant cannot
+          answer, that is worth knowing.
         </p>
         <p className="text-ink-muted">
           They are <strong>not linked to you</strong>. No IP address, no device details, no
           identifier of any kind is stored alongside them.
         </p>
         <p className="text-ink-muted">
-          Conversations are held in the server\u2019s memory for <strong>60 minutes</strong> after
-          they were last used, and are then gone. They are never written to a disk or a database,
-          and none of them survives a restart.
+          Conversations are held in the server’s memory for <strong>60 minutes</strong> after they
+          were last used, and are then gone. They are never written to a disk or a database, and
+          none of them survives a restart.
         </p>
       </section>
 
@@ -72,10 +72,10 @@ function Privacy() {
       <section className="space-y-2">
         <h2 className="text-h3 font-semibold">Voice</h2>
         <p className="text-ink-muted">
-          If you use the microphone, your recording is sent to SCASPA\u2019s server to be turned
-          into text and is then discarded. It is never written to a disk, and neither the audio nor
-          the text of it is kept in any log. Your browser asks your permission first, and only when
-          you tap the microphone.
+          If you use the microphone, your recording is sent to SCASPA’s server to be turned into
+          text and is then discarded. It is never written to a disk, and neither the audio nor the
+          text of it is kept in any log. Your browser asks your permission first, and only when you
+          tap the microphone.
         </p>
       </section>
 
@@ -100,7 +100,7 @@ export const Route = createFileRoute('/privacy')({
   component: Privacy,
   head: () => ({
     meta: [
-      { title: 'Privacy \u2014 SCASPA Assistant' },
+      { title: 'Privacy — Pilot' },
       {
         name: 'description',
         content:

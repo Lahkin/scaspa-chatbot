@@ -31,7 +31,7 @@ export function Rehearsal() {
         className="shrink-0 border-b border-amber-text/30 bg-amber-surface px-4 py-2"
       >
         <p className="text-small font-semibold text-amber-text">
-          Rehearsed conversation \u2014 recorded, not live
+          Rehearsed conversation — recorded, not live
         </p>
         <p className="text-caption text-ink-muted">
           Rendered from a local fixture with no network. Every figure is a placeholder.

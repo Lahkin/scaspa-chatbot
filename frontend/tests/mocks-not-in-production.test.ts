@@ -12,16 +12,16 @@
  * Requires `npm run build` first; `npm run verify` builds before it runs tests.
  */
 
-import { existsSync, globSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const PROJECT_ROOT = process.cwd();
+import { PROJECT_ROOT, globFiles } from './source-files';
 
 function builtJs(): { file: string; source: string }[] {
   const dir = resolve(PROJECT_ROOT, 'dist/assets');
   if (!existsSync(dir)) return [];
-  return globSync('dist/assets/*.js', { cwd: PROJECT_ROOT }).map((file) => ({
+  return globFiles('dist/assets/*.js').map((file) => ({
     file,
     source: readFileSync(resolve(PROJECT_ROOT, file), 'utf8'),
   }));
@@ -81,7 +81,7 @@ describe.skipIf(bundles.length === 0)('mocks are absent from the production bund
 
 describe('no production module imports the mocks', () => {
   it('src/ outside src/mocks never imports @/mocks or msw statically', () => {
-    const files = globSync('src/**/*.{ts,tsx}', { cwd: PROJECT_ROOT }).filter(
+    const files = globFiles('src/**/*.{ts,tsx}').filter(
       (file) => !file.startsWith('src/mocks/') && !file.endsWith('routeTree.gen.ts')
     );
 

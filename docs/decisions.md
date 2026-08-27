@@ -2603,3 +2603,1899 @@ what the values *are*, so writing fixtures first would mean rewriting every
 record to retro-fit the tells. One milestone, one pass. The same reasoning puts
 the `facility` enum and the metric fields here — schema before generation, so
 generation happens exactly once.
+
+
+## 0033 — Test paths have one spelling, and it is the forward slash
+
+**Status:** accepted. Governs every check in `frontend/tests/` that reads the
+repository off disk.
+**Supersedes nothing.**
+
+### The problem this exists to solve
+
+Six of the frontend checks do not assert against a belief about the source tree,
+they glob it and read it: which modules statically import the mock, which files
+name a money amount or a clock time, which component owns the advisory, which
+file is allowed to use the disabled ink. That is the right shape for those
+claims — "it tree-shakes" is a belief, grepping the built output is a fact.
+
+Every one of them then compared the globbed path against a forward-slash
+literal: a `startsWith('src/mocks/')` exclusion, an `assets/index-*.js` regex, a
+lookup keyed by `src/routes/index.tsx`. `globSync` returns the platform's own
+separator, so on Windows those paths arrive as `src\mocks\fixtures.ts` and
+every comparison missed.
+
+The failures were not merely noisy, they were **inverted**. The exclusions
+stopped excluding, so `src/mocks/browser.ts` reported *itself* as a production
+module importing the mock, and `src/mocks/fixtures.ts` reported itself for
+naming a fare — the two files whose entire job is to hold the mock. The lookups
+returned `undefined`, so a check meaning "the landing page quotes a real source"
+failed with "src/routes/index.tsx is missing from the scan". Eleven checks
+failing, and the loudest of them accusing the fixture file of being a fixture.
+
+CI is `ubuntu-latest` on both workflows, so the suite is green there. The only
+reader who ever saw this was a contributor on Windows, on their first run of the
+suite — the reader with the least context for telling a real finding from a path
+bug, being handed eleven fake ones.
+
+### The decision
+
+One helper, `frontend/tests/source-files.ts`, exporting `PROJECT_ROOT` and a
+`globFiles(pattern)` that normalises the separator once. All six files now call
+it. `globSync` no longer appears in `tests/`.
+
+The call sites did not change their spelling of a path — they still read
+`src/mocks/`, still key on `src/routes/index.tsx`. That is the point: the
+normalisation is invisible where the claims are written, so a new check is
+correct by default rather than correct if its author remembered Windows.
+
+### Alternatives considered
+
+**Normalise at each call site** (`.map((f) => f.replaceAll('\\', '/'))`, ten
+times). Rejected: it is the same defect waiting for the eleventh check. The bug
+was never that a author got the replacement wrong, it was that nothing carried
+the requirement to the next person.
+
+**Compare with `path.sep` at each call site.** Rejected: it makes every
+assertion in these files harder to read to buy portability that one helper
+already buys, and the literals are what a reader is checking against a mental
+model of the tree.
+
+**Add `.gitattributes` and let the tree be POSIX.** That is a real and separate
+question (see below), and it would not have fixed this: `globSync` reports the
+separator the *filesystem* uses, not the one the file content is stored with.
+
+### What this does not cover
+
+Two further Windows-only findings, both pre-existing, both left alone
+deliberately because each is a repository-wide call rather than a bug fix:
+
+- **`format:check` fails on all 27 test files on Windows.** `core.autocrlf` is
+  `true` and there is no `.gitattributes`, so a Windows checkout is CRLF while
+  Prettier's `endOfLine` defaults to `lf`. Every file is flagged, including
+  untouched ones. The fix is `* text=auto eol=lf` in a `.gitattributes`, which
+  rewrites the working copy of every file in the repository.
+- **`tests/gallery.test.tsx` times out about one run in two on a slow machine.**
+  Its `findByRole` was already raised to 5000ms for exactly this reason, but
+  Vitest's own `testTimeout` is also 5000ms — so the inner timeout can never
+  fire, and the test dies at the outer one first. The number needs to be a pair,
+  not a single value repeated.
+
+## 0034 — Two themes, one palette, and the brand that stopped being purple
+
+**Status:** accepted. Foundations for the Pilot identity (stage 1 of 5).
+**Supersedes** the "THE PRODUCT IS DARK. There is no light theme and no theme
+switch." ruling recorded in `frontend/src/styles/tokens.css` and enforced by the
+previous `tests/contrast.test.ts`.
+
+### What changed, and why it is not a repaint
+
+The client approved a Pilot identity expressed as two mock-ups — a light design
+and a dark design of the same product. The product had exactly one theme, by an
+earlier deliberate decision, and its contrast suite was written against that one
+palette: pinned ratios, and three colours asserted to FAIL on purpose.
+
+So this is not "add a light mode". It is re-introducing a theme axis into 880
+lines of tokens and rewriting the check that guards them.
+
+### The thing that made it tractable
+
+`tokens.css` was already two layers, and nobody had planned for this:
+
+- ~34 **primitives** with literal values — canvas, the surface ramp, the brand
+  ramp, ink, status hues, tints, edges.
+- ~60 **aliases** that are `var(--primitive)` and nothing else —
+  `--color-ink: var(--color-text-1)`, `--color-surface: var(--color-surface-2)`.
+
+Components almost never touch the primitives. `bg-surface` appears 165 times,
+`bg-surface-muted` 83, and `bg-surface-2` twice. So re-theming the primitives
+moved the aliases, and the aliases moved the entire component tree. **Two themes
+cost 38 declarations, not 100 components.**
+
+That is worth stating plainly because it was luck earned by an earlier decision:
+an alias layer named for MEANING rather than for colour is what let a palette be
+swapped underneath a product that had never considered the possibility.
+
+### Roles, not lightness
+
+The one rule that makes the two palettes coherent, and the one that is easy to
+get wrong.
+
+`--color-brand-300` is not "the 300 step of a ramp" in both themes. It is
+"readable brand text" in both, and its two values sit on either side of the
+ground each lands on — #0a56c0 on white, #5ca5f0 on navy. The surface ramp
+inverts for the same reason: `surface-sunken` is a step AWAY from the card in
+both themes, which is _down_ in one and _up_ in the other.
+
+A palette translated by lightness instead of by role produces pale-blue body
+text on white, and passes every test anyone remembered to write.
+
+### `light-dark()` was written first, and replaced
+
+The first implementation gave every primitive a single
+`light-dark(light, dark)` declaration. One place to write both values, and a
+token could not be given one theme and forgotten in the other.
+
+**It was measured working** and replaced anyway, which is worth recording so
+nobody re-litigates it from the diff. Under `data-theme='light'` the aliased
+chain resolved correctly all the way down to `--color-ink-muted: #5d6b80`, in
+the dev server and in the built output alike. Two duller reasons carried the
+day: it is not supported everywhere this app is read, so the build downlevels it
+into paired `var(--lightningcss-light, …)` space-toggles that turn every colour
+in the inspector into something unreadable while debugging a demonstration; and
+the parity it guaranteed for free can be bought for the price of one test.
+
+`tests/theme-parity.test.ts` is that test. It asserts the two blocks declare
+exactly the same token names, and that no token is given the same value twice by
+accident. Two exemptions, both named and both argued: `--color-ink-inverse`
+(white, because it means "ink on a dark fill" rather than "the opposite of the
+current ink") and `--color-amber-board` (the figure on the departure-board
+strip, which is navy in both themes).
+
+An honest note on the route here. An intermediate version of this work claimed
+`light-dark()` had a repaint bug in Chromium. It does not. The browser pane used
+for the measurement reports `document.hidden === true` and never fires
+`requestAnimationFrame`, so it defers style recalculation on already-rendered
+descendants — and plain custom properties behaved identically under it. The
+claim was removed from the token file rather than left there to mislead whoever
+reads it next.
+
+### The brand stopped being purple
+
+The old ramp ran `#383a97` → `#7a7cd6`, which reads as indigo. The Pilot spec
+bans purple as the dominant brand colour outright, so the ramp is now SCASPA
+navy through action blue, with aqua and one amber beacon carried in from the
+Pilot mark.
+
+`tests/contrast.test.ts` checks the HUE, not the values: blue must dominate red,
+and green must not be suppressed below red. A future retune can therefore be
+caught drifting back towards indigo — which the old ramp would have done while
+passing every contrast assertion in the file.
+
+### Where the approved mock-up and WCAG AA disagree
+
+One place, and the spec asks for both.
+
+The mock-up draws the **ALL CITED** badge as white on aqua `#08aeb7`. That
+measures **2.71:1**. Spec §52 requires WCAG AA. The hue is the more valuable half
+of the instruction — it is Pilot's colour — so the hue is kept and the ink is
+changed: `--color-ink-on-aqua`, dark in both themes, 5.49:1 light and 8.25:1
+dark. The badge reads navy-on-aqua rather than white-on-aqua. Put to the client
+before implementation and confirmed.
+
+Three aquas exist because one could not do three jobs: `--color-aqua` is the
+fill, `--color-aqua-strong` the boundary or meaningful icon at 3.41:1, and
+`--color-aqua-text` the readable word at 5.85:1.
+
+### What the flip found
+
+The palette change was also an audit. The className scanner — which reads every
+element setting both a background and a text colour, and now measures each pair
+twice — found **seven pairings unreadable on the light ground**, all invisible
+while the product had one theme:
+
+- Four quiet chips filled with `--color-border`, the DIVIDER colour, leaving
+  muted ink at 4.20:1. They use `--color-surface-muted` now, which is the token
+  for a quiet fill; using a line colour as a fill was the actual smell.
+- A checkbox whose ternary put the checked ink and the unchecked fill on one
+  line, so the scan paired two states that never render together. Split, per the
+  convention the rest of the codebase already follows.
+- The departure-board figure and the voice button's ending state, both amber on
+  navy, both resolved by the token split below.
+
+None of these was reachable by a hand-written assertion. All seven came from the
+check that reads what components actually wrote.
+
+### `--color-amber-board` became a token of its own
+
+The clearest example in the palette of why a token's name has to describe its
+job. It was an alias of `--color-caution`, and that held only while there was
+one theme.
+
+The status amber is a WORD on the page: on the light ground it must be a dark
+amber (#8a6100) to clear AA on white. The board amber is a FIGURE on a navy
+strip, in both themes, so it must stay bright — and #8a6100 on navy is 2.82:1.
+One token could not be both. It is now declared once at #d9a23b: 6.83:1 on the
+light navy, 6.57:1 on the dark one.
+
+### The switch
+
+`color-scheme` plus a `data-theme` attribute on the root, resolved before first
+paint by a blocking inline script in `index.html`. React cannot do this job — by
+the time a module script has been fetched, parsed and hydrated, a reader on a
+dark phone has already been shown a white page, and that flash is the most
+obvious sign of a theme bolted on afterwards.
+
+The default follows the operating system and keeps following it: `system` is a
+real, selectable choice rather than the absence of one, and the store subscribes
+to `prefers-color-scheme` for as long as that is what the reader has chosen.
+
+The preference is a second FIELD in the existing `scaspa.prefs` key, not a second
+key — `frontend/CLAUDE.md` rule 5 permits one key, and this respects it.
+`writePrefs` became a merging patch in the process: as a plain write, choosing a
+language would have silently erased the theme, which is the kind of bug that only
+appears on the reader's next visit.
+
+### What this does not cover
+
+The rest of the Pilot work. This is foundations only: no Pilot mark, no landing
+page, no chat workspace, no terminology change. `--shadow-card` is still `none`
+while the spec asks for soft shadows in the light theme; that arrives with the
+screens that need it, not here.
+
+## 0035 — Two brands on one screen: SCASPA owns the information, Pilot does the talking
+
+**Status:** accepted. Stage 2 of 5 for the Pilot identity.
+**Depends on** 0034 for the aqua and beacon tokens.
+
+### The architecture, because everything else follows from it
+
+There are now two marks in this product and they are never merged:
+
+| | SCASPA | Pilot |
+| --- | --- | --- |
+| what it is | the Authority | the digital guide |
+| what it means | official, institutional, the owner of the facts | the thing that answers |
+| its mark | the supplied seal, used verbatim | drawn geometry |
+| in a transcript | never speaks | fronts every assistant message |
+
+The rule that makes this concrete: **an assistant message is fronted by the
+Pilot avatar, never by the institutional seal.** SCASPA owns the service; Pilot
+is the one talking. `tests/pilot-brand.test.tsx` scans for a component that
+imports both and draws them as one object, which is the hybrid this forbids.
+
+### The mark is a transcription, and the geometry was measured
+
+The approved asset is a raster on a white page. It cannot ship as it stands: at
+28px beside a chat message it turns to mush, on the navy sidebar it arrives
+inside a white box, and no part of it can be animated for the thinking state.
+
+So it was redrawn as SVG — and the proportions were **measured off the asset with
+Pillow**, not eyeballed, because an eyeballed transcription is close at 96px and
+wrong at 28px. Every number in `PilotAvatar.tsx` is a fraction of the source
+image times 96:
+
+```
+ring         outer radius 0.3045, stroke 0.033   ->  r 27.6, width 3.2
+compass tip  0.030 from the edge                 ->  y 2.9
+compass base 0.242, half-width 0.034             ->  y 23.2, ±3.3
+beacon       centre y 0.358, radius 0.043        ->  cy 34.4, r 4.1
+figure       top 0.397, widest 0.212 at y 0.64   ->  38.1, ±10.2, base 66.4
+```
+
+The result was then rasterised locally and looked at, in both themes, before
+being accepted. That is worth recording as a method: a brand mark is the one
+artefact where "the tests pass" proves nothing at all.
+
+### The rays are `brand-200` at 45%, and the first attempt was wrong
+
+The diagonal rays were first drawn as translucent aqua, which is correct on
+white and wrong on navy: a transparent colour over a dark ground darkens
+*towards* that ground, so the rays became muddy teal smudges on the one surface
+where they most need to read as light.
+
+`--color-brand-200` is a strong blue on white and a pale blue on navy, so at 45%
+it lands correctly on both — pale blue over white, silver-blue over navy. Found
+by rendering it, not by reasoning about it.
+
+### One artwork, two themes — and the wordmark proves the point
+
+The geometry is identical in both themes and only the tokens resolve
+differently. The wordmark is the clearest case: the spec asks for a deep-blue
+PILOT on light and a white one on dark, which is exactly what `--color-ink`
+already is (#10264f / #f5f8fc). Reaching for a brand step would have produced a
+bright blue wordmark in the dark theme — not what the approved lockup shows —
+and fixing that would have taken a theme-conditional class.
+
+PILOT is set as **text**, not shipped as an image: it inherits the interface
+font, scales without a second asset, is selectable, is read aloud correctly, and
+its descriptor translates. An image would have needed three of them.
+
+### Motion: one thing moves, and the compass is not it
+
+The avatar is the thinking indicator and the listening indicator, so this is
+product behaviour rather than decoration. The beacon pulses (1.6s) or the ring
+pulses (1.8s). **The compass never rotates** — a spinning compass reads as a
+loading spinner, which says "waiting" where this has to say "working". Asserted,
+not just written down.
+
+Both keyframe sets start AND end at rest. That is load-bearing: the base layer
+collapses every animation to 0.01ms with one iteration under
+`prefers-reduced-motion`, which freezes an element on its FINAL keyframe — so a
+pulse written 100% → 50% would leave the beacon permanently half-lit for exactly
+the readers who asked for less motion.
+
+### States add a badge; they never swap the mark
+
+`idle`, `thinking`, `listening`, `verified`, `attention`. The spec is explicit
+that there is no warning robot and no second avatar, so the two badge states draw
+a badge *beside* the mark and the identity holds. The test counts paths to prove
+it.
+
+### The favicon duplicates the geometry, and is checked
+
+`public/pilot-mark.svg` has to repeat the paths: a favicon is fetched as a
+standalone document with no stylesheet behind it, so it can neither read a token
+nor reuse a React component. Duplicated geometry with nothing watching it is how
+a product ends up with a tab icon that is subtly a different logo from the one in
+its own header — nobody looks at a 16px square twice.
+
+So the test parses both and asserts the path sets are **equal, both directions**,
+against the RESTING mark: the favicon must not lose a ray, and must not gain a
+flourish. It carries its own `prefers-color-scheme` block, because browser chrome
+has a light and a dark of its own that has nothing to do with the app's
+`data-theme`, and a navy compass on a dark tab strip is an empty tab.
+
+One SVG rather than a 16/32/48/192/512 raster set — it scales to whatever is
+asked for at a fraction of the bytes, on a product that self-hosts its font to
+save a single DNS round trip.
+
+### What this does not cover
+
+The mark is built and shown in the gallery; almost nothing uses it yet. Putting
+it into the sidebar, in front of every assistant message, and into the composer's
+generating state is stage 4. The browser title and PWA name (`Pilot | SCASPA
+Digital Guide`) are terminology and arrive in stage 5 with the rest of the
+renaming.
+
+## 0036 — The landing page becomes a gateway, and keeps the one thing worth reading
+
+**Status:** accepted. Stage 3 of 5 for the Pilot identity.
+**Depends on** 0034 (themes) and 0035 (the Pilot mark).
+
+### The shape the spec asked for, and the one place this departs from it
+
+Hero, four journeys, one call to action, four trust signals, into the
+application. "It should not require five screens of scrolling before reaching
+the assistant." The long "what it can help with" list and the full-length trust
+section are gone — compressed into the four cards and the strip, with `/about`
+still carrying the expanded version for a reader who came to find it.
+
+**The example answer stayed, against the spec's own list of sections.** It is the
+one thing on the page a visitor actually reads, it is `kb-192` as retrieved
+rather than copy, and `tests/matrix.test.tsx` guards it under T-18 because this
+page once invented a sailing time. Shortening a page by deleting its only
+verified content is the wrong trade on a product whose entire argument is that it
+does not invent things. It is one compact block and the page is still two
+screens.
+
+### The four cards ask questions the knowledge base can answer
+
+Each card sends one of the four labels already in
+`features/chat/suggestions.ts`, every one annotated there with the rows behind
+it. A card that opened a conversation and got "I do not have that" would be the
+worst possible first impression, and it is avoidable by not inventing new
+phrasings on a marketing page. `tests/landing.test.tsx` asserts every card's
+question is one the suggestion set vouches for.
+
+The question travels through the in-memory `pendingQuestion` store, not the URL —
+a query string would put it in history, in the address bar and in every
+screenshot taken during a demonstration.
+
+### The hero photograph: two exposures, chosen in JS
+
+Daylight and blue hour, the same scene. This is what `useResolvedTheme` was
+written for: a difference that is not a colour and therefore cannot be a token.
+
+A `<source media="(prefers-color-scheme: dark)">` would have been fewer lines and
+is **wrong** here — the theme can be set explicitly in `/settings`, and a media
+query cannot see that choice. A reader who picked Light on a dark phone would
+have got the light interface with the night photograph inside it.
+
+### Fitting the budget, decided by looking
+
+`scripts/bundle-budget.mjs` allows 100 kB per image and 250 kB across the build.
+The SCASPA seal already spends 45.8 kB, leaving 204 kB for four hero files
+(two themes x two widths). They come to 193 kB; the build reports 240.3 kB total.
+
+**1200 wide, not 1440, and that was settled by rendering both.** At the same
+~74 kB, 1440 needs quality 39 and visibly smears the traveller's shirt and the
+hillside buildings; 1200 holds together at quality 59. The hero occupies roughly
+900–960 CSS px at desktop, so 1200 is still comfortably over 1x. Arithmetic said
+"more pixels"; the crops said otherwise.
+
+A fixed height at desktop rather than an aspect ratio, because the two
+photographs are not the same shape — 1200x640 light, 1200x675 dark. Under
+`aspect-[...]` the column would change height when a reader switched theme,
+moving everything below it.
+
+### The accessible name was garbled, and only a browser said so
+
+The cards announced **"Ferry & NevisSchedules, terminalsand travel
+information"**. Accessible-name computation concatenates the title, the line
+break and the two description lines with no separator, so every join in the card
+produced a run-together word.
+
+Invisible on screen and invisible in jsdom, which computes no accessible name at
+all. Fixed with an explicit `aria-label` that states the name once in the order a
+listener needs it, and asserted on the attribute rather than on the computed
+name — because the test environment cannot see the thing that was wrong.
+
+### The header is the Authority's, and Privacy moved
+
+Seal, statutory name, three destinations, language, accessibility. Pilot's
+identity appears inside the page, where the product begins — the architecture
+from 0035.
+
+`Privacy` moved from the header into the footer, where a policy link
+conventionally lives and where it is still one tap away on every document page.
+The approved design gives the header three destinations and this is which three.
+
+**"EN" is a link to `/settings#language`, not a dropdown, and that is a
+departure.** `LanguagePicker` is radios rather than a `<select>` because on iOS a
+native select opens a modal wheel that does not commit until "Done" — so a reader
+picks a language, sees nothing happen, and picks it again. Rebuilding that
+control in miniature in a header would either repeat the bug or duplicate a
+solved problem in a second place, and two controls writing one preference is how
+they drift.
+
+### Verified
+
+`/` reports **0 axe violations at both mobile and desktop**, and a live audit of
+every text node against its painted background reports 0 contrast failures in
+both themes. 807 tests, lint, typecheck, build and the performance budget all
+clean.
+
+`npm run check:a11y` does report four other failures, all outside this stage:
+two `scrollable-region-focusable` on `/vessels` and `/flights` at mobile, which
+are pre-existing (neither route nor `components/ops/` appears in this branch's
+diff), and two chat manual checks that could not run because the checker serves
+on `http://localhost:4400` and that origin is not in `ALLOWED_ORIGINS`, so the
+page never received an answer to announce. Worth fixing so the check can pass on
+its own terms; it is a backend configuration line, not a frontend defect.
+
+## 0037 — The workspace stops explaining itself in developer terms
+
+**Status:** accepted. Stage 4 of 5 for the Pilot identity.
+**Depends on** 0035 for the mark.
+
+The three-column workspace was already the right structure, so almost nothing
+here is layout. It is about who is speaking, what the interface claims, and
+which of its own internals it puts in front of a traveller.
+
+### Pilot appears where a speaker belongs
+
+The mark now fronts every assistant turn, opens the conversation beside the
+greeting, and heads the sidebar in place of the SCASPA seal. That is the
+architecture from 0035 made visible: the Authority owns the information, Pilot
+does the talking, and the seal stays in the institutional header on the document
+pages.
+
+Decorative in every one of those places — no label. A mark announcing "Pilot"
+before each answer would make a screen reader say the name before every sentence
+it is about to read, and `AnswerAnnouncer` already says it once, in words, when
+the answer completes.
+
+The avatar's state is the message's own: thinking while tokens arrive, and the
+verified badge once the answer has settled **and** the backend reported it
+grounded. The badge is a claim about verification, so it waits for the thing it
+is claiming rather than appearing with the first token.
+
+### "1 tool used · 361 ms" was the most inside-out sentence in the product
+
+A traveller standing on a pier, deciding whether to believe a fact about a
+ferry, was being told how many function calls had run and how long they took.
+
+It is now **"How Pilot verified this"**, and what sits under the answer instead
+is the evidence: `Source: Official SCASPA website — … · Verified: 2026-07-31`,
+with a link to the row. Every word of it comes from the citation through the
+same `sourceTypeLabel` and `entryLabel` helpers the sources rail uses, so a
+source cannot be described one way beside an answer and another way in the
+panel.
+
+The timing was demoted, not deleted. It is inside the collapsed trace, where a
+reader who opened something called "How Pilot verified this" is asking exactly
+that. While tools are still running the count DOES show — "Verifying — 2 of 6
+steps" — because then it is progress rather than trivia.
+
+The footer is gated on `grounded` as well as on having a citation: an ungrounded
+answer already carries `UngroundedNotice`, and a "Verified:" line under a notice
+saying the figures could not be verified is the interface contradicting itself
+in two consecutive lines.
+
+### Diagnostics moved behind a flag
+
+`Answer time`, `records searched` and `rate-limit keys tracked` are facts about
+the machine. They sat beside every answer, next to the new verification footer —
+one evidence expander too many, and the wrong one first.
+
+Gated on `DEV` **and** `VITE_SHOW_DIAGNOSTICS`, not on `DEV` alone, and the
+reasoning is borrowed wholesale from the mock controls: the client demonstration
+runs on `npm run dev`, so anything gated on DEV alone is on screen throughout it.
+
+### The sources rail has to be earned
+
+It used to render whatever happened, so a reader who had not yet asked anything
+was given a third of a wide screen occupied by the words "Nothing to show yet".
+A permanent empty panel does not read as "sources will appear here" — it reads as
+a part of the product that is broken.
+
+The conversation holds that width until an answer earns it. The layout does move
+once, when the first cited answer lands, and that movement is the point: it is
+the evidence arriving. It happens under an answer the reader is about to start
+reading, not under their cursor, and once per conversation.
+
+### ALL CITED is aqua, and that is a semantic change
+
+It was green. Green in this product means berthed, on time, settled — an
+operational state — so a verification result was wearing the status vocabulary,
+where a reader scanning a screen could reasonably take it for another piece of
+live information.
+
+Aqua is Pilot's hue and belongs to claims about Pilot's own work. Its ink is
+`--color-ink-on-aqua`, because aqua is bright in both themes.
+
+### The navigation stopped naming its own implementation
+
+**ASSISTANT**, **OPERATIONS** and **CONDITIONAL** became **Ask Pilot** and
+**Services**. The first two are jargon; the third is not a category at all — it
+is a note to the developer that a route may not exist. "Conditional" as a
+heading above a customer's navigation is the clearest possible sign of an
+interface labelled from the inside out.
+
+Console joined Services rather than keeping a group of its own: a heading
+reading "Console" above a single item called "Console" says nothing twice. It is
+still filtered out when its route is absent, which was the only real content of
+the old label.
+
+### A person is permanently on screen
+
+`HumanHelpCard` in the sidebar foot. `EscalationBlock` already offers a number at
+the moment Pilot cannot answer, and that is right for that moment. This is a
+different job: it is there BEFORE anything goes wrong, so a traveller who is
+late, or anxious, or simply does not want to type at a machine can see that a
+person exists without first failing a conversation to find out.
+
+### A guard of mine fired on the wrong thing
+
+`pilot-brand.test.tsx` asserts nothing merges the seal into the Pilot mark. It
+matched module NAMES, and immediately reported `Composer` — which imports
+`SCASPA_PHONE_HREF`, a phone-number constant that happens to be exported from
+`ScaspaMark.tsx`, and draws no seal at all.
+
+Tightened to actual rendering. A guard that fires on a file's neighbours rather
+than on what it does is worse than no guard: it gets suppressed, and then it is
+not watching.
+
+### Verified end to end, against the running backend
+
+One real question, one real answer: the rail appeared only once there was
+evidence, two Pilot marks on screen with exactly one carrying the verified
+badge, the source footer present, "How Pilot verified this" present, and
+`Diagnostics` and "N tools used" both absent. 0 contrast failures across the
+answered conversation.
+
+809 tests. Six of them asserted the old wording and were moved to the new intent
+rather than loosened to accept either.
+
+### What this does not cover
+
+The voice control's behaviour. The button is styled with the rest of the
+composer and its logic is untouched — it already degrades honestly, announcing
+"The spoken version is not available just now" rather than breaking, which was
+confirmed while investigating the missing speech models. It is waiting on
+project access to `gpt-4o-mini-tts` and `gpt-transcribe`, not on this work.
+
+## 0038 — Pilot, said out loud: the terminology sweep and the honest empty screen
+
+**Status:** accepted. Stage 5 of 5 for the Pilot identity.
+**Completes** 0034–0037.
+
+### The product has a name now, and the Authority keeps its own
+
+`SCASPA Assistant` is gone from every title, every document head, the
+no-JavaScript fallback and the OpenAPI document. Route titles read `X — Pilot`;
+the shell default and the PWA identity read `Pilot | SCASPA Digital Guide`.
+
+Deliberately **not** a global find-and-replace, and this is the part that
+mattered. Several of those strings sit beside the SCASPA seal, where the
+Authority's name is the correct thing to say — a blanket substitution would have
+renamed the client. So:
+
+- `LogoLockup` now reads **SCASPA**. It is the institutional lockup: the
+  Authority's seal, and the Authority beside it. It said "SCASPA Assistant"
+  because at the time the product *was* the SCASPA Assistant and the two names
+  were the same thing. Putting "Pilot" there instead would be exactly the hybrid
+  mark 0035 forbids — the Authority's seal with the guide's name under it.
+- The operations console header reads **SCASPA operations**. It is a console for
+  SCASPA staff; Pilot is the customer-facing guide.
+
+The landing page keeps a descriptive title — `Pilot — ports and travel in
+St. Kitts` — rather than repeating the shell default. That is not decoration:
+`accessibility.test.tsx` proves each route sets its own title by looking for a
+distinctive fragment, and a landing title identical to the default would make
+"set its own" and "forgot and inherited" indistinguishable.
+
+### Four empty tiles are not an empty state
+
+With no feed connected — **the production default** — `/vessels` drew four
+metric cards reading `— / not reported`, above a panel that then explained there
+was nothing. It looked like software that had failed to load rather than a
+service that has not been connected, and it pushed the one sentence worth
+reading below the fold.
+
+The tiles now render only when there are figures. What replaces them is one
+deliberate statement:
+
+> **Live vessel movements are currently unavailable**
+> **Pilot will not invent operational data.** For current movements, telephone
+> Marine Operations on 869-465-8121.
+
+That middle sentence is the most valuable line on the screen and the Pilot spec
+asks for it by name. "No feed is connected" describes a deficiency. "Pilot will
+not invent operational data" describes a rule the product holds itself to — the
+same rule that makes every answer it *does* give worth believing. It is the
+argument for the whole product, made at the one moment the product has nothing
+to show.
+
+Underneath, where Pilot can still help: published tariffs, contact, and the
+assistant itself. A dead end became a junction.
+
+### "NO FEED" became "Live data unavailable"
+
+"Feed" is our word for our plumbing. A traveller does not know whether SCASPA
+publishes a feed, and `NO FEED` in a badge reads as a fault in the thing they
+are looking at rather than as a description of what is connected.
+
+The duplicate went with it. `SourceNotice` sits directly above the panel
+carrying the same badge and the same statement; two identical labels a few
+centimetres apart do not double a message, they halve it — a reader who sees the
+same words twice reads them as chrome.
+
+### "Total" implied a bill
+
+The tariff result said **Total**, which is what appears at the foot of an
+invoice. This figure is arithmetic over a published schedule: nobody has been
+billed, no account has been debited, and the number can change when the real
+charge is raised. It now reads **Estimated SCASPA charge**, and **Estimated
+charge so far** when a component could not be priced.
+
+The "so far" rule is untouched — it appears only when the unpriced flag is
+present, never inferred by string-matching. The word it modifies changed; the
+mechanism did not. A test now asserts the word "Total" appears nowhere in the
+result at all.
+
+### A test that caught the rewording, correctly and then wrongly
+
+`console.test.tsx` asserted that an empty position map never claims a live
+source, with `/live (ais|data|feed|map view)/i`. Reworded, the badge reads "Live
+data unavailable" — a phrase saying the opposite of the claim, failing a check
+that exists to catch the claim.
+
+Rewritten to match the affirmative badges by name. A negation containing the
+word "live" is the correct thing to show on that screen, and a guard that cannot
+tell a claim from its denial is a guard that will be loosened rather than fixed.
+
+### Verified in the production-default state, not just the demo one
+
+The demonstration runs on `OPS_DATA_SOURCE=fixture`, so the empty state never
+appears there. It was checked by switching the backend to `none` — what SCASPA
+actually has — reading the screen, and switching back. Every assertion above
+about what that screen says was read off it.
+
+810 tests, lint, typecheck, build, and the backend unchanged at 610/611.
+
+### What remains
+
+Voice, and only voice. The microphone and the spoken-answer button are styled
+with the rest of the composer and their logic is untouched; they already degrade
+honestly. They are waiting on the OpenAI project being granted
+`gpt-4o-mini-tts` and `gpt-transcribe`, which is an account change rather than
+a code one — see the note at the end of 0037.
+
+---
+
+## 0039 — Cargo publishes nothing, so Watchtower monitors nothing
+
+**Status:** accepted. Referenced by `app/watchtower/registry.py`.
+
+`scaspa.com/cargo.html` is an approved source in principle and is deliberately
+absent from `SOURCES`.
+
+### What is actually on the page
+
+The served document carries an FAQ describing a "Cargo Info table" with a search
+field "at the top right". It contains **no table, no input elements, no iframe,
+and 1,332 characters of body text in total.** The only XHR calls the page makes
+are the site platform's own membership RPCs. Whatever the FAQ is describing is
+either not deployed or is behind something a visitor does not reach.
+
+This is the same class of finding as the cruise page, and the opposite outcome.
+There, `cruise-ship-schedule.html` also served an empty table — and a widget
+behind it called a SCASPA-owned Apps Script endpoint that returns the whole
+schedule as JSON. Looking for the equivalent here found nothing to look at.
+
+### Why registering it anyway would have been worse than leaving it out
+
+Two things follow from adding a source, and both would have been false:
+
+- **A hash that never moves.** Watchtower would fetch the same empty page every
+  six hours forever and record "unchanged" every time. A monitor reporting
+  health on a source that publishes nothing is a monitor teaching its reader to
+  stop reading it.
+- **A parser that has never seen a row.** `registry.Source` requires one. It
+  would be written against a table nobody has, reviewed against a guess, and
+  merged — and on the day SCASPA restores the table it would run against real
+  cargo data for the first time, in production, unobserved.
+
+### What the product says instead
+
+The `/cargo` route says plainly that published cargo status is not available and
+points at the telephone. That is a true sentence today. It is also the sentence
+that has to change on the day the table appears, which is the right place for
+the pressure to sit: on a screen somebody reads, rather than in a registry entry
+nobody looks at.
+
+The entry goes in when SCASPA restores or exposes the table.
+
+---
+
+## 0040 — `/vessels` becomes Cruise & Vessel Activity
+
+**Status:** accepted.
+**Builds on** 0032 (the fixture hatch) and the Watchtower work on
+`feat/watchtower-cruise`.
+
+### The screen was answering a question it could not answer
+
+`/vessels` was one thing: a movements table fed by `GET /api/vessels`. In
+production no feed is connected, so what a real visitor saw was four metric
+tiles reading "— / not reported" above a panel explaining there was nothing.
+
+That is not an honest empty state, it is an empty dashboard — it reads as
+software that failed to load rather than as a service that has not been
+connected, and it pushed the one sentence worth reading below the fold.
+
+Meanwhile SCASPA publishes a genuine cruise schedule, Pilot now fetches it every
+six hours, and the page said nothing about it at all.
+
+### Two sections, and the rule is that they never merge
+
+**A. The official SCASPA cruise schedule.** Real, published, dated. 496 calls in
+the store as this was written.
+
+**B. Live vessel movements and positions.** Not connected: SCASPA publishes no
+movements feed and no external AIS source has been tested for St Kitts coverage.
+
+Separate headings, separate provenance treatments, separate empty states, a rule
+between them. Interleaving the two would lend A's authority to B's absence,
+which is the one thing this page must not do — a schedule and a position report
+are different kinds of claim with different certainties.
+
+Section B is kept fully built rather than reduced to a placeholder: every
+filter, the density toggle and the pagination stay wired to the real endpoint,
+and `OPS_DATA_SOURCE=fixture` still renders all of it. A section rebuilt from
+nothing on the day a feed appears is a section that has never been reviewed.
+
+### The hatch moved off the page and into one section
+
+0032 layer 4 draws caution stripes behind any surface whose `source.kind` is
+`fixture`, and `OpsShell` draws it for the whole screen from the source it is
+handed. This screen now has **two** sources, and only one of them can be
+fixtures.
+
+Handing the shell the movements source would hatch the Authority's own published
+cruise schedule as invented data — the precise lie the hatch exists to prevent,
+told by the mechanism built to prevent it. So the route passes no `source`, and
+the hatch lives inside `VesselMovements` over the half of the screen it is true
+of. Asserted in `tests/cruise-schedule.test.tsx`.
+
+### Three tiles, not the four that were suggested
+
+The brief proposed calls today, expected next 24h, scheduled this week, and Port
+Zante capacity, with the instruction to show "only values that can be derived
+safely". Two cannot be:
+
+| Tile | Why it is not drawn |
+| --- | --- |
+| Expected next 24h | A rolling window needs a timestamp per call. The schedule publishes a *day* plus a free-text window (`07:00 - 18:00`) which the backend deliberately never parses — the page is inconsistent about the format and a parser that guessed would move a sailing time. The count would be arithmetic on a guess. |
+| Port Zante capacity | SCASPA publishes no berth count. The tile would have to invent a denominator, and the denominator is what turns two numbers into a claim about how full the port is. |
+
+They are absent rather than dashed: "do not populate empty dashboards with
+dashes just to preserve layout" is the same instruction that produced this
+rebuild. What is drawn instead is today, tomorrow and the next seven days, which
+answer the same question out of figures that are actually published.
+
+### Counting rows is allowed here and forbidden on the movements table
+
+The movements table takes `total` from the server and counts nothing, because
+its rows are one page of many. The cruise tiles count their own rows — but the
+query behind them asks for the **whole** seven-day window, and the tiles only
+render a figure when `total === calls.length` proves it came back whole.
+Counting a complete result set is reading it. When the window is truncated the
+tiles go to null, because an undercount reads as a fact and a blank reads as a
+blank.
+
+**Zero is a real answer in these tiles**, which is the opposite of the berth
+occupancy rule and worth stating so the two are not confused. Occupancy must
+never show 0 because no feed reports occupancy at all. "Cruise calls today: 0"
+means the schedule was fetched, completely, and lists none — which is precisely
+what SCASPA published, and often correct.
+
+### Two empty tables that mean opposite things
+
+`published` with no calls means SCASPA lists none for those dates: an ordinary
+answer, and there are quiet weeks at Port Zante. `unavailable` means Pilot never
+managed to retrieve the schedule: a statement about this service.
+
+They render as different panels. Collapsing them would let an outage read as a
+quiet week, and that mistake is expensive in one direction only — a passenger
+told there are no ships stops looking.
+
+### A fourth range control the brief did not ask for
+
+Today / Tomorrow / This week are the three specified. **All upcoming** is added,
+because without it the search box can only find a ship inside the selected
+window — so "when is RHAPSODY OF THE SEAS next in?" is unanswerable unless the
+reader already knows roughly when, which is the question. It is also the only
+control that reaches the endpoint's 100-row limit, so it is where the truncation
+line was verified: *Showing the first 100 of 192 published calls.*
+
+The endpoint has no `offset` and this screen invents none. It truncates and
+reports `total`, so the page states the truncation rather than offering a page 2
+that does not exist.
+
+### Dates are computed in the port's time zone, not the reader's and not UTC
+
+`lib/portDate.ts`. SCASPA publishes whole days with no zone attached, and
+"today" on that schedule means today in St Kitts.
+
+- **UTC** would be wrong every evening: St Kitts is UTC−4, so from 20:00 local
+  until midnight, UTC has rolled over and the board would show *tomorrow's*
+  ships under a heading reading "Today".
+- **The browser's local date** is correct in Basseterre and wrong everywhere
+  else — and this product's readers are, by definition, people who have just
+  arrived from somewhere else.
+
+The zone is named (`America/St_Kitts`) and resolved through `Intl` rather than
+hardcoded as −4, so "no daylight saving" stays a fact about the world instead of
+a fact baked into a file. Everything in that module is a `YYYY-MM-DD` string,
+never a `Date`, because a `Date` at local midnight serialises to the previous day
+in any negative-offset zone. The MSW handler was moved onto the same helper: a
+mock anchored on UTC would have put the fixture four hours out of step with the
+page and produced an evening-only test failure.
+
+### `PUBLISHED` needed a badge, and the badge exposed a contrast failure
+
+`SourceKind` gained a fourth value on the backend and the frontend followed:
+`live | published | fixture | unavailable`. The badge says **PUBLISHED** and the
+stamp beside it says **checked *when***, and both halves are required — a badge
+claiming authority with no date on it is the thing `as_of` is mandatory to
+prevent, and "as of" was the wrong preposition because the timestamp is when
+Pilot last *looked*, not when SCASPA last *changed*.
+
+It takes `FILL.brand`, and drawing it there is what surfaced the defect. That
+fill carried `--color-on-navy-primary` — the ink for text **on the navy**, a
+dark ground — over a mid-blue fill, measuring **2.97:1 on the dark palette and
+2.93:1 on the light one** for 11px semibold text, where AA asks 4.5:1. It failed
+in both themes.
+
+It survived because `tests/contrast.test.ts` enumerated the fills it checked and
+this one was not in the list, and because the two badges wearing it — Operator
+and Calculated — are rarely on screen. PUBLISHED is not rare. The ink is now
+`--color-ink-on-bright`, the family ink, which measures 5.86:1 dark and 4.95:1
+light; the exception was removed rather than special-cased, and the fill is now
+in the enumerated list so it cannot fall out again.
+
+### A metric tile that is loading is not a metric tile that is unknown
+
+Both drew the em dash and "not reported". On first paint, before any response
+landed, this screen therefore rendered exactly the row of empty cards it was
+rebuilt to remove — transiently, which is the version nobody catches in review
+because it is gone by the time the page is looked at.
+
+`MetricTile` now takes `loading`, and draws a skeleton bar inside the value's
+own line box so the tile is the same height loaded and loading. "Wait" and "the
+source did not say" are different sentences.
+
+### The bridge back into the conversation
+
+`AskPilot` sends a stated question into `/chat` through the in-memory handoff the
+landing chips already use — never a query string, which would put message
+content in history, in the address bar and in every screenshot. The label *is*
+the question, because a button reading "Ask Pilot" that then fires an unseen
+question is the assistant putting words in somebody's mouth.
+
+### Verified against the real source
+
+The backend was pointed at the live store, not fixtures. Today's date is
+2026-08-27; the store held 496 published calls; the week window returned exactly
+one — RHAPSODY OF THE SEAS, 2 September, PORTZANTE, capacity 2,026, **passenger
+count not published**, which is the `pax: 0 → null` rule rendering correctly on
+real Authority data. The tiles read 0 / 0 / 1. Search for "rhapsody" over all
+upcoming returned five calls and kept focus through all eight keystrokes. The
+hatch was confirmed by measurement to begin below the cruise section's last
+pixel.
+
+821 frontend tests, lint, typecheck, production build, both themes, 375px and
+desktop.
+
+---
+
+## 0041 — Watchtower runs on a schedule, which until now it did not
+
+**Status:** accepted.
+**Completes** the Watchtower work begun in 0039/0040.
+
+### The bug was an absence, and absences do not show up in review
+
+`check_all()` was written, documented and tested. Every source in the registry
+carried an `interval_hours`. `check_source` had a `_due()` helper comparing
+`last_checked_at` against it. And **nothing called any of it.**
+
+The 496 cruise calls in the store were there because a person ran the monitor by
+hand, once. The Vessels page read `source.as_of` and stamped every row
+*"checked 27 Aug 2026 at 05:12"* — accurately, about a fetch that was never
+going to happen again.
+
+That is the worst shape a defect can take in this product. There is no error, no
+failing test and no red health check; the screen goes on making a confident,
+dated claim while the thing behind it has quietly stopped, and the only symptom
+is a date getting slowly older. Everything about the feature looked finished
+because every part of it existed except the part that made it run.
+
+### In the API process, not a second one
+
+A separate worker or a system cron is the textbook answer and both were
+considered. This deployment is a single container. Adding a second process to
+run one job every six hours would introduce a supervisor, a second image, and a
+second thing that can be down without anybody noticing — to replace a task that
+is forty lines and cancels cleanly on shutdown.
+
+The two things that usually make in-process scheduling a bad idea are handled
+rather than waved at:
+
+| Objection | What was done |
+| --- | --- |
+| **Multiple workers each run their own** | `uvicorn --workers 4` builds the app four times. A `scheduler_lease` row in SQLite settles which one sweeps. |
+| **The fetch blocks the event loop** | `check_source` uses a synchronous `httpx.Client` and `time.sleep` for retry backoff — up to six seconds of deliberate sleeping, which would stall every in-flight chat stream. It runs under `asyncio.to_thread`. |
+
+### A lease, not a lock
+
+A lock has no expiry, and a worker killed mid-sweep never releases one. The
+cruise schedule would then stop updating **forever**, with the application still
+serving happily and no error anywhere — arriving at exactly the same silent
+failure this decision exists to fix, from the other direction.
+
+The lease runs out. Acquire, renew and steal are one `INSERT ... ON CONFLICT
+... DO UPDATE ... WHERE`: read-then-write would let two workers both observe an
+expired lease and both conclude they had won it, so the `WHERE` does the
+deciding inside SQLite's own write lock and exactly one caller sees a row change.
+
+A holder may always renew its own lease, or a healthy worker would lose it to a
+peer every tick and the sweep would bounce between processes for no reason.
+
+### The loop ticks every fifteen minutes; the sources decide the cadence
+
+`check_source` already asks `_due()`. So the loop ticks far more often than
+anything is due, and a tick against an up-to-date source costs one SQLite read.
+The alternative — a loop that slept for six hours — would put the cadence in two
+places, and they would disagree the first time either changed. It also means a
+source becomes due within a quarter of an hour of its mark rather than up to six
+hours late.
+
+### Nothing is fetched at boot
+
+Sixty seconds before the first tick. A container in a crash-loop would otherwise
+hit SCASPA's endpoint once per restart, and a deployment scaling to six replicas
+would hit it six times in the same second. It also means a smoke check that
+starts the app and stops it does no network I/O at all.
+
+### The default is on, and that is the whole point
+
+`WATCHTOWER_ENABLED` defaults to `True`. A flag an operator has to know about
+would have left the original bug true for every deployment whose operator did
+not know — and this failure is invisible, so nobody would have found out.
+
+Off is for a process that must not reach the network. The test suite sets it in
+a session-scoped autouse fixture, before any `Settings` is built, because
+`get_settings()` is `lru_cache`d and `create_app()` calls it directly. Two other
+things happen to protect the suite today and neither is load-bearing:
+`TestClient(app)` outside a `with` block never runs the lifespan, and the
+startup delay outlives most test processes. One `with TestClient(app) as client`
+and a slow suite would be enough to start fetching a live schedule from CI.
+
+### A CLI, for the three things a scheduler cannot do
+
+`scripts/watchtower.py` — `--force` for a release step, `--status` for "is it
+actually working", and the whole mechanism if someone prefers cron. It shares
+the lease, so running it alongside a live application is safe.
+
+`--status` deliberately prints `last checked` and `last changed` as two lines.
+They render identically on a screen and mean opposite things: *"nobody has
+looked since Tuesday"* is our fault, *"SCASPA has not edited it since Tuesday"*
+is a normal week.
+
+### A row count that was six too high
+
+Running the new `--status` against the real store showed `rows=502` in the
+change log and 496 rows in the table.
+
+`replace_cruise_calls` returned `len(calls)` — what it was *handed*, not what
+landed. The primary key is `(call_date, vessel)` and SCASPA's published schedule
+genuinely contains repeats, which `ON CONFLICT DO UPDATE` correctly folds. So
+the one place an operator looks to ask "did that work" was quietly reporting six
+rows that existed nowhere.
+
+It now counts back out of the database, and the log line carries **both**
+numbers — `parsed=502 stored=496` — because the gap between them is itself worth
+seeing. It would grow if the publisher started duplicating rows in earnest.
+
+A count that is only ever slightly wrong is the kind that never gets checked.
+
+### Verified running, not just tested
+
+Driven against the real store and the real SCASPA endpoint with the delays
+collapsed. The scheduler started, took the lease, fetched **the revision marker
+only** — a few hundred bytes against a quarter of a megabyte — compared it,
+logged `unchanged`, and the next two ticks correctly skipped because the source
+was no longer due. Then a clean cancel on shutdown.
+
+Booted normally afterwards: `watchtower_scheduler_started worker=… tick_s=900
+first_sweep_in_s=60`, with `/api/health` answering 200 throughout.
+
+648 backend tests, ruff clean. The one failure is the Windows symlink-privilege
+error in `test_ingest.py`, unrelated and pre-existing.
+
+### Still missing
+
+`docs/architecture.md` does not mention Watchtower at all — a gap that predates
+this change and is worth closing when that document is next touched.
+
+---
+
+## 0042 — `/flights` becomes Airport Information, and the knowledge base gets a second exit
+
+**Status:** accepted.
+**Builds on** 0032 (the fixture hatch) and 0040 (the same two-section shape on
+`/vessels`).
+
+### The screen was three em dashes and an apology
+
+`/flights` was a movements table with three metric tiles above it. SCASPA
+publishes no flight feed, so what a real visitor saw was **Arrivals today —,
+Departures today —, Delayed —** over a panel explaining there was nothing. The
+brief names those three cards individually and says to remove them.
+
+Removing them leaves a page with nothing on it, which is why the instruction
+continues: show "useful SCASPA-grounded content" instead — facilities, passenger
+information, parking and access.
+
+### Where that content could honestly come from
+
+Three options, and only one of them survives CLAUDE.md rule 5.
+
+| Option | Why not |
+| --- | --- |
+| **Write the content into a component** | A developer typing "the airport has a duty-free shop and two lounges" produces text indistinguishable on screen from something the Authority stands behind. Nobody verified it, no researcher can correct it by editing the spreadsheet, and it drifts silently from the moment it is written. The frontend has an entire module (`lib/scaspa-facts.ts`) devoted to holding this line for the handful of facts it *is* allowed to hardcode, and airport facilities are nowhere near that list. |
+| **Topic cards that bridge into the assistant** | Honest, and thin. It answers "what do you want to ask?" with "what do you want to ask?", which is the problem the page has. |
+| **Serve the verified rows directly** | Chosen. |
+
+The knowledge base already contains **19 confirmed airport rows** across
+fourteen of the researchers' own subcategories — facilities, parking, check-in,
+security, immigration among them. Every one was already in the product. They
+were reachable only by knowing what to ask.
+
+### `GET /api/guide`
+
+Confirmed knowledge-base rows for one category, grouped by the researchers'
+subcategory, each with its question, answer, source URL, verification date and
+volatility. No model anywhere in the path, so nothing can be hallucinated.
+
+Four properties worth stating:
+
+- **`confirmed` only**, the same rule the index applies. A page is not a lower
+  standard than a sentence — if anything it is higher, because a screen is
+  scanned and believed without the reader ever forming a question they might
+  have doubted the answer to. There is no follow-up in which an unverified claim
+  gets challenged.
+- **`id` is the citation anchor the assistant uses.** An answer met on the page
+  and the same answer met in a conversation are one row, not two sources that
+  happen to agree. That is the whole reason this reads from the knowledge base
+  rather than from a copy of it.
+- **An uncovered category is a 200 with `source.kind: "unavailable"`**, not a
+  404. "Nothing has been verified about this" is information; a 404 would put an
+  error on screen where the correct rendering is an honest empty state.
+- **The parse is cached on the CSV's path *and* mtime.** A researcher correcting
+  a wrong answer and redeploying must not be outlived by a parse cached at boot;
+  caching on the path alone would serve the superseded answer until somebody
+  restarted the process, and nobody would know to.
+
+### No page-level date, which took two attempts to get right
+
+The endpoint sends `source.as_of` as the **oldest** verification in the set —
+the only date true of everything returned. The first version rendered it.
+
+On the real airport data the oldest row was verified in **May 2024** and most
+were verified in **July 2026**. A single stamp is therefore wrong in whichever
+direction you pick: the newest advertises the best case, and the oldest condemns
+month-old content as two years stale.
+
+So the page renders no aggregate date at all, and every answer carries its own
+inside its panel. That is the date a reader acts on. The envelope value stays on
+the wire for callers that want a conservative single figure.
+
+### The hatch, again
+
+Same as 0040. `OpsShell` draws 0032's sample-data stripes behind the whole
+screen from the source it is handed, and this page has two sources: verified
+published information, and a movements feed that can be fixtures. Hatching the
+page would mark the researchers' verified content as invented data. The route
+passes no `source`; the hatch lives inside `FlightMovements`, and a test asserts
+the published section contains none while the page still has one.
+
+### The accessibility harness could never have passed
+
+`/flights` at mobile was the last route failing axe — `scrollable-region-focusable`,
+a scroll container with no keyboard access. It is gone with the metric row that
+caused it, and **every route is now clean at both viewports**.
+
+Two *manual* checks in `npm run check:a11y` had been failing for long enough to
+be treated as furniture: "the finished answer is announced" and the citation-chip
+focus test. They were reported repeatedly as a known limitation.
+
+They were never broken. `frontend/scripts/a11y-check.mjs` starts its own Vite
+server on a hardcoded port **4400**, and the backend's default `ALLOWED_ORIGINS`
+listed only 5173 — so the browser's calls were blocked by CORS on every machine,
+for anyone who had not hand-edited their `.env`. The default now includes both
+spellings of 4400, with the same reasoning already written there for 5173, and
+the suite reports **0 axe violations, 0 manual failures** for the first time.
+
+Dev ports only, and this default is dev-only in effect: production must set the
+real origin and a wildcard with `ENV=prod` refuses to boot.
+
+### What this surfaced about the data
+
+`docs/found-during-build.md` item 7 recorded four rows the loader rejects for
+carrying `source_type: reference`/`directory` with Wikipedia and findyello
+sources. The rejection is correct and the entry says so.
+
+One of them, `kb-045`, is `confirmed` and answers "What is the airport code for
+St. Kitts?". Until now the only consequence was one row missing from the index.
+It is now a **visible gap on a page**: the airport section shows 18 answers where
+the export holds 19 confirmed rows, and the missing one is a question a traveller
+is quite likely to have.
+
+The enum is not being widened. Admitting `reference` would let third-party
+content onto a page badged PUBLISHED, which is worse than the gap. Item 7 has
+been updated; the fix is the researchers'.
+
+### Verified
+
+Against the real knowledge base, not fixtures: 18 answers across 13 topics,
+each expanding to its answer with a volatility badge, a "Checked 31 Jul 2026"
+stamp, the SCASPA source link (`rel="noreferrer noopener"`) and its `kb-` id.
+No console errors.
+
+661 backend tests, 831 frontend tests, lint, typecheck, prettier, production
+build, and `check:a11y` fully green. The one backend failure is the Windows
+symlink-privilege error in `test_ingest.py`, unrelated and pre-existing.
+
+---
+
+## 0043 — `/cargo` ships without the feature the brief asked for
+
+**Status:** accepted. A recorded deviation from the navigation brief §20.
+**Builds on** 0039 (why cargo is not a Watchtower source) and 0042 (the guide).
+
+### What was asked for
+
+A cargo status lookup: "Search by vessel or agent", returning a card of
+**Vessel · Agent · Status · Last updated · Official SCASPA source**. The brief
+also says to inspect `scaspa.com/cargo.html` first — DOM, XHR, fetch calls,
+embedded JSON — and to prefer a structured endpoint, falling back to parsing
+server-side.
+
+### What the inspection found, twice
+
+0039 reached its conclusion from the served HTML. This is a second look, in a
+real browser with JavaScript running, because the whole page design rests on it:
+
+| | |
+| --- | --- |
+| `<table>` elements | 5, **all** Weebly `wsite-multicol-table` layout blocks — no `<th>`, no data rows |
+| `<input>` / `<select>` / `<textarea>` | 0 |
+| `<iframe>` | 0 |
+| Embedded JSON | none |
+| XHR / fetch | only `CustomerAccounts::getAccountDetails` and `Member::get_session_details` — the site platform's own membership RPCs |
+| Body text | 1,156 characters |
+
+There is no structured endpoint to prefer and nothing to parse server-side.
+
+**And it is sharper than "no data".** The page's own FAQ answers "How do I Check
+my Cargo Status" with: search "the search field located at the top right of the
+Cargo Info table" — and there is no Cargo Info table on that page. Its next
+question, "Is the information updated regularly", has no answer at all; the
+field is empty. An agent following the Authority's published instructions
+reaches a dead end. Recorded as `found-during-build.md` item 12.
+
+### So the search box is not built
+
+This is the deviation. A search field over nothing is not a neutral placeholder
+— it is a promise. Somebody types a vessel name, gets "no results", and
+reasonably concludes their cargo is not at the port. That is a **different and
+much worse answer** than "this is not published", and it is the one a search box
+manufactures for free.
+
+The page says what is true instead: cargo status is not published online,
+SCASPA's page describes a table the site does not currently publish, and here is
+the telephone number to ring with the vessel or agent name. Reproducing the dead
+end more prettily would help nobody.
+
+The control goes in when there is something behind it. `tests/cargo.test.tsx`
+asserts its absence so that "we should add a search box" is a conversation
+rather than a commit.
+
+### The page leads with what SCASPA HAS published
+
+Ten confirmed cargo answers sit in the researchers' export — customs clearance,
+berth specifications, ramps, tariffs, what the Deep Water Harbour is, how much
+cargo it handles. Same mechanism as Airport Information: `GET /api/guide`, no
+model in the path, every answer carrying its source, verification date and the
+`kb-` id the assistant cites.
+
+The privacy sentence is on the page even though there is no feed to leak from:
+*"Pilot has no accounts and never knows who is asking."* The brief says not to
+expose private shipment data beyond what SCASPA publishes, and that rule needs
+to exist **before** a source is connected — a rule that lives only in prose gets
+relaxed by whoever wires the feed up. It is asserted in a test for the same
+reason.
+
+### Reusing the guide component exposed a bug in it
+
+`GuideTopics` maps the researchers' subcategory slugs to display headings, and
+those headings were written when the airport was the only category using them.
+The same slugs appear under cargo:
+
+| Slug | Rendered | Over |
+| --- | --- | --- |
+| `identity` | "About the airport" | "What is the Deep Water Harbour?" |
+| `infrastructure` | "Runway and infrastructure" | "What are the specifications of the cargo berth?" |
+| `statistics` | "Passenger numbers" | "How much cargo does the port handle?" |
+
+A heading is read as a claim about what is under it, so "Passenger numbers"
+above a tonnage figure is a small lie printed in capitals. Every label is now
+neutral enough to be true of any facility, which is the constraint a shared
+component was always under and which was invisible while one screen used it.
+
+### A route added to the app but not to `__root.tsx`
+
+`SELF_CHROMED_ROUTES` lists the screens that supply their own header, `<main>`
+and footer and must not be wrapped in the marketing chrome. `/cargo` went into
+the app without going into that list, so it rendered inside both: **two `<main>`
+landmarks**, a marketing footer an operations screen has no use for, and 469px
+of horizontal overflow at 320px from chrome that does not belong on it.
+
+`__root.tsx` already carried a comment saying this defect was found by
+`check:responsive` "not by review". It happened again, and was found the same
+way again — because the landmark test only ever rendered `/about`.
+
+**A guard that examines one example is a guard for that example.** The
+assertion now walks every route in the generated tree, parsed out of
+`routeTree.gen.ts` so a new route is covered without anybody remembering to add
+it. Verified by reintroducing the bug and watching `/cargo has exactly one main
+landmark` go red, then restoring.
+
+`/cargo` was also missing from the route lists in `scripts/a11y-check.mjs` and
+`scripts/responsive-check.mjs` — the same class of omission, and the reason
+those checks are worth running before a page is called finished.
+
+### The gallery timeout, raised a second time
+
+`tests/gallery.test.tsx` waits on a lazy import of the whole component gallery.
+Adding the published-answer, nothing-verified and cargo-status sections pulled
+three more import graphs into that transform, and it began failing roughly one
+full-suite run in three while passing every time in isolation.
+
+Raised 5s to 15s with a note: if it needs a third raise, the fix is to stop
+lazy-loading the gallery in tests rather than to keep buying seconds.
+
+### Verified
+
+856 frontend tests, 661 backend, lint, typecheck, prettier, production build.
+`check:a11y` reports **0 axe violations and 0 manual failures** across 14 routes
+at two viewports, `/cargo` included. `check:responsive` is clean on `/cargo` for
+overflow at all five widths; its remaining touch-target failures there are the
+shared sidebar and header chrome, identical on `/vessels` and `/flights`, and
+predate this work.
+
+---
+
+## 0044 — The navigation takes the brief's four groups, and 0037 was half right
+
+**Status:** accepted. Partially supersedes 0037's navigation section.
+
+### ASK PILOT · OPERATIONS · HELP · TOOLS
+
+```
+ASK PILOT      Chat
+OPERATIONS     Vessels · Flights · Tariffs · Cargo
+HELP           Contact SCASPA
+TOOLS          Console
+```
+
+Exactly §4 of the navigation brief, including the order inside OPERATIONS —
+which is not alphabetical and not the order the screens were built in.
+
+### What 0037 got right, and the one thing it did not
+
+0037 replaced **ASSISTANT**, **OPERATIONS** and **CONDITIONAL** with **Ask
+Pilot** and **Services**, on the grounds that the first two were jargon and the
+third was not a category at all: "Conditional" is a note to the developer that a
+route may not exist, and as a heading over a customer's navigation it is the
+clearest possible sign of an interface labelled from the inside out.
+
+That is right about Assistant and unarguable about Conditional. It over-reached
+on the middle one. The brief's list of things to stop showing names **SCASPA
+Assistant**, **Conditional**, **Diagnostics** and "raw developer terminology" —
+it does not name Operations, and the brief's own §4 navigation *uses* OPERATIONS
+as a heading.
+
+So this is not a reversal of a considered decision. It is the correction of a
+misreading, and it is worth being precise about which part was misread, because
+the reasoning 0037 gave was good and should survive: **the test still asserts
+that Assistant, Conditional and Diagnostics never come back.** Only Operations
+left that list.
+
+### Console gets a group, and 0037's objection is answered rather than ignored
+
+0037 folded Console into Services because "a heading reading Console above a
+single item called Console says nothing twice". Correct, and the brief resolves
+it by naming the group **TOOLS** — which says something the item does not: this
+is instrumentation, not a service a traveller came looking for.
+
+Same shape for **HELP** over a single **Contact SCASPA**. A one-item group earns
+its heading when the heading answers "what is this for" and the label does not.
+
+The remaining worry about one-item groups is an empty heading surviving on
+screen, so there is now a test for it: type a search term that matches only
+Vessels, and HELP, TOOLS and ASK PILOT disappear along with their contents.
+
+### "Contact SCASPA", not "Support"
+
+Support is what a software company calls its help desk. A traveller who wants a
+person wants to contact the Authority — and the label now says which authority,
+which matters on a page that also carries an airline's name and a cruise line's.
+
+The route is unchanged at `/support`. `tests/settings.test.tsx` checks that pair
+explicitly, so a rename that moved the label and the href apart would fail.
+
+### Not touched
+
+`ConsoleShell` still has an internal link reading "Contact support", and the
+institutional header still reads "Contact". Both are different surfaces with
+their own context and the Console has its own section in the brief (§22), which
+is a later piece of work.
+
+Nav labels are not routed through `features/i18n`; they are literals in
+`NAV_GROUPS`. That predates this change and is unchanged by it.
+
+### The suite stopped being trustworthy, and that is fixed here too
+
+Not part of the navigation work, but found by it and not worth leaving.
+
+Across the Vessels, Airport and Cargo pages the suite gained roughly thirty-five
+tests that render a **whole route**: mount the router, resolve a lazy chunk, let
+MSW answer, settle React Query. Each is comfortably fast alone. Run 857 of them
+together and a handful drifted past `findBy*`'s one-second default — **a
+different handful each run**, which is the signature of a shared budget rather
+than of any one test being wrong.
+
+Two numbers were fighting each other:
+
+| Setting | Was | Now | Why |
+| --- | --- | --- | --- |
+| `asyncUtilTimeout` | 1s (default) | 5s | The actual cause. Raising assertions one at a time as they flaked would have meant chasing them forever and would have made the number look like a property of each test. |
+| `testTimeout` | 5s (default) | 20s | A silent ceiling on every longer wait in the suite. `gallery.test.tsx` asks `findByRole` to wait 15s for a lazy chunk and `airport-information.test.tsx` waits 8s to outlast a retry policy — **neither could ever reach its own number**, because vitest killed the test at 5s first. The symptom was a test timing out well before the timeout it had been given. |
+
+Neither costs anything on a passing run: a `findBy*` resolves the moment its
+element appears, and a test ends when its assertions finish. The ceiling is only
+ever reached by something that was going to fail, where it buys five seconds
+instead of one — against a suite that had started crying wolf.
+
+Verified by five consecutive full runs with no failure but the environmental
+one (`CLAUDE_CODE_MESSAGING_TOKEN` in the developing shell's environment, which
+`config.test.ts` correctly objects to and which is not in the repository).
+
+---
+
+## 0045 — The console stops being a second implementation of the product
+
+**Status:** accepted.
+**Builds on** 0042, 0043 and 0044.
+
+### It was two copies of the same screens
+
+`/ops/vessels` carried its own search field, its own pagination, its own
+`DataTable`, its own metric tiles and its own empty states — around 150 lines
+rendering the same `useVessels` query the public `/vessels` renders. `/ops/flights`
+did the same against `useFlights`.
+
+Two copies of one screen is two places for the ETA/ATA distinction to be lost,
+two places for a filter to start lying about `total`, and two places to fix
+anything found in either. It is not hypothetical: the console is where the
+ETA/ATA columns *were* collapsed into one "Arrival" column, and it had to be
+fixed there separately.
+
+§22 is explicit — "Use the SAME backend services as the public pages. Do not
+duplicate data fetching logic." So the console tabs now render the public
+sections themselves: `CruiseSchedule`, `VesselMovements`, `GuideTopics`,
+`FlightMovements`, `CargoStatus`.
+
+### What the console is FOR, once the tables are shared
+
+The aside panels, and nothing else: position reports, marine advisories, gate
+assignments, service health, index freshness. That is operational
+instrumentation a traveller has no use for and an operator does.
+
+Stating it that plainly is a better answer than a second table that looked
+different for no reason — and it is a real answer to "why does this screen
+exist", which the console did not previously have.
+
+### Deleting the duplication found a component with no callers
+
+`OpsListState` existed to give the console's lists a skeleton, an empty and an
+error state. With the console's own tables gone it had **zero callers**, and it
+was `tests/matrix.test.tsx` that noticed — its guard scans for `<OpsListState`
+callers and asserts each hands over `columns`, and the caller count fell to
+nought.
+
+The component is deleted. The guard is not: the rule it protects — a loading
+table keeps its column headings, §7.5, so the table does not dissolve and move
+every column twice — is now enforced by `TableSkeleton`, which is the only thing
+that draws that state. The scan points there instead.
+
+`OpsPage` itself survives; `/settings` and `/profile` still use it.
+
+### The tabs are §22's, and two of the five leave the console
+
+```
+Cruise & Vessels · Airport · Cargo · Tariffs · Contact
+```
+
+Tariffs and Contact link to `/tariffs` and `/support` rather than to console
+copies, which looks inconsistent and is not: those public screens are already
+the whole of what such a tab would show, so a console version of either would be
+a second implementation of a screen that exists — the exact thing this decision
+removes everywhere else.
+
+### A Cargo tab is not a Cargo Tracking link
+
+`tests/console.test.tsx` has asserted since the console was built that it offers
+no "Cargo Tracking", on the grounds that a link promising to look up somebody's
+container is the `personal_record` refusal wearing a nav label — read long
+before the refusal is.
+
+That guard now sits next to a Cargo tab, so the distinction is worth stating
+rather than assuming safe. `/ops/cargo` leads to what SCASPA has published about
+cargo and to a panel saying, in as many words, that cargo status is not
+published online and that Pilot has no accounts with which to look up a private
+consignment. It is an answer, not a lookup. The test still passes, and it is now
+guarding a distinction the product actually makes rather than an absence.
+
+`/ops/cargo` has no aside. There is no cargo feed, no cargo gate map and no
+cargo advisory source, so the panel column would be empty furniture — and an
+empty aside on one tab of three reads as something failing to load.
+
+### "Pilot Operations Console", and the old label had the brand architecture inverted
+
+The top bar read **SCASPA operations**, on the note that "this is an operations
+console for SCASPA staff, and Pilot is the customer-facing guide".
+
+§22 names it **Pilot Operations Console**, and the brief is right. §1 establishes
+two brands: PILOT is the **product**, SCASPA is the **institution**. A Pilot
+surface displaying SCASPA's information is precisely that architecture — the old
+label treated a product screen as an institutional artefact, which is the
+inversion, not the fix.
+
+§22's supporting text — *"A unified view of published SCASPA operational
+information and service status."* — sits under the section heading on every
+console page rather than on a landing page, because there is no landing page.
+`/ops` still redirects to the first tab: a dashboard summarises across sources,
+every source here is already summarised on the tab that owns it, and an overview
+would be a click between the reader and the data.
+
+### Ask Pilot came along for free
+
+§22 asks for contextual actions — "Ask Pilot about today's arrivals", "Ask Pilot
+what documents I need". They are already inside the shared sections, so the
+console acquired them by rendering the same components. That is the argument for
+sharing, made by the first feature that arrived after it.
+
+### Verified
+
+858 frontend tests, lint, typecheck, prettier, production build.
+`check:a11y` at 0 violations and 0 manual failures, `/ops/cargo` included in the
+route list along with `check:responsive`.
+
+Counted in a browser on a clean tab: `/ops/vessels` issues **five** distinct
+requests — cruise schedule, vessels, positions, advisories, health — which is
+comfortably inside the 60-per-minute operations budget. (Dev doubles each
+through StrictMode's double mount; production does not.) The cruise table and
+its summary tiles share one request on the default range, because their query
+keys match.
+
+---
+
+## 0046 — "Why Pilot asks for so little", and a privacy notice that contradicted the control beneath it
+
+**Status:** accepted. Closes §21 of the navigation brief, and the brief itself.
+
+### Most of §21 was already built
+
+The brief asks to *keep* the emergency banner, the facility contact cards, the
+privacy explanation and the enquiry form; to head the page **Contact SCASPA**;
+to list five named facilities; and to keep **Attach this conversation** "if
+supported".
+
+All of it existed. The heading was already "Contact SCASPA", the five cards come
+from `GET /api/support/directory` with the real switchboard number and postal
+address, and the transcript attachment was built with explicit opt-in, a
+consequence line and a receipt that reports what the server actually did rather
+than what was asked for.
+
+So this is a small change, and its interest is entirely in what looking closely
+turned up.
+
+### "Pilot", not "we", and the change is not cosmetic
+
+§21 asks for the heading **"Why we ask for so little"** to become **"Why Pilot
+asks for so little"**.
+
+"We" on a SCASPA-branded page reads as the Authority — and the Authority *does*
+hold accounts, for berthing, for cargo, for payments. It is Pilot that does not.
+The old heading invited a reader to conclude something untrue about the
+organisation instead of something true about this assistant, on the one panel
+whose whole job is being believed about privacy.
+
+The brief's sentence goes in verbatim: *"Pilot does not require an account,
+login or personal profile to answer public SCASPA questions."*
+
+### The notice claimed the form takes no attachment, above a control offering one
+
+`PrivacyNotice` said the form "takes no name, no email address, no telephone
+number and **no attachment**". `EnquiryForm` renders an **Attach this
+conversation** checkbox directly beneath it, whenever the session has a
+conversation to attach.
+
+Both halves were written truthfully and separately. The notice describes a form
+that asks nothing about the person; the checkbox is an explicit, opt-in,
+clearly-consequenced choice to send this session's questions. Together they told
+a reader one of two contradictory things — and a privacy notice is the worst
+available place to be approximately right, because it is the panel a reader has
+no way to verify for themselves.
+
+The claim is now about what the form asks **about the person**, which is what it
+was always for, and the attachment is described honestly as the one thing that
+sends anything more.
+
+### And the correction had to work in both directions
+
+The obvious fix — a second paragraph describing the attachment — reintroduces
+the same defect pointing the other way, because the control renders **only when
+the session has a conversation**. A paragraph about a box that is not on the
+screen is the same failure as a box the paragraph denies.
+
+So `PrivacyNotice` takes `canAttachTranscript` and the paragraph appears with
+the control. Both directions are asserted:
+
+- the notice never says "no attachment" while the box exists;
+- the paragraph is absent on a first visit and present once there is a
+  conversation, checked by rendering the route in both states.
+
+Verified in a browser as well as in jsdom, because the condition reads
+`sessionStorage` and a test that stubs it proves less than a real session does.
+
+### Not changed
+
+The five facility names keep the backend's casing — "SCASPA — Authority
+headquarters", "Port Zante cruise terminal" — rather than the brief's title
+case. They are the published strings the API serves, the facilities are
+identical, and the product's house style is sentence case. Churning fixtures to
+match capitalisation in a brief would be a change with no reader on the other
+end of it.
+
+The extension directory the original mockup drew — "Operations Tower: Ext.
+2240", "Berthing Office: Ext. 4450", "Security Gate: Ext. 9110" — is still
+absent, and still deliberately: those numbers appear in no verified SCASPA
+source, and a wrong extension for a security gate is worse than no extension.
+
+### Verified
+
+860 frontend tests, lint, typecheck, prettier, production build, and
+`check:a11y` at 0 violations and 0 manual failures.
+
+---
+
+## 0047 — Voice: the blocker is real, and the product now says so before the press
+
+**Status:** accepted.
+
+### What I actually checked, rather than remembered
+
+"Voice is blocked on the OpenAI project lacking `gpt-4o-mini-tts` and
+`gpt-transcribe`" had been repeated for a while on the strength of one 403. It
+is worth confirming a claim that decides whether a feature ships.
+
+`/v1/models` on this key returns **nine models**:
+
+```
+gpt-4o · gpt-5.4-pro-2026-03-05 · gpt-5.5 · gpt-5.5-pro
+gpt-5.6-luna · gpt-5.6-sol · gpt-5.6-terra
+gpt-realtime-2.1-mini · text-embedding-3-large
+```
+
+Not one is a speech model. Probing the audio endpoints directly:
+
+| Model | `/v1/audio/transcriptions` | `/v1/audio/speech` |
+| --- | --- | --- |
+| `whisper-1` | 403 no access | — |
+| `gpt-4o-mini-transcribe` | 403 no access | — |
+| `tts-1` | — | 403 no access |
+| `gpt-4o-mini-tts` | — | 403 no access |
+| `gpt-realtime-2.1-mini` | 404 Invalid URL | 404 Invalid URL |
+
+The 403s carry OpenAI's own envelope — *"Project `proj_…` does not have access
+to model"* — so this is an entitlement, not a bad request.
+
+**`gpt-realtime-2.1-mini` is the only near-miss and it is not one.** It is a
+realtime speech model reached over a WebSocket, and the audio REST endpoints
+reject it outright. `frontend/CLAUDE.md` rule 1 is "there are no WebSockets", so
+adopting it is an architecture change and not a configuration one.
+
+So the blocker stands, it is an account change, and no amount of code will move
+it. What follows is everything that *can* be done without it.
+
+### The real defect was not the missing model
+
+`VITE_ENABLE_VOICE` defaults to **true** and is set by whoever builds the
+frontend. The entitlement belongs to whoever holds the API key. They are
+different people, and nothing connected them — so the microphone and the
+speak-aloud button were rendered for **every user**, and failed on **every
+press**, after a round trip and a wait, with "Voice is unavailable right now".
+
+A control that always fails is worse than an absent one. It is a promise the
+product cannot keep, offered to somebody who may be standing on a pier with a
+bag in one hand — which is the exact person `docs/api-contract.md` says voice
+exists for.
+
+### The backend now knows, and says
+
+`app/voice/availability.py` lists models once an hour and reports whether the
+two configured ids are present. `/api/health` carries a `voice` block, and the
+frontend hides the controls rather than offering them.
+
+The models list rather than a probe call, because listing is free and instant
+and definitive for exactly this failure: a 403 entitlement error, where an
+entitled model appears in the list. It cannot detect a provider outage and is
+not meant to — that is a different event with its own error path.
+
+**Unknown is not unavailable**, and that is the half worth guarding. If the list
+cannot be read — no key, no network, a transient upstream — the report is
+`checked: false` and the flags beside it are optimistic. Nothing is hidden on
+the strength of them. Taking a working microphone away because one probe failed
+is a worse mistake than the one this fixes and a far quieter one: the control
+simply stops being there, and nobody files a bug about a button they never saw.
+Asserted from both directions, in the backend and in the client.
+
+**`voice` never changes `status`.** A deployment with no speech models is fully
+functional — this product answers in text — and reporting it `degraded` would
+put a permanent amber light on a working service, which is how a status field
+stops being read.
+
+### A store, because the first design made a leaf component fetch
+
+The obvious wiring was `useHealth()` inside each control. `SpeakButton` is a
+**leaf rendered once per assistant message**, so that subscribed every message
+to the health query and made a presentational component require a
+`QueryClientProvider`.
+
+Forty-six tests that render `MessageBubble` bare broke at once, and they were
+right to: it is the same argument `Sidebar` makes about staying router-free so
+it can be tested on its own.
+
+So availability is published once by `ChatCore`, which already holds health, and
+the controls read it through `useSyncExternalStore` — the pattern
+`features/voice/speech.ts` already establishes in this codebase. The default is
+optimistic, so a component rendered with nothing published behaves exactly as it
+did before any of this existed.
+
+### Two smaller things found on the way
+
+**The health panel called both states "switched off".** Turned off in a build is
+a decision somebody can undo; no entitlement is an OpenAI project somebody has
+to go and edit. The one state that needs an account change looked like a
+setting. It now says which, and `detail` names the missing models — because
+"voice is unavailable" sends a person to read code, and "no access to
+gpt-transcribe, gpt-4o-mini-tts" sends them where the fix is.
+
+**A 403 is reported to the client as `UPSTREAM_TIMEOUT`.** `VoiceUnavailableError`
+borrows that code because the taxonomy has no voice-specific one. The
+user-facing message is already correct and voice-specific, and the frontend
+never shows a raw code — so this is a logs-and-operators problem rather than a
+user-facing one, and it is **left alone here** rather than widened into an
+error-taxonomy change on the way past. Recorded so the next person meets it
+deliberately.
+
+### The suite must not probe
+
+`/api/health` now lists models, and the health tests build the app from real
+settings — so on a developer's machine every health test would have made an
+upstream call. `tests/conftest.py` seeds the probe cache with an *unchecked*
+result for the session, which is also the honest answer for a run that never
+asked. Same shape and same reasoning as `_no_watchtower_in_tests`.
+
+### Verified
+
+Against the real key, in a browser: the microphone renders greyed and disabled
+with "Asking by voice is switched off", and `/api/health` reports
+
+```json
+"voice": { "stt": false, "tts": false, "checked": true,
+           "detail": "this OpenAI project has no access to gpt-transcribe, gpt-4o-mini-tts — an account entitlement, not a code fault" }
+```
+
+with `status` still `ok`.
+
+864 frontend tests, 667 backend, lint, typecheck, prettier, production build.
+`docs/api-contract.md` documents the field; `docs/runbook.md` §7 now starts by
+asking health and says plainly that the greyed microphone is the designed state,
+not something to fix during a demonstration.
+
+### What is still needed to ship voice
+
+An OpenAI project with access to a transcription model and a speech model.
+Nothing in this repository is in the way — set `OPENAI_TRANSCRIBE_MODEL` and
+`OPENAI_TTS_MODEL` to entitled ids and the controls appear on their own, because
+the probe will find them.
+
+---
+
+## 0048 — ElevenLabs becomes the speech provider, and voice becomes swappable
+
+**Status:** accepted.
+**Follows** 0047, which established that the OpenAI key cannot do speech at all.
+
+### Why a second provider rather than a different model id
+
+0047 measured it: this project's OpenAI key returns nine models and not one can
+transcribe or synthesise. Every audio call comes back `403 — Project proj_… does
+not have access to model`. That is an entitlement, so no model id fixes it.
+
+ElevenLabs was supplied instead. It does both halves — Scribe for speech to
+text, and the text-to-speech endpoint for the reply — so voice is reachable
+without an OpenAI account change.
+
+### What did NOT move, and that is the point
+
+`app/voice/provider.py` is only the provider call. Everything that makes voice
+usable stays exactly where it was:
+
+- the **sanitiser** in `tts.py` — markdown, citation markers, URLs, currency
+  codes, and above all the telephone number, which read as a quantity is "eight
+  hundred sixty-nine million…" and which ends every refusal this product gives;
+- the on-disk **cache**, keyed on sanitised text, so a rehearsed answer is
+  synthesised once;
+- the **logging** that records size and latency and never the audio or the
+  transcript;
+- the **retry and classification** in `app/upstream.py`.
+
+A second provider must not mean a second copy of the thinking. The sanitiser is
+the most valuable code in the voice path and would have been the first thing to
+drift.
+
+### `auto`, so one key is the whole configuration
+
+`VOICE_PROVIDER` defaults to `auto`: ElevenLabs when `ELEVENLABS_API_KEY` is
+set, OpenAI otherwise. Somebody pastes the key they were given and voice works,
+without also having to learn that a second setting exists.
+
+An explicit value always wins, including an explicit `openai` on a deployment
+that also holds an ElevenLabs key — otherwise `auto` would be impossible to
+override and the setting would be a lie. An unrecognised value falls to the
+`auto` rule rather than disabling speech, because a typo in an env var must not
+take a working feature away.
+
+The resolved answer is reported by `/api/health`, so it is never a guess.
+
+### httpx rather than the ElevenLabs SDK
+
+The project already depends on httpx, already has `call_with_retry` with the
+backoff and classification the rest of the product uses, and needs exactly two
+endpoints. An SDK would add a dependency to own two requests and bring a second
+retry policy alongside the one already here.
+
+### The voice has no default, and that is a product decision
+
+`ELEVENLABS_VOICE_ID` is blank in source. Choosing one would pick an accent, a
+gender and a register for a Caribbean port authority on the strength of whatever
+a developer saw first in a list — and it is the voice every caller hears.
+
+Blank is handled as a **half-available** state, which OpenAI has no equivalent
+of: transcription needs no voice and works, synthesis does not. `/api/health`
+reports `stt: true, tts: false`, the speak-aloud control is not drawn, and the
+detail names the command that lists the options:
+
+```bash
+cd backend && uv run python scripts/voice_smoke.py --voices
+```
+
+That command prints every voice on the account with its id, marks the one
+currently configured, and runs in-process against `.env` rather than against a
+running server — it is a configuration question, and answering it should not
+need the API up.
+
+**No voice chosen raises `ValueError`, not a provider error.** Nothing is wrong
+with ElevenLabs, and "voice is unavailable right now" would send somebody to
+look at a service that is working.
+
+### The probe learned a second shape
+
+0047's availability probe listed OpenAI models. The two providers fail
+differently, so it now branches:
+
+| Provider | Probe | Catches |
+| --- | --- | --- |
+| `openai` | list models | The entitlement 403 — an entitled model appears in the list |
+| `elevenlabs` | list voices | Reachability, **and** whether `ELEVENLABS_VOICE_ID` names a voice this account has |
+
+Listing voices doubles as the reachability check: the cheapest authenticated
+call the API has, whose answer is what an operator needs anyway. A voice id
+copied from another account is caught here rather than by a 404 in front of
+somebody waiting to hear an answer.
+
+`checked: false` still means carry on. Unknown is not unavailable, in either
+provider.
+
+### The key travels in a header and appears nowhere else
+
+`xi-api-key`, never in a URL — a URL reaches logs, proxies and error messages
+that a header does not. Asserted: the synthesis test checks the key is in the
+header and *not* in the request URL.
+
+Audio is posted from memory and never written to disk, the same guarantee the
+OpenAI path makes and the reason `stt.py` hands bytes rather than a path. Also
+asserted.
+
+### One shape guard worth naming
+
+ElevenLabs' transcription returns `{"text": …}`. If that field is missing, this
+raises rather than falling back to the response body — otherwise a
+`{"detail": …}` error payload would land in the composer as though the user had
+said it.
+
+### Verified
+
+680 backend tests, 864 frontend, lint, typecheck, prettier, production build.
+With no ElevenLabs key present the resolver correctly reports `openai` and the
+OpenAI entitlement gap, which is the state this repository is in until the key
+is added — at which point `auto` flips with no code change.
+
+`.env.example`, `README.md`, `docs/api-contract.md` and `docs/runbook.md` §7
+updated; the runbook's table now starts from `provider`, because sending
+somebody to the wrong dashboard is the first mistake available.
+
+### Still needed to hear it
+
+The key in `backend/.env` (gitignored), and a voice id chosen from the account.
+Nothing else.

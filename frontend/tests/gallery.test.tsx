@@ -24,7 +24,7 @@ async function renderGallery() {
   });
   render(<RouterProvider router={router as never} />);
   /*
-   * Five seconds, not the 1000ms default.
+   * Fifteen seconds, not the 1000ms default.
    *
    * The gallery is behind `lazy(() => import('@/dev/Gallery'))`, so this waits on
    * Vite transforming that module *and its whole import graph* — every primitive,
@@ -36,8 +36,18 @@ async function renderGallery() {
    * runner's cold transform, not anything a user experiences — the gallery is
    * dev-only and `tests/mocks-not-in-production.test.ts` proves it is not in the
    * shipped bundle. A flaky assertion is worse than a slow one.
+   *
+   * Raised again, 5s to 15s, when `/cargo` landed. Same cause, further along:
+   * the gallery gained the published-answer, nothing-verified and cargo-status
+   * sections, and each pulls its component's import graph into this transform.
+   * It began failing roughly one full-suite run in three while passing every
+   * time in isolation — the signature of a budget that is too tight rather than
+   * of anything being wrong.
+   *
+   * If this ever needs a third raise, the fix is to stop lazy-loading the
+   * gallery in tests rather than to keep buying seconds.
    */
-  return screen.findByRole('heading', { name: 'Component gallery', level: 1 }, { timeout: 5000 });
+  return screen.findByRole('heading', { name: 'Component gallery', level: 1 }, { timeout: 15000 });
 }
 
 describe('component gallery', () => {
