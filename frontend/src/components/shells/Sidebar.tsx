@@ -15,7 +15,7 @@ import type { DataSource, OperatorProfile } from '@/lib/types';
  *
  *   1. the brand lockup, with the panel-collapse control beside it
  *   2. a 36px search field
- *   3. three nav groups — Assistant, Operations, Conditional
+ *   3. four nav groups — Ask Pilot, Operations, Help, Tools
  *   4. the recorded questions, running under a fade
  *   5. the data-source status card
  *   6. the demonstration profile row
@@ -63,22 +63,41 @@ interface NavGroup {
 }
 
 /**
- * Two groups, named for what a reader is doing rather than for how the routes
- * were classified.
+ * Four groups, in the navigation brief's §4 order.
  *
- * They used to read **ASSISTANT**, **OPERATIONS** and **CONDITIONAL**. The
- * first two are jargon and the third is not even a category — it is a note to
- * the developer that the route may not exist. "Conditional" as a heading above
- * a customer's navigation is the clearest possible sign of an interface that
- * was labelled from the inside out, and the Pilot spec names all three
- * explicitly as things to stop showing.
+ * ## What was here before, and why it changed
  *
- * Console joined Services rather than keeping a group of its own, because a
- * group heading reading "Console" above a single item called "Console" is a
- * heading that says nothing twice. It is still filtered out below when its
- * route does not exist — that behaviour was the only real content of the old
- * "Conditional" label, and it is a property of the item, not something a
- * reader needs a heading to be told.
+ * The headings once read **ASSISTANT**, **OPERATIONS** and **CONDITIONAL**.
+ * 0037 replaced all three with **Ask Pilot** and **Services**, judging the
+ * first two to be jargon and the third not a category at all — "Conditional" is
+ * a note to the developer that a route may not exist, and as a heading over a
+ * customer's navigation it is the clearest possible sign of an interface
+ * labelled from the inside out.
+ *
+ * That call was right about two of the three and wrong about the middle one.
+ * The brief's list of things to stop showing names **SCASPA Assistant**,
+ * **Conditional**, **Diagnostics** and "raw developer terminology" — it does
+ * not name Operations, and its own §4 navigation uses **OPERATIONS** as a
+ * heading. So the previous pass over-corrected, and this restores the brief's
+ * structure rather than reversing a considered decision. 0044.
+ *
+ * ## Console gets a group after all, and the old objection no longer holds
+ *
+ * 0037 folded Console into Services because "a heading reading Console above a
+ * single item called Console says nothing twice". True, and the brief solves it
+ * by naming the group **TOOLS** — which says something the item does not: this
+ * is instrumentation, not a service a traveller came for.
+ *
+ * The group vanishes with its contents. `groups` below drops any group left
+ * empty, so a search that matches nothing in TOOLS removes the heading too, and
+ * a build without the Console route would do the same.
+ *
+ * ## HELP holds one item, deliberately
+ *
+ * **Contact SCASPA**, not "Support". Support is what a software company calls
+ * its help desk; a traveller who wants a person wants to contact the Authority.
+ * A one-item group is the right shape here for the reason TOOLS is: the heading
+ * answers "what is this for", which the label alone does not.
  *
  * Admin has no route in this build and therefore no entry — and, per §2.8,
  * nothing in the search returns it either.
@@ -89,18 +108,25 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [{ label: 'Chat', href: '/chat', icon: 'sparkle' }],
   },
   {
-    label: 'Services',
+    label: 'Operations',
+    // The brief's order: Vessels, Flights, Tariffs, Cargo. Not alphabetical and
+    // not the order they were built in — it runs from the surfaces with live
+    // published data to the one that has none, which is also roughly the order
+    // a reader is likely to want them.
     items: [
       { label: 'Vessels', href: '/vessels', icon: 'ship' },
       { label: 'Flights', href: '/flights', icon: 'plane' },
-      // §4 of the navigation brief puts Cargo in this group. It is the last of
-      // the four facilities to get a screen, and it arrives after the others
-      // because it was the only one with nothing to put on it — see 0043.
-      { label: 'Cargo', href: '/cargo', icon: 'anchor' },
       { label: 'Tariffs', href: '/tariffs', icon: 'receipt' },
-      { label: 'Support', href: '/support', icon: 'headset' },
-      { label: 'Console', href: '/ops', icon: 'chart' },
+      { label: 'Cargo', href: '/cargo', icon: 'anchor' },
     ],
+  },
+  {
+    label: 'Help',
+    items: [{ label: 'Contact SCASPA', href: '/support', icon: 'headset' }],
+  },
+  {
+    label: 'Tools',
+    items: [{ label: 'Console', href: '/ops', icon: 'chart' }],
   },
 ];
 

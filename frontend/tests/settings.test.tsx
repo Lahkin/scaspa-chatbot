@@ -262,7 +262,12 @@ describe('the sidebar way out', () => {
     renderWithProviders(<Sidebar {...sidebarProps()} />);
     // Links, so they are middle-clickable, copyable and openable in a new tab.
     expect(screen.getByRole('link', { name: 'Vessels' })).toHaveAttribute('href', '/vessels');
-    expect(screen.getByRole('link', { name: 'Support' })).toHaveAttribute('href', '/support');
+    // "Contact SCASPA", not "Support" — the nav restructure renamed the label
+    // and not the route, which is exactly the pair this assertion checks.
+    expect(screen.getByRole('link', { name: 'Contact SCASPA' })).toHaveAttribute(
+      'href',
+      '/support'
+    );
   });
 
   it('dismisses the drawer on the way out', async () => {

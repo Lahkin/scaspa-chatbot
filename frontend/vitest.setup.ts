@@ -1,8 +1,35 @@
 import '@testing-library/jest-dom/vitest';
 import { afterAll, afterEach, beforeAll } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { server } from './src/mocks/server';
 import { setScenario, setTimeScale } from './src/mocks/scenarios';
+
+/**
+ * `findBy*` waits five seconds, not the one-second default.
+ *
+ * ── WHY THIS IS A CONFIG CHANGE AND NOT A TEST FIX ──────────────────────────
+ *
+ * The suite grew a large number of tests that render a whole route: mount the
+ * router, resolve a lazy chunk, let MSW answer, settle React Query. Each is
+ * comfortably under a second alone. Run 857 of them together on a loaded
+ * machine and a handful drift past it — and it was a *different* handful each
+ * run, which is the signature of a shared budget rather than of any one test
+ * being wrong.
+ *
+ * Raising individual assertions as they flaked would have meant chasing them
+ * one at a time forever, and would have left the number looking like a property
+ * of each test rather than of the runner.
+ *
+ * **This does not make a real failure slow.** A `findBy*` resolves the moment
+ * its element appears, so the timeout is only ever spent on a query that was
+ * going to fail anyway. What it costs is five seconds instead of one on a
+ * genuine break; what it buys is a suite that does not cry wolf.
+ *
+ * It does NOT relax `waitFor` calls with an explicit timeout — those keep
+ * whatever they were given, including the deliberately generous one in
+ * `tests/airport-information.test.tsx` that exists to outlast a retry policy.
+ */
+configure({ asyncUtilTimeout: 5000 });
 
 /**
  * `onUnhandledRequest: 'error'` is deliberate. A test that quietly reaches the
