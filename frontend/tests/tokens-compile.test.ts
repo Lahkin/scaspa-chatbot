@@ -38,6 +38,18 @@ function builtCss(): string | null {
  * ones that fail quietly when a namespace is wrong.
  */
 const TOKEN_UTILITIES = [
+  /*
+   * The Pilot mark's two motions and its wordmark tracking.
+   *
+   * `--animate-*` and `--tracking-*` are both real Tailwind namespaces, so these
+   * should compile — but "should" is what `duration-fast` and `min-h-touch-min`
+   * also did, and neither emitted a byte. The beacon is the thinking indicator;
+   * if `animate-beacon` compiles to nothing, Pilot silently stops showing that
+   * it is working and every test still passes.
+   */
+  'animate-beacon',
+  'animate-ring',
+  'tracking-wordmark',
   // custom @utility declarations
   'tabular',
   'min-h-touch',

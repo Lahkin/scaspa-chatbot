@@ -530,6 +530,11 @@
    * 22px pill with 8px of side padding and the wider tracking pushes a
    * four-word label past the pill. Handoff §5.6.
    */
+  /* The PILOT wordmark, which the approved lockup sets wide. Its own token
+   * rather than an arbitrary value: tests/no-arbitrary-values.test.ts bans
+   * those, and a brand constant is exactly the kind of thing that should be
+   * named once and reused rather than retyped per lockup. */
+  --tracking-wordmark: 0.08em;
   --tracking-eyebrow: 0.06em;
   --tracking-badge: 0.04em;
   --tracking-tight: -0.01em;
@@ -559,6 +564,46 @@
   /* `--transition-duration-*`, NOT `--duration-*`. Tailwind reads durations from
    * the transition-duration namespace; a token named --duration-fast compiles to
    * nothing at all and `duration-fast` in a className silently does nothing. */
+  /* ── The Pilot mark's two motions ─────────────────────────────────────────
+   *
+   * The avatar is the thinking indicator and the listening indicator, so these
+   * are product behaviour rather than decoration. The spec is specific and the
+   * restraint is the point: the beacon pulses, or the ring pulses. The compass
+   * never rotates — a spinning compass reads as a loading spinner, which says
+   * "waiting" where this needs to say "working".
+   *
+   * BOTH KEYFRAME SETS START AND END AT REST. That is load-bearing, not tidy.
+   * The base layer collapses every animation to 0.01ms with one iteration under
+   * `prefers-reduced-motion`, which leaves an element frozen on its FINAL
+   * keyframe — so a pulse written 100% → 50% would leave the beacon permanently
+   * half-lit for exactly the readers who asked for less motion. Ending where it
+   * started means the collapse lands on the resting state and no JS gate is
+   * needed. */
+  --animate-beacon: pilot-beacon 1.6s ease-in-out infinite;
+  --animate-ring: pilot-ring 1.8s ease-in-out infinite;
+
+  @keyframes pilot-beacon {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  @keyframes pilot-ring {
+    0%,
+    100% {
+      opacity: 1;
+      stroke-width: 3.2;
+    }
+    50% {
+      opacity: 0.7;
+      stroke-width: 4.4;
+    }
+  }
+
   --transition-duration-fast: 120ms;
   --transition-duration-base: 200ms;
 

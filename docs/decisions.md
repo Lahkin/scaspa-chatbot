@@ -2842,3 +2842,118 @@ The rest of the Pilot work. This is foundations only: no Pilot mark, no landing
 page, no chat workspace, no terminology change. `--shadow-card` is still `none`
 while the spec asks for soft shadows in the light theme; that arrives with the
 screens that need it, not here.
+
+## 0035 — Two brands on one screen: SCASPA owns the information, Pilot does the talking
+
+**Status:** accepted. Stage 2 of 5 for the Pilot identity.
+**Depends on** 0034 for the aqua and beacon tokens.
+
+### The architecture, because everything else follows from it
+
+There are now two marks in this product and they are never merged:
+
+| | SCASPA | Pilot |
+| --- | --- | --- |
+| what it is | the Authority | the digital guide |
+| what it means | official, institutional, the owner of the facts | the thing that answers |
+| its mark | the supplied seal, used verbatim | drawn geometry |
+| in a transcript | never speaks | fronts every assistant message |
+
+The rule that makes this concrete: **an assistant message is fronted by the
+Pilot avatar, never by the institutional seal.** SCASPA owns the service; Pilot
+is the one talking. `tests/pilot-brand.test.tsx` scans for a component that
+imports both and draws them as one object, which is the hybrid this forbids.
+
+### The mark is a transcription, and the geometry was measured
+
+The approved asset is a raster on a white page. It cannot ship as it stands: at
+28px beside a chat message it turns to mush, on the navy sidebar it arrives
+inside a white box, and no part of it can be animated for the thinking state.
+
+So it was redrawn as SVG — and the proportions were **measured off the asset with
+Pillow**, not eyeballed, because an eyeballed transcription is close at 96px and
+wrong at 28px. Every number in `PilotAvatar.tsx` is a fraction of the source
+image times 96:
+
+```
+ring         outer radius 0.3045, stroke 0.033   ->  r 27.6, width 3.2
+compass tip  0.030 from the edge                 ->  y 2.9
+compass base 0.242, half-width 0.034             ->  y 23.2, ±3.3
+beacon       centre y 0.358, radius 0.043        ->  cy 34.4, r 4.1
+figure       top 0.397, widest 0.212 at y 0.64   ->  38.1, ±10.2, base 66.4
+```
+
+The result was then rasterised locally and looked at, in both themes, before
+being accepted. That is worth recording as a method: a brand mark is the one
+artefact where "the tests pass" proves nothing at all.
+
+### The rays are `brand-200` at 45%, and the first attempt was wrong
+
+The diagonal rays were first drawn as translucent aqua, which is correct on
+white and wrong on navy: a transparent colour over a dark ground darkens
+*towards* that ground, so the rays became muddy teal smudges on the one surface
+where they most need to read as light.
+
+`--color-brand-200` is a strong blue on white and a pale blue on navy, so at 45%
+it lands correctly on both — pale blue over white, silver-blue over navy. Found
+by rendering it, not by reasoning about it.
+
+### One artwork, two themes — and the wordmark proves the point
+
+The geometry is identical in both themes and only the tokens resolve
+differently. The wordmark is the clearest case: the spec asks for a deep-blue
+PILOT on light and a white one on dark, which is exactly what `--color-ink`
+already is (#10264f / #f5f8fc). Reaching for a brand step would have produced a
+bright blue wordmark in the dark theme — not what the approved lockup shows —
+and fixing that would have taken a theme-conditional class.
+
+PILOT is set as **text**, not shipped as an image: it inherits the interface
+font, scales without a second asset, is selectable, is read aloud correctly, and
+its descriptor translates. An image would have needed three of them.
+
+### Motion: one thing moves, and the compass is not it
+
+The avatar is the thinking indicator and the listening indicator, so this is
+product behaviour rather than decoration. The beacon pulses (1.6s) or the ring
+pulses (1.8s). **The compass never rotates** — a spinning compass reads as a
+loading spinner, which says "waiting" where this has to say "working". Asserted,
+not just written down.
+
+Both keyframe sets start AND end at rest. That is load-bearing: the base layer
+collapses every animation to 0.01ms with one iteration under
+`prefers-reduced-motion`, which freezes an element on its FINAL keyframe — so a
+pulse written 100% → 50% would leave the beacon permanently half-lit for exactly
+the readers who asked for less motion.
+
+### States add a badge; they never swap the mark
+
+`idle`, `thinking`, `listening`, `verified`, `attention`. The spec is explicit
+that there is no warning robot and no second avatar, so the two badge states draw
+a badge *beside* the mark and the identity holds. The test counts paths to prove
+it.
+
+### The favicon duplicates the geometry, and is checked
+
+`public/pilot-mark.svg` has to repeat the paths: a favicon is fetched as a
+standalone document with no stylesheet behind it, so it can neither read a token
+nor reuse a React component. Duplicated geometry with nothing watching it is how
+a product ends up with a tab icon that is subtly a different logo from the one in
+its own header — nobody looks at a 16px square twice.
+
+So the test parses both and asserts the path sets are **equal, both directions**,
+against the RESTING mark: the favicon must not lose a ray, and must not gain a
+flourish. It carries its own `prefers-color-scheme` block, because browser chrome
+has a light and a dark of its own that has nothing to do with the app's
+`data-theme`, and a navy compass on a dark tab strip is an empty tab.
+
+One SVG rather than a 16/32/48/192/512 raster set — it scales to whatever is
+asked for at a fraction of the bytes, on a product that self-hosts its font to
+save a single DNS round trip.
+
+### What this does not cover
+
+The mark is built and shown in the gallery; almost nothing uses it yet. Putting
+it into the sidebar, in front of every assistant message, and into the composer's
+generating state is stage 4. The browser title and PWA name (`Pilot | SCASPA
+Digital Guide`) are terminology and arrive in stage 5 with the rest of the
+renaming.

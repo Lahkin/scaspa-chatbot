@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- The Pilot mark, alone and without the wordmark, as the spec asks.
+
+         One SVG rather than a 16/32/48/192/512 raster set: it scales to whatever
+         a browser asks for and costs a fraction of the bytes, which matters on a
+         product that self-hosts its font to save a single DNS round trip. The
+         file carries its own prefers-color-scheme block, because browser chrome
+         has a light and a dark of its own that has nothing to do with the app's
+         data-theme — and a navy compass on a dark tab strip is an empty tab. -->
+    <link rel="icon" type="image/svg+xml" href="/pilot-mark.svg" />
     <meta
       name="description"
       content="Ask about ferries, cruise arrivals, cargo and Robert L. Bradshaw International Airport in St. Kitts. Answers come from verified SCASPA information and cite their source."

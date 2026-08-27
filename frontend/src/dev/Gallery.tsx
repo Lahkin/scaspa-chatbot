@@ -65,6 +65,8 @@ import {
 import { config as appConfig } from '@/lib/config';
 import { ScaspaMark } from '@/components/shells/ScaspaMark';
 import { LogoLockup } from '@/components/brand/LogoLockup';
+import { PilotAvatar } from '@/components/brand/PilotAvatar';
+import { PilotBrand } from '@/components/brand/PilotBrand';
 import { Sidebar } from '@/components/shells/Sidebar';
 import { LanguagePicker } from '@/components/settings/LanguagePicker';
 import { ThemePicker } from '@/components/settings/ThemePicker';
@@ -998,6 +1000,63 @@ function NavigationSection() {
 
   return (
     <>
+      <Section
+        title="PilotAvatar — the product mark"
+        note="Two brands are on screen at once and they are never merged. SCASPA is the Authority and owns the information; Pilot is the digital guide and is the one that speaks, so an assistant message is fronted by this and never by the seal. The geometry was measured off the approved asset rather than eyeballed — ring radius 0.3045 of the box, compass tip at 0.030, beacon at 0.358 with radius 0.043 — because an eyeballed transcription is close at 96px and wrong at 28px. One artwork in both themes: only the tokens resolve differently."
+      >
+        <div className="flex flex-wrap items-end gap-6">
+          <Figure label="idle — 28px, beside a message">
+            <PilotAvatar size={28} />
+          </Figure>
+          <Figure label="idle — 44px, the sidebar">
+            <PilotAvatar size={44} />
+          </Figure>
+          <Figure label="idle — 84px, the landing hero">
+            <PilotAvatar size={84} />
+          </Figure>
+          <Figure label="thinking — the beacon pulses, 1.6s">
+            <PilotAvatar size={44} state="thinking" />
+          </Figure>
+          <Figure label="listening — the ring pulses, 1.8s">
+            <PilotAvatar size={44} state="listening" />
+          </Figure>
+          <Figure label="verified — a badge, not a different mark">
+            <PilotAvatar size={44} state="verified" />
+          </Figure>
+          <Figure label="attention — likewise">
+            <PilotAvatar size={44} state="attention" />
+          </Figure>
+        </div>
+        <p className="mt-2 text-caption text-ink-subtle">
+          The compass never rotates. A spinning compass reads as a loading spinner, which says
+          waiting where this has to say working. Both keyframe sets start AND end at rest, so the
+          reduced-motion collapse in tokens.css lands on the resting state rather than freezing the
+          beacon half-lit.
+        </p>
+      </Section>
+
+      <Section
+        title="PilotBrand — the lockup"
+        note="Mark, wordmark, descriptor. PILOT is set as text rather than shipped as an image so it inherits the interface font, scales without a second asset, is selectable and is read aloud correctly — and the descriptor translates, which an image would have needed three of. The wordmark takes text-ink, which is a deep navy on the light ground and near-white on the dark one, exactly as the two approved lockups show."
+      >
+        <div className="flex flex-wrap items-end gap-6">
+          <Figure label="sm — the chat sidebar">
+            <PilotBrand />
+          </Figure>
+          <Figure label="md — a page header">
+            <PilotBrand size="md" />
+          </Figure>
+          <Figure label="markOnly — a constrained mobile header">
+            <PilotBrand markOnly />
+          </Figure>
+        </div>
+        <div className="mt-4">
+          <Figure label="lg — the landing hero">
+            <PilotBrand size="lg" />
+          </Figure>
+        </div>
+      </Section>
+
       <Section
         title="LogoLockup"
         note="The seal is dark blue line art on transparency and always sits on a white circular plate — 32 inside 40 in the sidebar, 24 inside 32 in the widget, the 404 and the mobile header. Never recoloured, outlined, cropped or knocked out to white, and never unplated at any size."

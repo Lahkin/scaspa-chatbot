@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <!--
+    The Pilot mark, as the browser-tab icon.
+
+    THE GEOMETRY HERE MUST MATCH src/components/brand/PilotAvatar.tsx.
+    It is duplicated because a favicon is fetched as a standalone document: it
+    has no stylesheet behind it, so it cannot read a single token, and the app's
+    component cannot be reused. tests/pilot-brand.test.tsx compares the two path
+    definitions and fails if they drift, which is the only thing stopping this
+    file from quietly becoming a different logo.
+
+    One file, no PNG set. An SVG favicon scales to every size a browser asks for
+    and is a fraction of the bytes of 16/32/48/192/512 rasters — which matters on
+    a product that self-hosts its font to save one DNS round trip.
+
+    The colours are literal, and the dark variant is a media query rather than a
+    second file: browser chrome has its own light and dark, independent of the
+    app's data-theme, and a navy compass on a dark tab strip disappears.
+  -->
+  <style>
+    .compass-deep { fill: #052c66 }
+    .compass-light { fill: #0868e6 }
+    .ring { stroke: #08aeb7 }
+    .core { fill: #08aeb7 }
+    .cloak-top { stop-color: #06367b }
+    .cloak-bottom { stop-color: #08aeb7 }
+    .rays { fill: #0868e6 }
+    .beacon { fill: #e8820c }
+
+    @media (prefers-color-scheme: dark) {
+      .compass-deep { fill: #0e4e9e }
+      .compass-light { fill: #3d93f0 }
+      .ring { stroke: #0cc0c2 }
+      .core { fill: #0cc0c2 }
+      .cloak-top { stop-color: #1565d8 }
+      .cloak-bottom { stop-color: #0cc0c2 }
+      .rays { fill: #8fc2f7 }
+      .beacon { fill: #f5a13a }
+    }
+  </style>
+
+  <defs>
+    <linearGradient id="pilot-figure" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" class="cloak-top" />
+      <stop offset="100%" class="cloak-bottom" />
+    </linearGradient>
+  </defs>
+
+  <g class="rays" opacity="0.45">
+    <path d="M48 5 L50.4 44 L48 48 L45.6 44 Z" transform="rotate(45 48 48)" />
+    <path d="M48 5 L50.4 44 L48 48 L45.6 44 Z" transform="rotate(135 48 48)" />
+    <path d="M48 5 L50.4 44 L48 48 L45.6 44 Z" transform="rotate(225 48 48)" />
+    <path d="M48 5 L50.4 44 L48 48 L45.6 44 Z" transform="rotate(315 48 48)" />
+  </g>
+
+  <circle cx="48" cy="48" r="27.6" fill="none" class="ring" stroke-width="3.2" />
+
+  <g transform="rotate(0 48 48)">
+    <path d="M48 2.9 L44.7 23.2 L48 27.5 Z" class="compass-deep" />
+    <path d="M48 2.9 L51.3 23.2 L48 27.5 Z" class="compass-light" />
+  </g>
+  <g transform="rotate(90 48 48)">
+    <path d="M48 2.9 L44.7 23.2 L48 27.5 Z" class="compass-deep" />
+    <path d="M48 2.9 L51.3 23.2 L48 27.5 Z" class="compass-light" />
+  </g>
+  <g transform="rotate(180 48 48)">
+    <path d="M48 2.9 L44.7 23.2 L48 27.5 Z" class="compass-deep" />
+    <path d="M48 2.9 L51.3 23.2 L48 27.5 Z" class="compass-light" />
+  </g>
+  <g transform="rotate(270 48 48)">
+    <path d="M48 2.9 L44.7 23.2 L48 27.5 Z" class="compass-deep" />
+    <path d="M48 2.9 L51.3 23.2 L48 27.5 Z" class="compass-light" />
+  </g>
+
+  <path
+    d="M48 38.1 C43.2 38.1 40.2 44.5 38.6 57 L37.8 63.5 L48 66.4 L58.2 63.5 L57.4 57 C55.8 44.5 52.8 38.1 48 38.1 Z"
+    fill="url(#pilot-figure)"
+  />
+  <path d="M48 44 L55.5 63.5 L48 66.4 L40.5 63.5 Z" class="core" />
+  <circle cx="48" cy="34.4" r="4.1" class="beacon" />
+</svg>
