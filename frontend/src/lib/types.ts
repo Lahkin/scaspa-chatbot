@@ -304,6 +304,13 @@ export interface VoiceStatus {
   checked: boolean;
   /** For an operator, in the health panel. Never shown to a traveller. */
   detail: string;
+  /**
+   * Which provider answered — `openai` or `elevenlabs` — with `auto` resolved.
+   *
+   * The first thing to establish when voice misbehaves, and impossible to infer
+   * from the client, which cannot see the keys.
+   */
+  provider: string;
 }
 
 // ── Errors ───────────────────────────────────────────────────────────────────

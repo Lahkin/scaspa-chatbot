@@ -174,6 +174,9 @@ tracked. In production, set these in the platform dashboard, never in the repo.
 | `OPENAI_REASONING_EFFORT` | `none` | Compatibility, not preference: OpenAI refuses **function tools with reasoning** on `/v1/chat/completions`, and this assistant is an agent. Use `omit` for a model that rejects the parameter |
 | `RATE_LIMIT_PER_MINUTE` | `15` | The chat budget. Voice gets a third of it; reading vessels/flights/tariffs gets four times it |
 | `OPS_DATA_SOURCE` | `none` | `none` serves an honest empty state; `fixture` serves obviously-fake sample data for development and is **refused at boot when `ENV=prod`** |
+| `VOICE_PROVIDER` | `auto` | `auto` uses ElevenLabs when `ELEVENLABS_API_KEY` is set, else OpenAI. `/api/health` reports which was resolved |
+| `ELEVENLABS_API_KEY` | — | **A secret.** Put it in `backend/.env`, never in `.env.example` |
+| `ELEVENLABS_VOICE_ID` | — | Required for speaking, and deliberately without a default — it is the voice every caller hears. List the account's voices with `uv run python scripts/voice_smoke.py --voices` |
 | `WATCHTOWER_ENABLED` | `true` | Whether the server refreshes the published cruise schedule on its own. Turn it off **only** if cron is running `scripts/watchtower.py` instead — with neither, the schedule silently stops updating while the page keeps printing a date |
 | `PRICE_*_PER_MTOK` | `0.0` | Set from current pricing so the spend estimate means something |
 | `DAILY_SPEND_WARN_USD` | `5.0` | Logs a warning past this |

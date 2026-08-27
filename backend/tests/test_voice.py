@@ -29,6 +29,49 @@ from app.voice.tts import sanitise_for_speech, synthesise, text_digest
 # --------------------------------------------------------- THE PHONE NUMBER
 
 
+def test_local_numbers_beside_a_full_one_are_also_spoken_as_digits() -> None:
+    """── THE BUG THIS PINS ────────────────────────────────────────────────────
+
+    `kb-005` — the answer people ring about — reads:
+
+        Call SCASPA at (869) 465-8121, 465-8122, 465-8123, or 465-8124.
+
+    Only the first matched the phone pattern, because the rest are seven digits
+    with the area code left implicit. The end-to-end smoke check produced
+
+        8 6 9, 4 6 5, 8 1 2 1, 465-8122, 465-8123, or 465-8124
+
+    so three of the four lines would have been read aloud as "four hundred
+    sixty-five dash eight thousand one hundred twenty-two". That is precisely
+    the failure this whole module exists to prevent, on the most-spoken answer
+    in the product — and it was found by reading the sanitised text, which is
+    what that step of `scripts/voice_smoke.py` is for.
+    """
+    spoken = sanitise_for_speech("Call SCASPA at (869) 465-8121, 465-8122, 465-8123.")
+
+    for leftover in ("465-8121", "465-8122", "465-8123"):
+        assert leftover not in spoken, f"{leftover} was left as a quantity"
+    assert "4 6 5, 8 1 2 2" in spoken
+    assert "4 6 5, 8 1 2 3" in spoken
+
+
+def test_a_number_range_is_not_mistaken_for_a_telephone_number() -> None:
+    r"""The other half, and the reason the local pattern is context-gated.
+
+    `\d{3}-\d{4}` matches "berths 100-2000" perfectly well. Expanding that into
+    digits is a small degradation where missing a phone number is a real
+    failure, so the aggressive reading applies only to text that already
+    contains a full telephone number.
+    """
+    assert sanitise_for_speech("Berths 100-2000 are on the west side.") == (
+        "Berths 100-2000 are on the west side."
+    )
+
+    # And a date, which is the same shape as nothing in particular but is the
+    # commonest four-digit group in a verified answer.
+    assert "2026-07-31" in sanitise_for_speech("This was verified on 2026-07-31.")
+
+
 def test_phone_number_is_spoken_as_digits() -> None:
     """`869-465-8121` as a number is "eight hundred sixty-nine million…".
 

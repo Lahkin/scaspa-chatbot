@@ -414,7 +414,13 @@ export const HEALTH: HealthResponse = {
    * what the demo runs on. `tests/voice.test.tsx` overrides it to the
    * unavailable case, which is what this project's real key reports.
    */
-  voice: { stt: true, tts: true, checked: true, detail: 'speech models are available' },
+  voice: {
+    stt: true,
+    tts: true,
+    checked: true,
+    detail: 'speech models are available',
+    provider: 'elevenlabs',
+  },
 };
 
 /**

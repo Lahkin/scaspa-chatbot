@@ -73,6 +73,7 @@ const UNKNOWN: VoiceStatus = {
   tts: true,
   checked: false,
   detail: 'not reported yet',
+  provider: 'openai',
 };
 
 let status: VoiceStatus = UNKNOWN;

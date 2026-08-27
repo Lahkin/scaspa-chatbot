@@ -747,6 +747,7 @@ const HEALTHY: HealthResponse = {
     tts: false,
     checked: true,
     detail: 'this OpenAI project has no access to the configured speech models',
+    provider: 'openai',
   },
   index: {
     ready: false,

@@ -45,6 +45,7 @@ def _voice(settings: Settings) -> VoiceStatus:
         tts=availability.tts,
         checked=availability.checked,
         detail=availability.detail,
+        provider=availability.provider,
     )
 
 

@@ -627,10 +627,11 @@ Unknown values are `null`, never `0` — a client must not read "never built" as
     "message": null
   },
   "voice": {
-    "stt": false,
-    "tts": false,
+    "stt": true,
+    "tts": true,
     "checked": true,
-    "detail": "this OpenAI project has no access to gpt-transcribe, gpt-4o-mini-tts — an account entitlement, not a code fault"
+    "detail": "ElevenLabs is reachable; speaking as 'Marin'",
+    "provider": "elevenlabs"
   }
 }
 ```
@@ -649,9 +650,27 @@ belongs to whoever holds the API key. On a project without one, the microphone
 and the speak-aloud button were rendered for every user and failed on every
 press.
 
-Determined by listing models once an hour and looking for the two configured
-ids — free, fast, and definitive for the failure it catches, which is a `403`
-saying the project has no access to the model.
+**`provider` is `openai` or `elevenlabs`**, with the `VOICE_PROVIDER=auto`
+setting already resolved — `auto` picks ElevenLabs when `ELEVENLABS_API_KEY` is
+set. It is reported because the first question when voice misbehaves is which
+provider a deployment is using, and the client cannot infer it: it never sees a
+key.
+
+How availability is determined depends on which one answered, because they fail
+differently:
+
+| Provider | Probe | What it catches |
+| --- | --- | --- |
+| `openai` | list models, once an hour | The entitlement `403` — an entitled model appears in the list |
+| `elevenlabs` | list voices, once an hour | Reachability, **and** whether `ELEVENLABS_VOICE_ID` names a voice this account actually has |
+
+**ElevenLabs has a half-available state that OpenAI does not.** A reachable
+account with no voice chosen transcribes perfectly and cannot speak, so `stt` is
+true and `tts` is false. `ELEVENLABS_VOICE_ID` has no default on purpose:
+choosing one in source would pick an accent, a gender and a register for a
+Caribbean port authority on the strength of whatever was first in a list, and it
+is the voice every caller hears. `detail` then names the command that lists the
+options.
 
 **`checked: false` means carry on, not stop.** It is the backend saying it could
 not find out — no key, no network, a transient upstream — and `stt`/`tts` beside

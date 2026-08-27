@@ -71,6 +71,7 @@ describe('a control that cannot work is not offered', () => {
     tts: false,
     checked: true,
     detail: 'this OpenAI project has no access to the configured speech models',
+    provider: 'openai',
   };
 
   it('marks the microphone off when the backend says voice cannot work', () => {
@@ -97,7 +98,13 @@ describe('a control that cannot work is not offered', () => {
      * it works, and do it silently: the control simply stops being there, and
      * nobody files a bug about a button they never saw.
      */
-    publishVoiceStatus({ stt: false, tts: false, checked: false, detail: 'could not list models' });
+    publishVoiceStatus({
+      stt: false,
+      tts: false,
+      checked: false,
+      detail: 'could not reach the provider',
+      provider: 'elevenlabs',
+    });
     render(<SpeakButton messageId="m1" text="The ferry departs at noon." />);
 
     expect(screen.queryByRole('button', { name: 'Reading aloud is switched off' })).toBeNull();
