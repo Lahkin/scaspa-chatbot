@@ -57,6 +57,19 @@ export const en = {
     onThisPage: 'On this page',
     backToAssistant: 'Assistant',
 
+    appearance: {
+      heading: 'Appearance',
+      lead: 'Whether this app is light or dark. It does not change the answers.',
+      legend: 'Theme',
+      options: {
+        light: { label: 'Light', hint: 'Bright background' },
+        dark: { label: 'Dark', hint: 'Dark background' },
+        system: { label: 'System', hint: 'Follow my device' },
+      },
+      saved: 'Theme saved on this device.',
+      storedNote: 'Stored on this device only. Nothing about your choice is sent to SCASPA.',
+    },
+
     language: {
       heading: 'Language',
       lead: "The language of this app's buttons, menus and labels.",

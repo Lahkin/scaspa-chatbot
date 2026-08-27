@@ -1,20 +1,50 @@
 /* ═══════════════════════════════════════════════════════════════════════════
  *
- *   SCASPA ASSISTANT — DESIGN TOKENS
+ *   PILOT — SCASPA DIGITAL GUIDE — DESIGN TOKENS
  *
- *   Imported from the Claude Design project "SCASPA Assistant Component Spec",
- *   board A (Foundations, 00–00d). This file replaces the interim light-theme
- *   placeholder wholesale, which is what that file said would happen to it.
+ *   Foundations imported from the Claude Design project "SCASPA Assistant
+ *   Component Spec" (board A, 00–00d), then re-tokenised for the approved Pilot
+ *   identity. Two changes, and they are the whole story of this file:
  *
- *   THE PRODUCT IS DARK. There is no light theme and no theme switch. Depth
- *   comes from surface lightness only — canvas, surface-1, surface-2,
- *   surface-3 — and there are no drop shadows and no gradients anywhere inside
- *   the frame. A gradient in the spec appears exactly once, on the cover
- *   artwork, and the cover is not a product surface.
+ *   THE PRODUCT HAS TWO THEMES, AND THEY ARE ONE DESIGN. The previous version
+ *   of this header said "THE PRODUCT IS DARK. There is no light theme and no
+ *   theme switch." That is no longer true, and it was not softened — it was
+ *   replaced, because the approved mock-ups are a light design and a dark
+ *   design of the same product.
+ *
+ *   The light values are the base, declared in @theme. The dark values are one
+ *   block under `:root[data-theme='dark']`, below. Both lists are complete and
+ *   both are checked: tests/theme-parity.test.ts asserts they declare exactly
+ *   the same token names, so a colour cannot be given one theme and forgotten
+ *   in the other.
+ *
+ *   `light-dark()` was written first and replaced — see the note above the
+ *   dark block. It worked; it was traded for browser reach and a readable
+ *   inspector.
+ *
+ *   Default follows the operating system, resolved onto <html> before first
+ *   paint by an inline script in index.html, and overridable in /settings.
+ *
+ *   THE BRAND IS NAVY AND AQUA, NOT INDIGO. The old ramp ran #383a97 → #7a7cd6,
+ *   which reads as purple, and the Pilot spec bans purple as the dominant brand
+ *   colour outright. The ramp is now SCASPA navy through action blue, with aqua
+ *   and one amber beacon carried in from the Pilot mark.
+ *
+ *   Roles, not lightness. In a light theme a readable brand text is DARK and in
+ *   a dark theme it is LIGHT, so `--color-brand-300` is not "the 300 step" in
+ *   both — it is "readable brand text" in both, and its two values sit either
+ *   side of the ground they each land on. The surface ramp inverts the same way
+ *   and for the same reason: `surface-sunken` is a step AWAY from the card in
+ *   both themes, which is up in one and down in the other.
+ *
+ *   Depth comes from surface lightness. Light gains soft shadows; dark keeps
+ *   border contrast and no drop shadows, exactly as before.
  *
  *   Every ratio quoted below was MEASURED against the surface it names, not
- *   claimed. tests/contrast.test.ts recomputes all of them from this file in
- *   about ninety seconds and fails on a regression.
+ *   claimed, IN BOTH THEMES. tests/contrast.test.ts reads the @theme block and
+ *   the dark block separately and recomputes every assertion twice — once per
+ *   theme — so a token that passes in dark and fails in light is a test
+ *   failure, not a thing somebody notices during a demonstration.
  *
  *   Tailwind v4 is CSS-first: there is no tailwind.config.js. A token declared
  *   in @theme becomes BOTH a CSS variable and a utility class, so
@@ -76,11 +106,11 @@
    *   border     a 1px divider — DECORATIVE, and makes no contrast claim
    *              (1.22:1 on surface-2, exactly like the light theme's before it)
    */
-  --color-canvas: #0a0b14;
-  --color-surface-1: #10121f;
-  --color-surface-2: #171a2b;
-  --color-surface-3: #1e2137;
-  --color-border: #262a42;
+  --color-canvas: #fbfcfe;
+  --color-surface-1: #f2f6fb;
+  --color-surface-2: #ffffff;
+  --color-surface-3: #f4f8fc;
+  --color-border: #d9e4ef;
 
   /* ══ Brand — sampled from the seal ════════════════════════════════════════
    *
@@ -96,13 +126,13 @@
    *   200  #A5A7E6   8.66:1 canvas  links, focus ring, the readable accent
    *   100  #E5E5F7  11.39:1 on 700  text on a brand fill, hover link
    */
-  --color-brand-700: #22245e;
-  --color-brand-600: #2c2e7a;
-  --color-brand-500: #383a97;
-  --color-brand-400: #5457be;
-  --color-brand-300: #7a7cd6;
-  --color-brand-200: #a5a7e6;
-  --color-brand-100: #e5e5f7;
+  --color-brand-700: #04224e;
+  --color-brand-600: #052c66;
+  --color-brand-500: #06367b;
+  --color-brand-400: #0868e6;
+  --color-brand-300: #0a56c0;
+  --color-brand-200: #0868e6;
+  --color-brand-100: #eaf2fe;
 
   /* ══ Text — measured on surface-2, the card ground ════════════════════════
    *
@@ -111,9 +141,9 @@
    * read is text-1 or text-2. The contrast test asserts that it fails AA, on
    * purpose, so that reaching for it as body copy is caught rather than shipped.
    */
-  --color-text-1: #f2f3f8; /* 15.55:1 on surface-2 — headings, body, figures */
-  --color-text-2: #a3a8c0; /*  7.32:1 — labels, metadata, secondary prose    */
-  --color-text-3: #6e7490; /*  3.74:1 — placeholder and disabled ONLY        */
+  --color-text-1: #10264f; /* 14.87:1 on surface-2 — headings, body, figures */
+  --color-text-2: #5d6b80; /* 5.41:1 — labels, metadata, secondary prose */
+  --color-text-3: #7e8b9c; /* 3.47:1 — placeholder and disabled ONLY */
 
   /* ══ Status ══════════════════════════════════════════════════════════════
    *
@@ -132,12 +162,12 @@
    *    same value as text-3. An "unknown" label sits at text-2 so it stays
    *    readable while still reading as muted.
    */
-  --color-positive: #3ba776; /* 5.72:1 on surface-2 — berthed, on time, settled */
-  --color-caution: #d9a23b; /* 7.53:1 — delayed, estimated, stale, sample data  */
-  --color-critical: #d9564b; /* 4.42:1 — DOT/BORDER/FILL ONLY. See above        */
-  --color-critical-text: #e4736a; /* 5.71:1 — the label tint. This one is text  */
-  --color-neutral-status: #6e7490; /* dot only — the label lifts to text-2      */
-  --color-live: #3b9bd9; /* 5.64:1 — a live data source                         */
+  --color-positive: #0f7a4d; /* 5.37:1 on surface-2 — berthed, on time, settled */
+  --color-caution: #8a6100; /* 5.54:1 — delayed, estimated, stale, sample data */
+  --color-critical: #c93a3a; /* FILL/DOT/BORDER. Ink-on-bright 4.93:1. See above */
+  --color-critical-text: #b32f2f; /* 6.24:1 — the label tint. This one is text */
+  --color-neutral-status: #7e8b9c; /* dot only — the label lifts to text-2      */
+  --color-live: #16689c; /* 6.01:1 — a live data source */
 
   /* The "no feed" provenance badge's fill.
    *
@@ -157,7 +187,7 @@
    *
    * The fill moved. The ink, the shape and the family did not.
    */
-  --color-absent: #7e84a0; /* 5.32:1 with ink-inverse — the "no feed" fill */
+  --color-absent: #667487; /* 4.76:1 with ink-inverse — the "no feed" fill */
 
   /* ══ Tinted surfaces ══════════════════════════════════════════════════════
    *
@@ -166,10 +196,10 @@
    * ratio cannot be computed against a translucent colour and an alpha fill is
    * therefore a figure nobody has measured. Each hue clears AA on its own tint.
    */
-  --color-positive-tint: #1b2b34; /* positive on it: 4.84:1      */
-  --color-caution-tint: #2e2a2d; /* caution on it:  6.18:1       */
-  --color-critical-tint: #2e212f; /* critical-text on it: 5.06:1 */
-  --color-live-tint: #1b2940; /* live on it: 4.78:1              */
+  --color-positive-tint: #e8f6ef; /* positive on it: 4.82:1 */
+  --color-caution-tint: #fdf4e3; /* caution on it:  5.07:1 */
+  --color-critical-tint: #fceded; /* critical-text on it: 5.49:1 */
+  --color-live-tint: #e8f2fb; /* live on it: 5.30:1 */
 
   /* ── The edges, and they were missing ────────────────────────────────────
    *
@@ -184,18 +214,54 @@
    * border is a figure nobody has measured. Each clears the 3:1 non-text bar
    * that WCAG 1.4.11 asks of the boundary identifying a component.
    */
-  --color-positive-edge: #27594d; /* positive 45% */
-  --color-caution-edge: #6e5732; /* caution 45%   */
-  --color-critical-edge: #6e3539; /* critical 45%  */
-  --color-live-edge: #275479; /* live 45%          */
+  --color-positive-edge: #a8d8c2; /* positive 45% */
+  --color-caution-edge: #e5ce9a; /* caution 45%   */
+  --color-critical-edge: #efb4b4; /* critical 45%  */
+  --color-live-edge: #a9cde8; /* live 45%          */
 
   /* Notice panels sit one step quieter than a pill — 30% for caution and live,
    * 35% for critical, which is where the handoff puts each of them. */
-  --color-caution-notice-edge: #514330;
-  --color-critical-notice-edge: #5b2f36;
-  --color-live-notice-edge: #22415f;
+  --color-caution-notice-edge: #eeddb8;
+  --color-critical-notice-edge: #f3cccc;
+  --color-live-notice-edge: #c3ddf0;
   /* brand-500 at 32–35%, for the user's own message bubble and a citation chip. */
-  --color-brand-tint: #232551; /* text-1 13.03:1, brand-200 6.37:1 */
+  --color-brand-tint: #eff5fe; /* text-1 13.57:1, brand-200 4.64:1 */
+
+  /* ── Pilot aqua and the beacon ────────────────────────────────────────────
+   * The Pilot mark is navy + aqua + one amber beacon point, and none of those
+   * had a token: the product had no product brand, only the institutional one.
+   *
+   * Three aquas, because one cannot do three jobs. The spec's #08aeb7 is
+   * gorgeous and reads 2.71:1 on white — fine as a FILL under dark ink, not
+   * fine as text and not fine as a boundary. Rather than dim the brand, each
+   * job gets the value that passes for it:
+   *
+   *   --color-aqua         the fill. ALL CITED, the ring in the mark. Dark ink
+   *                        goes on it: 5.49:1 light, 8.25:1 dark.
+   *   --color-aqua-strong  a boundary or an icon carrying meaning. 3.41:1.
+   *   --color-aqua-text    "SCASPA Digital Guide" and any aqua word. 5.85:1.
+   *
+   * The mock-up sets white on --color-aqua at 2.71:1. That pairing is not in
+   * this file because it does not pass; the badge takes dark ink instead and
+   * keeps the hue. docs/decisions.md 0034. */
+  --color-aqua: #08aeb7;
+  --color-aqua-strong: #0a9aa2;
+  --color-aqua-text: #067076;
+
+  /* The ink that goes ON aqua.
+   *
+   * Not --color-ink-on-bright, which is the canvas and therefore near-WHITE in
+   * the light theme. Aqua is a bright fill in BOTH themes — that is the whole
+   * point of the hue — so the ink on it is dark in both, and near-white on aqua
+   * measures 2.64:1. This is the token the ALL CITED badge takes.
+   *
+   * 5.49:1 light, 8.25:1 dark. */
+  --color-ink-on-aqua: #10264f;
+
+  /* The single warm point in an otherwise cold palette. It is the beacon in
+   * the Pilot mark and the thing that pulses while Pilot is thinking. It is
+   * never a text colour and never a status. */
+  --color-beacon: #e8820c;
 
   /* ══ Semantic aliases ════════════════════════════════════════════════════
    *
@@ -308,7 +374,18 @@
    * The rule that replaced it is the critical one above: --color-critical is
    * the value that may not be a word, and --color-critical-text is its label.
    */
-  --color-amber-board: var(--color-caution);
+  /* The amber ON the departure board, which is a NAVY strip in both themes.
+   *
+   * No longer an alias of --color-caution, and this is the clearest example in
+   * the file of why a token's name has to describe its job. The status amber is
+   * a word on the page: on the light ground it has to be a DARK amber to clear
+   * AA on white, and #8a6100 on navy is 2.82:1. This one is a figure on a dark
+   * strip in BOTH themes, so it is bright in both — 6.83:1 light, 6.57:1 dark.
+   *
+   * Declared once, deliberately: the strip does not change colour with the
+   * theme, so neither does the figure on it. tests/theme-parity.test.ts lists
+   * it as theme-independent for exactly that reason. */
+  --color-amber-board: #d9a23b;
   --color-amber-text: var(--color-caution);
   --color-success: var(--color-positive);
   /* Danger splits the same way critical does, and for the same reason: the
@@ -541,15 +618,106 @@
   --size-nav-row: 34px;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ *
+ *   THE DARK THEME
+ *
+ *   Every primitive above, once more. The duplication is the point of the note
+ *   below, so it is worth saying plainly why it is here.
+ *
+ *   `light-dark(light, dark)` was written first — one declaration carrying both
+ *   values, no duplication, and a token physically unable to exist in one theme
+ *   and not the other. It was replaced with this, and NOT because it failed:
+ *   it was measured working. Under `data-theme='light'` the aliased chain
+ *   resolved correctly all the way down to `--color-ink-muted: #5d6b80`, in the
+ *   dev server and in the built output alike.
+ *
+ *   It went for two duller reasons. It is not supported everywhere this app is
+ *   read, so the build downlevels it into paired `var(--lightningcss-light, …)`
+ *   space-toggles — which work, and which turn every colour in the inspector
+ *   into something nobody can read while debugging a demo. And the parity it
+ *   guaranteed for free can be had for the price of one test, which is the form
+ *   this repository already prefers: checked, not trusted.
+ *
+ *   So: two blocks, plain custom properties, universally understood, and
+ *   tests/theme-parity.test.ts standing where the syntax used to.
+ *
+ *   THE DUPLICATION IS CHECKED, NOT TRUSTED. tests/theme-parity.test.ts asserts
+ *   that this block declares exactly the same token names as @theme — no more,
+ *   none missing. A token added to one theme and forgotten in the other is a
+ *   failing test rather than a colour that silently stays wrong in a demo.
+ *
+ *   The attribute is always present: an inline script in index.html resolves
+ *   the stored preference (or the OS) onto <html> before first paint, so there
+ *   is no flash and no unstyled first frame. There is no media query here
+ *   because that script has already asked the media query.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces. Depth by lightness, the ramp running the other way. */
+  --color-canvas: #031426;
+  --color-surface-1: #06182b;
+  --color-surface-2: #0a1f35;
+  --color-surface-3: #0d243d;
+  --color-border: #203b56;
+  /* Brand, by role. 500 is still the fill, 300 is still readable brand text. */
+  --color-brand-700: #0a2748;
+  --color-brand-600: #0e4e9e;
+  --color-brand-500: #1565d8;
+  --color-brand-400: #3d93f0;
+  --color-brand-300: #5ca5f0;
+  --color-brand-200: #8fc2f7;
+  --color-brand-100: #12314f;
+  --color-brand-tint: #0c2340;
+  /* Pilot's own hues. */
+  --color-aqua: #0cc0c2;
+  --color-aqua-strong: #0cc0c2;
+  --color-aqua-text: #3bd6d8;
+  --color-ink-on-aqua: #031426;
+  --color-beacon: #f5a13a;
+  /* Ink. */
+  --color-text-1: #f5f8fc;
+  --color-text-2: #aebac9;
+  --color-text-3: #6e7e93;
+  /* Status. Bright here, because the ground is dark. */
+  --color-positive: #3ba776;
+  --color-caution: #d9a23b;
+  --color-critical: #d9564b;
+  --color-critical-text: #e4736a;
+  --color-neutral-status: #6e7490;
+  --color-live: #3b9bd9;
+  --color-absent: #7e84a0;
+  /* Tints. */
+  --color-positive-tint: #1b2b34;
+  --color-caution-tint: #2e2a2d;
+  --color-critical-tint: #2e212f;
+  --color-live-tint: #1b2940;
+  /* Edges. */
+  --color-positive-edge: #27594d;
+  --color-caution-edge: #6e5732;
+  --color-critical-edge: #6e3539;
+  --color-live-edge: #275479;
+  --color-caution-notice-edge: #514330;
+  --color-critical-notice-edge: #5b2f36;
+  --color-live-notice-edge: #22415f;
+}
+
 @layer base {
   html {
     font-family: var(--font-sans);
     /* Never let a mobile browser silently inflate text and break a layout. */
     -webkit-text-size-adjust: 100%;
     /* The form controls, the scrollbars and the UA's own focus styling all read
-     * this. Declaring it is the difference between a dark app and a dark app
-     * with a white scrollbar down the side of it. */
-    color-scheme: dark;
+     * this — the difference between a themed app and a themed app with the
+     * wrong-coloured scrollbar down the side of it.
+     *
+     * Light here, because the light palette is the base. The dark block sets
+     * it back to `dark`, so the scrollbars and the date pickers follow the
+     * theme without anything else being told about it. */
+    color-scheme: light;
   }
 
   body {
@@ -636,9 +804,16 @@
   @media (prefers-contrast: more) {
     :root {
       /* Dividers become real boundaries rather than hints. */
-      --color-border: #3d4266;
+      --color-border: #aebfd2;
       --color-ops-outline-variant: var(--color-ops-outline);
       /* The placeholder ink steps up to the readable one. */
+      --color-text-3: #63707f;
+    }
+
+    /* The same two steps, on the dark ground. */
+    :root[data-theme='dark'] {
+      --color-border: #3d4266;
+      --color-ops-outline-variant: var(--color-ops-outline);
       --color-text-3: #8f95b0;
     }
 

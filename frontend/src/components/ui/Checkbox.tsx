@@ -55,7 +55,10 @@ export function Checkbox({
         className={cn(
           'mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-tiny',
           'transition-colors duration-fast ease-out-soft',
-          checked ? 'bg-brand-500 text-ink-inverse' : 'border border-border bg-surface-1',
+          // One pairing per line: tests/contrast.test.ts reads a line at a time,
+          // and these two branches never render together.
+          checked && 'bg-brand-500 text-ink-inverse',
+          !checked && 'border border-border bg-surface-1',
           // The ring follows the real input's focus, which is where focus is.
           'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus'
         )}

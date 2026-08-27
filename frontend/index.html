@@ -28,6 +28,45 @@
          The real control is a response header set by the deploy.
          See frontend/docs/embedding.md. -->
     <title>SCASPA Assistant</title>
+    <!-- The theme, before the first frame.
+
+         This has to be a blocking inline script and it has to be here. The
+         palette lives in CSS as a :root[data-theme='dark'] block, so something
+         must put that attribute on <html> before anything paints. React cannot:
+         by the time a module script has been fetched, parsed and hydrated, a
+         reader on a dark phone has already been shown a white page. That flash
+         is the single most obvious sign of a theme bolted on afterwards.
+
+         Deliberately duplicated logic, not shared with features/theme: this
+         runs before any module loads, so it cannot import. It is kept to the
+         two facts it needs — the storage key and the attribute — and the store
+         writes the same attribute again the moment it initialises, which makes
+         a drift between the two visible immediately rather than subtly.
+
+         Wrapped in try/catch because localStorage throws outright in Safari
+         private mode, and a preference must never be able to stop the page. -->
+    <script>
+      (function () {
+        try {
+          var stored = null;
+          try {
+            var raw = localStorage.getItem('scaspa.prefs');
+            if (raw) stored = JSON.parse(raw).theme;
+          } catch (e) {
+            /* private mode, a locked-down kiosk: fall through to the system */
+          }
+          var choice = stored === 'light' || stored === 'dark' ? stored : 'system';
+          var dark =
+            choice === 'dark' ||
+            (choice === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <!-- Users are on phones on expensive roaming data. If JavaScript fails they

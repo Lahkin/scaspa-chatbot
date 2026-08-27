@@ -238,7 +238,7 @@ const TREATMENT: Record<Visual, string> = {
    * `tests/contrast.test.ts` reads a line at a time — a dark brand step as text
    * is legitimate only when the same element supplies the light fill.
    */
-  ending: 'bg-caution text-brand-700',
+  ending: 'bg-caution text-ink-on-bright',
   denied: 'border border-critical-edge bg-critical-tint text-critical-text',
   off: 'border border-dashed border-border disabled:text-ink-disabled',
 };

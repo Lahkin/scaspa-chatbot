@@ -67,6 +67,7 @@ import { ScaspaMark } from '@/components/shells/ScaspaMark';
 import { LogoLockup } from '@/components/brand/LogoLockup';
 import { Sidebar } from '@/components/shells/Sidebar';
 import { LanguagePicker } from '@/components/settings/LanguagePicker';
+import { ThemePicker } from '@/components/settings/ThemePicker';
 import {
   SettingRow,
   SettingsLinkRow,
@@ -1108,6 +1109,20 @@ function NavigationSection() {
             advisoryCount={2}
           />
         </div>
+      </Section>
+
+      <Section
+        title="Theme picker"
+        note="The second control on /settings with a side effect, and the only one that repaints every screen in the product. Three choices, because System is a real answer and the default one — a reader who picks Dark in the morning needs a route back to following their phone that is not clearing all their settings. Choosing one writes data-theme on the root element, which is the single switch the whole palette hangs off; an inline script in index.html sets the same attribute before first paint, so there is no white flash on a dark phone. No icon chip: the obvious sun, moon and laptop glyphs are not in the spec sprite, and iconPaths.ts is transcribed rather than drawn."
+      >
+        <div className="max-w-2xl rounded-md border border-border p-4">
+          <ThemePicker />
+        </div>
+        <p className="mt-2 text-caption text-ink-subtle">
+          Every colour on this page moves when you choose. Both themes are held to WCAG AA by
+          tests/contrast.test.ts, which measures each pairing twice — once per theme — and
+          tests/theme-parity.test.ts refuses a token declared for one theme and not the other.
+        </p>
       </Section>
 
       <Section

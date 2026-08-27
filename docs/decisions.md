@@ -2680,3 +2680,165 @@ deliberately because each is a repository-wide call rather than a bug fix:
   Vitest's own `testTimeout` is also 5000ms — so the inner timeout can never
   fire, and the test dies at the outer one first. The number needs to be a pair,
   not a single value repeated.
+
+## 0034 — Two themes, one palette, and the brand that stopped being purple
+
+**Status:** accepted. Foundations for the Pilot identity (stage 1 of 5).
+**Supersedes** the "THE PRODUCT IS DARK. There is no light theme and no theme
+switch." ruling recorded in `frontend/src/styles/tokens.css` and enforced by the
+previous `tests/contrast.test.ts`.
+
+### What changed, and why it is not a repaint
+
+The client approved a Pilot identity expressed as two mock-ups — a light design
+and a dark design of the same product. The product had exactly one theme, by an
+earlier deliberate decision, and its contrast suite was written against that one
+palette: pinned ratios, and three colours asserted to FAIL on purpose.
+
+So this is not "add a light mode". It is re-introducing a theme axis into 880
+lines of tokens and rewriting the check that guards them.
+
+### The thing that made it tractable
+
+`tokens.css` was already two layers, and nobody had planned for this:
+
+- ~34 **primitives** with literal values — canvas, the surface ramp, the brand
+  ramp, ink, status hues, tints, edges.
+- ~60 **aliases** that are `var(--primitive)` and nothing else —
+  `--color-ink: var(--color-text-1)`, `--color-surface: var(--color-surface-2)`.
+
+Components almost never touch the primitives. `bg-surface` appears 165 times,
+`bg-surface-muted` 83, and `bg-surface-2` twice. So re-theming the primitives
+moved the aliases, and the aliases moved the entire component tree. **Two themes
+cost 38 declarations, not 100 components.**
+
+That is worth stating plainly because it was luck earned by an earlier decision:
+an alias layer named for MEANING rather than for colour is what let a palette be
+swapped underneath a product that had never considered the possibility.
+
+### Roles, not lightness
+
+The one rule that makes the two palettes coherent, and the one that is easy to
+get wrong.
+
+`--color-brand-300` is not "the 300 step of a ramp" in both themes. It is
+"readable brand text" in both, and its two values sit on either side of the
+ground each lands on — #0a56c0 on white, #5ca5f0 on navy. The surface ramp
+inverts for the same reason: `surface-sunken` is a step AWAY from the card in
+both themes, which is _down_ in one and _up_ in the other.
+
+A palette translated by lightness instead of by role produces pale-blue body
+text on white, and passes every test anyone remembered to write.
+
+### `light-dark()` was written first, and replaced
+
+The first implementation gave every primitive a single
+`light-dark(light, dark)` declaration. One place to write both values, and a
+token could not be given one theme and forgotten in the other.
+
+**It was measured working** and replaced anyway, which is worth recording so
+nobody re-litigates it from the diff. Under `data-theme='light'` the aliased
+chain resolved correctly all the way down to `--color-ink-muted: #5d6b80`, in
+the dev server and in the built output alike. Two duller reasons carried the
+day: it is not supported everywhere this app is read, so the build downlevels it
+into paired `var(--lightningcss-light, …)` space-toggles that turn every colour
+in the inspector into something unreadable while debugging a demonstration; and
+the parity it guaranteed for free can be bought for the price of one test.
+
+`tests/theme-parity.test.ts` is that test. It asserts the two blocks declare
+exactly the same token names, and that no token is given the same value twice by
+accident. Two exemptions, both named and both argued: `--color-ink-inverse`
+(white, because it means "ink on a dark fill" rather than "the opposite of the
+current ink") and `--color-amber-board` (the figure on the departure-board
+strip, which is navy in both themes).
+
+An honest note on the route here. An intermediate version of this work claimed
+`light-dark()` had a repaint bug in Chromium. It does not. The browser pane used
+for the measurement reports `document.hidden === true` and never fires
+`requestAnimationFrame`, so it defers style recalculation on already-rendered
+descendants — and plain custom properties behaved identically under it. The
+claim was removed from the token file rather than left there to mislead whoever
+reads it next.
+
+### The brand stopped being purple
+
+The old ramp ran `#383a97` → `#7a7cd6`, which reads as indigo. The Pilot spec
+bans purple as the dominant brand colour outright, so the ramp is now SCASPA
+navy through action blue, with aqua and one amber beacon carried in from the
+Pilot mark.
+
+`tests/contrast.test.ts` checks the HUE, not the values: blue must dominate red,
+and green must not be suppressed below red. A future retune can therefore be
+caught drifting back towards indigo — which the old ramp would have done while
+passing every contrast assertion in the file.
+
+### Where the approved mock-up and WCAG AA disagree
+
+One place, and the spec asks for both.
+
+The mock-up draws the **ALL CITED** badge as white on aqua `#08aeb7`. That
+measures **2.71:1**. Spec §52 requires WCAG AA. The hue is the more valuable half
+of the instruction — it is Pilot's colour — so the hue is kept and the ink is
+changed: `--color-ink-on-aqua`, dark in both themes, 5.49:1 light and 8.25:1
+dark. The badge reads navy-on-aqua rather than white-on-aqua. Put to the client
+before implementation and confirmed.
+
+Three aquas exist because one could not do three jobs: `--color-aqua` is the
+fill, `--color-aqua-strong` the boundary or meaningful icon at 3.41:1, and
+`--color-aqua-text` the readable word at 5.85:1.
+
+### What the flip found
+
+The palette change was also an audit. The className scanner — which reads every
+element setting both a background and a text colour, and now measures each pair
+twice — found **seven pairings unreadable on the light ground**, all invisible
+while the product had one theme:
+
+- Four quiet chips filled with `--color-border`, the DIVIDER colour, leaving
+  muted ink at 4.20:1. They use `--color-surface-muted` now, which is the token
+  for a quiet fill; using a line colour as a fill was the actual smell.
+- A checkbox whose ternary put the checked ink and the unchecked fill on one
+  line, so the scan paired two states that never render together. Split, per the
+  convention the rest of the codebase already follows.
+- The departure-board figure and the voice button's ending state, both amber on
+  navy, both resolved by the token split below.
+
+None of these was reachable by a hand-written assertion. All seven came from the
+check that reads what components actually wrote.
+
+### `--color-amber-board` became a token of its own
+
+The clearest example in the palette of why a token's name has to describe its
+job. It was an alias of `--color-caution`, and that held only while there was
+one theme.
+
+The status amber is a WORD on the page: on the light ground it must be a dark
+amber (#8a6100) to clear AA on white. The board amber is a FIGURE on a navy
+strip, in both themes, so it must stay bright — and #8a6100 on navy is 2.82:1.
+One token could not be both. It is now declared once at #d9a23b: 6.83:1 on the
+light navy, 6.57:1 on the dark one.
+
+### The switch
+
+`color-scheme` plus a `data-theme` attribute on the root, resolved before first
+paint by a blocking inline script in `index.html`. React cannot do this job — by
+the time a module script has been fetched, parsed and hydrated, a reader on a
+dark phone has already been shown a white page, and that flash is the most
+obvious sign of a theme bolted on afterwards.
+
+The default follows the operating system and keeps following it: `system` is a
+real, selectable choice rather than the absence of one, and the store subscribes
+to `prefers-color-scheme` for as long as that is what the reader has chosen.
+
+The preference is a second FIELD in the existing `scaspa.prefs` key, not a second
+key — `frontend/CLAUDE.md` rule 5 permits one key, and this respects it.
+`writePrefs` became a merging patch in the process: as a plain write, choosing a
+language would have silently erased the theme, which is the kind of bug that only
+appears on the reader's next visit.
+
+### What this does not cover
+
+The rest of the Pilot work. This is foundations only: no Pilot mark, no landing
+page, no chat workspace, no terminology change. `--shadow-card` is still `none`
+while the spec asks for soft shadows in the light theme; that arrives with the
+screens that need it, not here.

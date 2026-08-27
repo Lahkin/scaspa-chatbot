@@ -6,6 +6,7 @@ import {
   SettingsSection,
 } from '@/components/settings/SettingsSection';
 import { LanguagePicker } from '@/components/settings/LanguagePicker';
+import { ThemePicker } from '@/components/settings/ThemePicker';
 import { HistoryControls } from '@/components/settings/HistoryControls';
 import { getLocale, stringsFor, useStrings } from '@/features/i18n';
 import { SCASPA_TEL_HREF, SCASPA_TEL_TEXT } from '@/features/chat/contact';
@@ -13,7 +14,7 @@ import { SCASPA_TEL_HREF, SCASPA_TEL_TEXT } from '@/features/chat/contact';
 /**
  * Settings — reached from the bottom of the navigation sidebar.
  *
- * ## Five sections, and why each says what it says
+ * ## Six sections, and why each says what it says
  *
  * The brief asked for a language selector, accessibility options, chat-history
  * controls, help and support, and an about panel. All five are here. Two of them
@@ -53,6 +54,7 @@ function SettingsRoute() {
   const t = useStrings();
 
   const sections = [
+    { id: 'appearance', label: t.settings.appearance.heading },
     { id: 'language', label: t.settings.language.heading },
     { id: 'accessibility', label: t.settings.accessibility.heading },
     { id: 'history', label: t.settings.history.heading },
@@ -67,8 +69,8 @@ function SettingsRoute() {
       backLabel={t.settings.backToAssistant}
     >
       {/*
-        Quick jump. Five sections is past the point where a phone user should
-        have to thumb through all of them to reach "clear my history".
+        Quick jump. Six sections is well past the point where a phone user
+        should have to thumb through all of them to reach "clear my history".
 
         Plain `<a href="#id">` rather than a router link: this is movement within
         the document, so the browser's own anchor handling — including its
@@ -87,7 +89,17 @@ function SettingsRoute() {
         ))}
       </nav>
 
-      {/* ── 1. Language ─────────────────────────────────────────────────────── */}
+      {/* ── 1. Appearance ───────────────────────────────────────────────────── */}
+      <SettingsSection
+        id="appearance"
+        icon="◐"
+        title={t.settings.appearance.heading}
+        lead={t.settings.appearance.lead}
+      >
+        <ThemePicker />
+      </SettingsSection>
+
+      {/* ── 2. Language ─────────────────────────────────────────────────────── */}
       <SettingsSection
         id="language"
         icon="🌐"
@@ -114,7 +126,7 @@ function SettingsRoute() {
         <LanguagePicker />
       </SettingsSection>
 
-      {/* ── 2. Accessibility ────────────────────────────────────────────────── */}
+      {/* ── 3. Accessibility ────────────────────────────────────────────────── */}
       <SettingsSection
         id="accessibility"
         icon="♿"
@@ -150,7 +162,7 @@ function SettingsRoute() {
         </p>
       </SettingsSection>
 
-      {/* ── 3. Chat history ─────────────────────────────────────────────────── */}
+      {/* ── 4. Chat history ─────────────────────────────────────────────────── */}
       <SettingsSection
         id="history"
         icon="🗒"
@@ -160,7 +172,7 @@ function SettingsRoute() {
         <HistoryControls />
       </SettingsSection>
 
-      {/* ── 4. Help and support ─────────────────────────────────────────────── */}
+      {/* ── 5. Help and support ─────────────────────────────────────────────── */}
       <SettingsSection
         id="support"
         icon="🛟"
@@ -212,7 +224,7 @@ function SettingsRoute() {
         </div>
       </SettingsSection>
 
-      {/* ── 5. About the assistant ──────────────────────────────────────────── */}
+      {/* ── 6. About the assistant ──────────────────────────────────────────── */}
       <SettingsSection
         id="about"
         icon="⚓"

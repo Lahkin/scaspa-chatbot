@@ -32,7 +32,7 @@ import { clearPrefs, readPrefs, writePrefs } from './prefs';
 
 function initial(): LocaleCode {
   const stored = readPrefs();
-  if (stored) return stored.locale;
+  if (stored?.locale) return stored.locale;
 
   /*
    * Nothing stored: follow the browser rather than assuming English.

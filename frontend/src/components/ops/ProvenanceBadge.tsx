@@ -23,9 +23,16 @@ import type { SourceKind, VesselPositionSource, Volatility } from '@/lib/types';
  * — see the derivation note on `--color-absent` in tokens.css, where the spec's
  * own "no feed" fill had to be lifted to keep it.
  *
- * The one exception is the caution fill, which is light enough that near-black
- * is not the safe ink: white measures 2.29:1 on it, so the ink there is
- * brand-700 at 6.20:1. Asserted in tests/contrast.test.ts.
+ * There used to be one exception. On the dark palette the caution fill was a
+ * bright amber, white measured 2.29:1 on it, and the ink there was brand-700.
+ * The two-theme palette removed the exception rather than doubling it: the
+ * light theme's caution is a DARK amber, on which brand-700 is 2.82:1 — so the
+ * ink that works is the one every other fill already uses.
+ *
+ * `--color-ink-on-bright` is the canvas, which means it is near-white on the
+ * light ground and near-black on the dark one. That is precisely the behaviour
+ * a saturated fill needs, in both directions, and it is why the family can now
+ * be one ink with no exception at all. Asserted in tests/contrast.test.ts.
  */
 
 interface Treatment {
@@ -44,12 +51,12 @@ interface Treatment {
 const FILL = {
   live: 'bg-live text-ink-on-bright',
   positive: 'bg-positive text-ink-on-bright',
-  caution: 'bg-caution text-brand-700',
+  caution: 'bg-caution text-ink-on-bright',
   critical: 'bg-critical text-ink-on-bright',
   absent: 'bg-absent text-ink-on-bright',
   brand: 'bg-brand-400 text-on-navy-primary',
-  /** Unfilled — the divider colour with muted ink. The quietest of the family. */
-  quiet: 'bg-border text-ink-muted',
+  /** Unfilled — the quiet surface with muted ink. The quietest of the family. */
+  quiet: 'bg-surface-muted text-ink-muted',
   /** Outlined and dashed — a value that is not recorded rather than one that is. */
   dashed: 'border border-dashed border-ink-subtle text-ink-muted',
 } as const;

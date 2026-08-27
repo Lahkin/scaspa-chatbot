@@ -37,6 +37,20 @@ export const es: Strings = {
     onThisPage: 'En esta página',
     backToAssistant: 'Asistente',
 
+    appearance: {
+      heading: 'Apariencia',
+      lead: 'Si esta aplicación se ve clara u oscura. No cambia las respuestas.',
+      legend: 'Tema',
+      options: {
+        light: { label: 'Claro', hint: 'Fondo claro' },
+        dark: { label: 'Oscuro', hint: 'Fondo oscuro' },
+        system: { label: 'Sistema', hint: 'Seguir mi dispositivo' },
+      },
+      saved: 'Tema guardado en este dispositivo.',
+      storedNote:
+        'Se guarda solo en este dispositivo. No se envía nada sobre su elección a SCASPA.',
+    },
+
     language: {
       heading: 'Idioma',
       lead: 'El idioma de los botones, menús y etiquetas de esta aplicación.',

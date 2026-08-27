@@ -13,7 +13,8 @@
    - `conversation_id` in sessionStorage (ends with the tab, so a shared kiosk
      does not hand on the last person's conversation);
    - non-message UI preferences in localStorage under the single key
-     `scaspa.prefs` (currently the interface language, and nothing else).
+     `scaspa.prefs` (currently the interface language and the theme choice).
+     Adding a FIELD to that key is ordinary work; adding a KEY is not.
    A third key needs a decision record, not a commit. Adding one to hold
    anything a user typed is still forbidden outright — see `features/chat/draft.ts`,
    which refuses storage entirely for exactly this reason.
