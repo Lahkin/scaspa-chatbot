@@ -172,3 +172,54 @@ def test_a_call_carries_only_what_was_published() -> None:
         "pax",
         "capacity",
     }
+
+
+# ── The verification path ────────────────────────────────────────────────────
+#
+# These are about the numeric grounding gate, not about Watchtower — but they
+# belong beside the parser, because they exist for the same reason: a cruise
+# call is a set of FIGURES, and the whole product rests on a figure being
+# traceable to something SCASPA published.
+
+
+class TestStructuredEvidenceIsVerifiable:
+    """Tool output is a source figures may be checked against.
+
+    When the cruise tool first shipped, every answer it produced was discarded
+    by the grounding gate and replaced with "I could not verify one of the
+    figures". The gate was right: a sailing time from a tool it had never heard
+    of is exactly the unverifiable figure it exists to stop.
+
+    The fix was to tell the gate where the figures came from, not to weaken it,
+    and these assert that distinction holds in both directions.
+    """
+
+    EVIDENCE = [
+        "Published SCASPA cruise calls for 2026-12-25:\n"
+        "- 2026-12-25 (Friday) 09:00 - 18:00: CELEBRITY ECLIPSE — Celebrity Cruise, "
+        "pier PORTZANTE, passenger count not published\n"
+        "Source: Official SCASPA cruise schedule, checked 27 Aug 2026 at 05:12 UTC."
+    ]
+
+    def test_a_figure_from_the_schedule_verifies(self) -> None:
+        from app.rag.answer import find_unverified_figures
+
+        answer = "Celebrity Eclipse calls at Port Zante, 09:00 - 18:00."
+        assert find_unverified_figures(answer, [], self.EVIDENCE) == []
+
+    def test_a_figure_from_nowhere_still_fails(self) -> None:
+        """The gate is not switched off for cruise answers.
+
+        A time that appears in neither the schedule nor a retrieved row is still
+        caught, which is the half of this that matters.
+        """
+        from app.rag.answer import find_unverified_figures
+
+        answer = "Celebrity Eclipse calls at Port Zante, 06:15 - 23:45."
+        assert find_unverified_figures(answer, [], self.EVIDENCE) != []
+
+    def test_with_no_evidence_nothing_changes(self) -> None:
+        from app.rag.answer import find_unverified_figures
+
+        answer = "The fare is XCD 44.44."
+        assert find_unverified_figures(answer, [], None) != []

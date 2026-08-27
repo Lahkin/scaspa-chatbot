@@ -93,15 +93,21 @@ class GroundingResult:
         return [f.value for f in self.ungrounded]
 
 
-def allowed_text(chunks: list[RetrievedChunk]) -> str:
+def allowed_text(chunks: list[RetrievedChunk], evidence: list[str] | None = None) -> str:
     """Everything a figure may legitimately have come from.
 
     Chunk text, plus the metadata a correct answer is *required* to quote: the
     `as_of` verification date (the prompt demands it for every schedule answer)
     and the source URL. Plus SCASPA's own published number, which lives in the
     escalation block rather than in any row.
+
+    `evidence` is text a TOOL produced from a structured official source — the
+    published cruise schedule. Those figures are as verifiable as a chunk's,
+    and more precisely so: they came out of SCASPA's own table rather than out
+    of a sentence about it. They are not citable as kb rows, which is a
+    separate question this function does not answer.
     """
-    parts: list[str] = [SCASPA_PHONE]
+    parts: list[str] = [SCASPA_PHONE, *(evidence or [])]
     for chunk in chunks:
         parts.append(chunk.text)
         for key in ("as_of", "source_url", "fetched_at", "page"):
@@ -142,14 +148,16 @@ def _appears(value: str, haystack: str) -> bool:
     return False
 
 
-def check_numbers(answer: str, chunks: list[RetrievedChunk]) -> GroundingResult:
+def check_numbers(
+    answer: str, chunks: list[RetrievedChunk], evidence: list[str] | None = None
+) -> GroundingResult:
     """Find every figure in `answer` that no retrieved row supports."""
     result = GroundingResult()
     if not answer.strip():
         return result
 
     scannable = _CITATION.sub(" ", answer)
-    haystack = allowed_text(chunks)
+    haystack = allowed_text(chunks, evidence)
     seen: set[str] = set()
 
     for kind, pattern in PATTERNS:
