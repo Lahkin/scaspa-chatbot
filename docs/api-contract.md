@@ -16,6 +16,7 @@ changes, this file changes in the same pull request.
 | `POST /api/tts/preview`      | Show what TTS would say, free                    |
 | `GET /api/vessels`           | Vessel arrivals and berth occupancy              |
 | `GET /api/cruise-schedule`   | Cruise calls as SCASPA publishes them            |
+| `GET /api/guide`             | Verified published answers, without asking        |
 | `GET /api/flights`           | Flight arrivals and departures                   |
 | `GET /api/tariffs`           | Published schedule of port charges               |
 | `POST /api/tariffs/quote`    | Estimate charges from published rates            |
@@ -825,6 +826,89 @@ a feed comes in, it is validated, and it goes out saying where it came from.
 So a panel may show "EN ROUTE" — because a named feed said so at a stated time —
 while the assistant continues to decline to say it in a sentence. Both are true
 at once, and the `source` object is what makes that so.
+
+### `GET /api/guide` — verified answers, without asking a question
+
+The knowledge base already reaches users through the assistant, with a citation
+and a verified date attached. That is the right shape for a question somebody
+actually has, and the wrong shape for a screen: a traveller opening "Airport
+Information" does not yet know what to ask, and telling them to go and think of
+a question is how a page ends up empty.
+
+This serves the same rows the assistant retrieves from, unchanged.
+
+| Parameter  | Type     | Default   | Notes                                                                              |
+| ---------- | -------- | --------- | ---------------------------------------------------------------------------------- |
+| `category` | `string` | `airport` | `ferry`, `cargo`, `cruise`, `airport`, `general`, `marine`, `payments`, `access`, `jobs`, `corporate` |
+
+```json
+{
+  "source": {
+    "kind": "published",
+    "label": "Verified SCASPA published information",
+    "as_of": "2024-05-09T00:00:00Z",
+    "notice": null
+  },
+  "category": "airport",
+  "topics": [
+    {
+      "name": "facilities",
+      "entries": [
+        {
+          "id": "kb-053",
+          "question": "What facilities are available at the airport?",
+          "answer": "…",
+          "source_url": "https://www.scaspa.com/airport-about.html",
+          "as_of": "2026-07-31",
+          "volatility": "medium"
+        }
+      ]
+    }
+  ],
+  "total": 18
+}
+```
+
+**No model is involved anywhere in this path.** Nothing is generated, so nothing
+can be hallucinated — which is exactly why it sits beside `/api/vessels` rather
+than behind `/api/chat`.
+
+**Only `confidence == "confirmed"` rows are served.** The same rule the index
+applies (CLAUDE.md rule 8), and a page is not a lower standard than a sentence:
+a screen is scanned and believed without the reader ever forming a question they
+might have doubted the answer to. There is no follow-up in which an unverified
+claim gets challenged. On the live export that is 18 of the 19 confirmed airport
+rows — see the note on rejected rows in `docs/found-during-build.md`.
+
+**`id` is the citation anchor the assistant uses.** An answer met on the Airport
+page and the same answer met in a conversation are one row, not two sources that
+happen to agree.
+
+**`source.as_of` is the OLDEST verification in the set**, not the newest. It is
+the only date true of everything returned; stamping the newest would advertise
+the best case. Clients should generally render the **per-entry** `as_of`
+instead: on the live airport data the oldest row was verified in May 2024 and
+most in July 2026, so a single page-level date either flatters the set or
+condemns month-old content as two years stale. `/flights` renders per-entry
+dates and no page-level one at all.
+
+**An unknown or uncovered category is a `200` with `total: 0` and
+`source.kind: "unavailable"`, never a 404.** "Nothing has been verified about
+this" is information; a 404 would mean the endpoint does not exist and would put
+an error on screen where the correct rendering is an honest empty state. Note
+the two are genuinely different: `published` with entries means researchers have
+verified something, `unavailable` means they have not — and `published` with
+zero entries is impossible, because the schema refuses a `published` source
+without an `as_of`.
+
+**`volatility` must be rendered, not dropped.** "Rarely changes" and "check
+before use" lead a reader to different actions, and only one of those is a
+question this product can settle. An unrecognised value resolves to `medium` —
+the cautious case — never to `low`.
+
+**The export is re-read when the file changes.** The service caches parsed rows
+on the CSV's path *and* modification time, so a researcher correcting an answer
+and redeploying does not need a restart to take effect.
 
 ### The four `/api/ops/*` endpoints
 

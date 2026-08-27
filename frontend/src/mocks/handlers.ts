@@ -50,6 +50,7 @@ import {
   FIXTURE_SOURCE,
   MOCK_CRUISE_OFFSETS,
   MOCK_DIRECTORY,
+  MOCK_GUIDE_TOPICS,
   MOCK_DISCLAIMER,
   MOCK_FLIGHTS,
   MOCK_GATES,
@@ -446,6 +447,47 @@ export const handlers = [
         'is 44.44 East Caribbean dollars.',
     })
   ),
+
+  // ── GET /api/guide ─────────────────────────────────────────────────────────
+  //
+  // `published`, like the cruise schedule and unlike everything else here:
+  // these are verified rows with a source and a date, not a feed and not sample
+  // operational data. `ops_unavailable` covers the case the page must also
+  // handle — a category the researchers have not covered, or an export where
+  // every row for it is still `probable`.
+  http.get(`${base}/api/guide`, ({ request }) => {
+    const category = new URL(request.url).searchParams.get('category') ?? 'airport';
+
+    if (getScenario() === 'ops_unavailable' || category !== 'airport') {
+      return HttpResponse.json({
+        source: {
+          kind: 'unavailable',
+          label: 'SCASPA published information',
+          as_of: null,
+          notice:
+            'Pilot has no verified information for this section yet. Nothing is shown rather ' +
+            'than something guessed.',
+        },
+        category,
+        topics: [],
+        total: 0,
+      });
+    }
+
+    return HttpResponse.json({
+      source: {
+        kind: 'published',
+        label: 'Verified SCASPA published information',
+        // The OLDEST date in the set, which is what the real service sends —
+        // the only claim true of every answer on the page.
+        as_of: '2024-05-09T00:00:00Z',
+        notice: null,
+      },
+      category,
+      topics: MOCK_GUIDE_TOPICS,
+      total: MOCK_GUIDE_TOPICS.reduce((n, topic) => n + topic.entries.length, 0),
+    });
+  }),
 
   // ── GET /api/cruise-schedule ───────────────────────────────────────────────
   //

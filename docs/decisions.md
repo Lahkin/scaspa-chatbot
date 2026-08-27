@@ -3661,3 +3661,132 @@ error in `test_ingest.py`, unrelated and pre-existing.
 
 `docs/architecture.md` does not mention Watchtower at all — a gap that predates
 this change and is worth closing when that document is next touched.
+
+---
+
+## 0042 — `/flights` becomes Airport Information, and the knowledge base gets a second exit
+
+**Status:** accepted.
+**Builds on** 0032 (the fixture hatch) and 0040 (the same two-section shape on
+`/vessels`).
+
+### The screen was three em dashes and an apology
+
+`/flights` was a movements table with three metric tiles above it. SCASPA
+publishes no flight feed, so what a real visitor saw was **Arrivals today —,
+Departures today —, Delayed —** over a panel explaining there was nothing. The
+brief names those three cards individually and says to remove them.
+
+Removing them leaves a page with nothing on it, which is why the instruction
+continues: show "useful SCASPA-grounded content" instead — facilities, passenger
+information, parking and access.
+
+### Where that content could honestly come from
+
+Three options, and only one of them survives CLAUDE.md rule 5.
+
+| Option | Why not |
+| --- | --- |
+| **Write the content into a component** | A developer typing "the airport has a duty-free shop and two lounges" produces text indistinguishable on screen from something the Authority stands behind. Nobody verified it, no researcher can correct it by editing the spreadsheet, and it drifts silently from the moment it is written. The frontend has an entire module (`lib/scaspa-facts.ts`) devoted to holding this line for the handful of facts it *is* allowed to hardcode, and airport facilities are nowhere near that list. |
+| **Topic cards that bridge into the assistant** | Honest, and thin. It answers "what do you want to ask?" with "what do you want to ask?", which is the problem the page has. |
+| **Serve the verified rows directly** | Chosen. |
+
+The knowledge base already contains **19 confirmed airport rows** across
+fourteen of the researchers' own subcategories — facilities, parking, check-in,
+security, immigration among them. Every one was already in the product. They
+were reachable only by knowing what to ask.
+
+### `GET /api/guide`
+
+Confirmed knowledge-base rows for one category, grouped by the researchers'
+subcategory, each with its question, answer, source URL, verification date and
+volatility. No model anywhere in the path, so nothing can be hallucinated.
+
+Four properties worth stating:
+
+- **`confirmed` only**, the same rule the index applies. A page is not a lower
+  standard than a sentence — if anything it is higher, because a screen is
+  scanned and believed without the reader ever forming a question they might
+  have doubted the answer to. There is no follow-up in which an unverified claim
+  gets challenged.
+- **`id` is the citation anchor the assistant uses.** An answer met on the page
+  and the same answer met in a conversation are one row, not two sources that
+  happen to agree. That is the whole reason this reads from the knowledge base
+  rather than from a copy of it.
+- **An uncovered category is a 200 with `source.kind: "unavailable"`**, not a
+  404. "Nothing has been verified about this" is information; a 404 would put an
+  error on screen where the correct rendering is an honest empty state.
+- **The parse is cached on the CSV's path *and* mtime.** A researcher correcting
+  a wrong answer and redeploying must not be outlived by a parse cached at boot;
+  caching on the path alone would serve the superseded answer until somebody
+  restarted the process, and nobody would know to.
+
+### No page-level date, which took two attempts to get right
+
+The endpoint sends `source.as_of` as the **oldest** verification in the set —
+the only date true of everything returned. The first version rendered it.
+
+On the real airport data the oldest row was verified in **May 2024** and most
+were verified in **July 2026**. A single stamp is therefore wrong in whichever
+direction you pick: the newest advertises the best case, and the oldest condemns
+month-old content as two years stale.
+
+So the page renders no aggregate date at all, and every answer carries its own
+inside its panel. That is the date a reader acts on. The envelope value stays on
+the wire for callers that want a conservative single figure.
+
+### The hatch, again
+
+Same as 0040. `OpsShell` draws 0032's sample-data stripes behind the whole
+screen from the source it is handed, and this page has two sources: verified
+published information, and a movements feed that can be fixtures. Hatching the
+page would mark the researchers' verified content as invented data. The route
+passes no `source`; the hatch lives inside `FlightMovements`, and a test asserts
+the published section contains none while the page still has one.
+
+### The accessibility harness could never have passed
+
+`/flights` at mobile was the last route failing axe — `scrollable-region-focusable`,
+a scroll container with no keyboard access. It is gone with the metric row that
+caused it, and **every route is now clean at both viewports**.
+
+Two *manual* checks in `npm run check:a11y` had been failing for long enough to
+be treated as furniture: "the finished answer is announced" and the citation-chip
+focus test. They were reported repeatedly as a known limitation.
+
+They were never broken. `frontend/scripts/a11y-check.mjs` starts its own Vite
+server on a hardcoded port **4400**, and the backend's default `ALLOWED_ORIGINS`
+listed only 5173 — so the browser's calls were blocked by CORS on every machine,
+for anyone who had not hand-edited their `.env`. The default now includes both
+spellings of 4400, with the same reasoning already written there for 5173, and
+the suite reports **0 axe violations, 0 manual failures** for the first time.
+
+Dev ports only, and this default is dev-only in effect: production must set the
+real origin and a wildcard with `ENV=prod` refuses to boot.
+
+### What this surfaced about the data
+
+`docs/found-during-build.md` item 7 recorded four rows the loader rejects for
+carrying `source_type: reference`/`directory` with Wikipedia and findyello
+sources. The rejection is correct and the entry says so.
+
+One of them, `kb-045`, is `confirmed` and answers "What is the airport code for
+St. Kitts?". Until now the only consequence was one row missing from the index.
+It is now a **visible gap on a page**: the airport section shows 18 answers where
+the export holds 19 confirmed rows, and the missing one is a question a traveller
+is quite likely to have.
+
+The enum is not being widened. Admitting `reference` would let third-party
+content onto a page badged PUBLISHED, which is worse than the gap. Item 7 has
+been updated; the fix is the researchers'.
+
+### Verified
+
+Against the real knowledge base, not fixtures: 18 answers across 13 topics,
+each expanding to its answer with a volatility badge, a "Checked 31 Jul 2026"
+stamp, the SCASPA source link (`rel="noreferrer noopener"`) and its `kb-` id.
+No console errors.
+
+661 backend tests, 831 frontend tests, lint, typecheck, prettier, production
+build, and `check:a11y` fully green. The one backend failure is the Windows
+symlink-privilege error in `test_ingest.py`, unrelated and pre-existing.

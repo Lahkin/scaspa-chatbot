@@ -771,6 +771,19 @@ Only one, `kb-045` ("What is the airport code for St. Kitts?"), is `confirmed`,
 so exactly one confirmed row is lost. **A question for the researchers**: source
 that fact from an official page, or accept the loss.
 
+**Update — the loss is now visible to users.** When this was written the only
+consequence was one row missing from the index, which showed up as the assistant
+being unable to answer a question nobody might ask. `GET /api/guide` now renders
+confirmed rows straight onto the Airport Information page, so the airport
+section shows **18 answers where the export contains 19 confirmed rows**, and
+the missing one is "What is the airport code for St. Kitts?" — a question a
+traveller is quite likely to have, on a page that otherwise looks complete.
+
+Nothing about the diagnosis changes: the enum is right to refuse a Wikipedia
+source, and widening it to admit `reference` would let third-party content onto
+a page badged **PUBLISHED**, which is worse than the gap. The fix is still the
+researchers': find `SKB`/`TKPK` on an official page and re-source the row.
+
 ### 8. The plan's `kb_rows_indexed == 116` gate was arithmetically wrong
 
 I derived 116 in `docs/implementation-plan.md` from a naive `csv.DictReader`

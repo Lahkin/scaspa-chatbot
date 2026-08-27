@@ -166,6 +166,26 @@ export const cruiseScheduleResponseSchema = z.object({
   total: z.number(),
 });
 
+export const guideEntrySchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  answer: z.string(),
+  source_url: z.string(),
+  as_of: z.string(),
+  // `.catch('medium')` matches `volatilityOf()` elsewhere: an unrecognised
+  // value resolves to the CAUTIOUS case, never to "rarely changes". Guessing
+  // low on a value we did not understand is the one direction that costs
+  // somebody a wasted journey.
+  volatility: z.enum(['low', 'medium', 'high']).catch('medium'),
+});
+
+export const guideResponseSchema = z.object({
+  source: dataSourceSchema,
+  category: z.string(),
+  topics: z.array(z.object({ name: z.string(), entries: z.array(guideEntrySchema) })),
+  total: z.number(),
+});
+
 export const vesselArrivalSchema = z.object({
   id: z.string(),
   name: z.string(),

@@ -98,6 +98,7 @@ import { IndexStatusPanel } from '@/components/ops/IndexStatusPanel';
 import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
 import { SourceAge } from '@/components/ops/SourceNotice';
 import { NothingPublished, ScheduleUnavailable } from '@/components/ops/cruise/CruiseStates';
+import { GuideTopics, NothingVerified } from '@/components/ops/guide/GuideSection';
 import type { HealthResponse, TariffQuote } from '@/lib/types';
 
 /**
@@ -945,6 +946,50 @@ function OperationsTableSection() {
         <div className="space-y-4">
           <NothingPublished range="week" onWiden={() => {}} />
           <ScheduleUnavailable />
+        </div>
+      </Section>
+
+      <Section
+        title="Published answers — the guide entry"
+        note="Every word of content comes off the wire; the only strings this component owns are the topic headings, and those name a grouping rather than assert a fact. Collapsed on arrival: the questions are the index a reader scans, and nineteen open answers is a wall. Provenance sits INSIDE the panel — a date beside a question nobody has read is noise, and the same date beside the answer is what lets them decide whether to trust it."
+      >
+        <div className="max-w-measure">
+          <GuideTopics
+            topics={[
+              {
+                name: 'facilities',
+                entries: [
+                  {
+                    id: 'kb-901',
+                    question: 'What facilities are available? (gallery placeholder)',
+                    answer:
+                      'PLACEHOLDER — gallery text, not a SCASPA answer. The real endpoint serves ' +
+                      "the researchers' verified export.",
+                    source_url: 'https://www.scaspa.com/airport-about.html',
+                    as_of: '2026-07-31',
+                    volatility: 'low',
+                  },
+                  {
+                    id: 'kb-902',
+                    question: 'An answer verified two years ago (gallery placeholder)',
+                    answer: 'PLACEHOLDER — gallery text. See kb-901.',
+                    source_url: 'https://www.scaspa.com/airport-about.html',
+                    as_of: '2024-05-09',
+                    volatility: 'high',
+                  },
+                ],
+              },
+            ]}
+          />
+        </div>
+      </Section>
+
+      <Section
+        title="Nothing verified yet"
+        note="Reachable in production: a category the researchers have not covered, or an export where every row for it is still `probable`. It reports that nothing has been VERIFIED — a different and more useful statement than 'nothing was found' — and offers no retry, because there is nothing to retry."
+      >
+        <div className="max-w-measure">
+          <NothingVerified subject="the airport" />
         </div>
       </Section>
 
