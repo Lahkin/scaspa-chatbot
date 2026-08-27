@@ -74,6 +74,12 @@ describe('the console shell', () => {
       '/chat',
       '/ops/vessels',
       '/ops/flights',
+      // The Cargo tab. Note what it is NOT: the test below still asserts the
+      // console offers no "Cargo Tracking", because a link promising to look up
+      // somebody's container is the personal-record refusal wearing a nav
+      // label. `/ops/cargo` leads to what SCASPA has published and to a panel
+      // saying cargo status is not published online — an answer, not a lookup.
+      '/ops/cargo',
       '/tariffs',
       '/support',
       '/about',
