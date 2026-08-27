@@ -99,6 +99,7 @@ import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
 import { SourceAge } from '@/components/ops/SourceNotice';
 import { NothingPublished, ScheduleUnavailable } from '@/components/ops/cruise/CruiseStates';
 import { GuideTopics, NothingVerified } from '@/components/ops/guide/GuideSection';
+import { CargoStatus } from '@/components/ops/cargo/CargoStatus';
 import type { HealthResponse, TariffQuote } from '@/lib/types';
 
 /**
@@ -981,6 +982,15 @@ function OperationsTableSection() {
               },
             ]}
           />
+        </div>
+      </Section>
+
+      <Section
+        title="Cargo status — a feature deliberately not built"
+        note="The brief asks for a search by vessel or agent over a Vessel/Agent/Status/Last-updated card. SCASPA publishes no cargo status anywhere, and a search field over nothing is not a placeholder but a promise: somebody types a vessel name, gets no results, and concludes their cargo is not at the port. This is what stands in its place — decisions.md 0043."
+      >
+        <div className="max-w-measure">
+          <CargoStatus />
         </div>
       </Section>
 

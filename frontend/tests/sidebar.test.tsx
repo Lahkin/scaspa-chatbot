@@ -177,7 +177,15 @@ describe('the navigation', () => {
     const links = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent?.trim());
-    expect(links).toEqual(['Chat', 'Vessels', 'Flights', 'Tariffs', 'Support', 'Console']);
+    /*
+     * The exact list, in order, and the exactness is the point: a nav that
+     * grows an entry nobody meant to add is how "Diagnostics" and "Conditional"
+     * got in front of customers before. Cargo joined when `/cargo` was built —
+     * §4 of the navigation brief puts it in this group, and it was the last of
+     * the four facilities to get a screen because it was the only one with
+     * nothing to put on it (decisions.md 0043).
+     */
+    expect(links).toEqual(['Chat', 'Vessels', 'Flights', 'Cargo', 'Tariffs', 'Support', 'Console']);
   });
 
   it('has no Admin entry at all — not a disabled row, not a lock', async () => {

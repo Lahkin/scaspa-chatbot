@@ -856,3 +856,42 @@ export const MOCK_GUIDE_TOPICS: GuideTopic[] = [
     ],
   },
 ];
+
+/**
+ * Cargo answers, same contract as `MOCK_GUIDE_TOPICS`.
+ *
+ * Kept separate so a test can assert the two categories return different sets —
+ * a `category` parameter the handler ignored would otherwise look identical to
+ * one it honoured.
+ */
+export const MOCK_CARGO_TOPICS: GuideTopic[] = [
+  {
+    name: 'customs',
+    entries: [
+      {
+        id: 'kb-910',
+        question: 'How do I clear cargo through customs?',
+        answer:
+          'PLACEHOLDER — this is mock text, not a SCASPA answer. The real endpoint serves the ' +
+          "researchers' verified export.",
+        source_url: 'https://www.scaspa.com/cargo.html',
+        as_of: '2026-07-31',
+        volatility: 'medium',
+      },
+    ],
+  },
+  {
+    name: 'tariffs',
+    entries: [
+      {
+        id: 'kb-911',
+        question: 'What are the port charges for cargo?',
+        answer: 'PLACEHOLDER — mock text. See kb-910.',
+        source_url: 'https://www.scaspa.com/cargo.html',
+        as_of: '2026-07-31',
+        // Money moves, and this is the badge that says so.
+        volatility: 'high',
+      },
+    ],
+  },
+];
