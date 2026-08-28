@@ -31,15 +31,17 @@ export const SCASPA_POSTAL_ADDRESS = [
   'St. Kitts',
 ] as const;
 
-/**
- * ⚠️ Pending from the client.
+/*
+ * There is deliberately no email constant in this module.
  *
- * scaspa.com obfuscates the address to defeat scrapers, so it cannot be read off
- * the site and **must not be guessed**. A wrong email on a handoff card sends
- * someone's cargo query into a void and they never learn it did not arrive.
+ * One lived here, `SCASPA_EMAIL = null`, with a comment claiming its slot was
+ * "rendered and visibly marked as pending". Nothing imported it and nothing
+ * rendered it, so the comment described a screen that did not exist — and it
+ * contradicted `AboutScaspa`, which omits the row instead. Two modules
+ * disagreeing in prose about one address is exactly the failure the header of
+ * this file warns about, with the added twist that the losing copy was dead.
  *
- * The slot is rendered and visibly marked as pending rather than omitted: an
- * omitted field is invisible to whoever needs to chase it, and a visible one is a
- * standing question on screen at every demo.
+ * The address is a low-volatility published fact and belongs with the others in
+ * `lib/scaspa-facts.ts`, which is the single source and is guarded by
+ * `tests/scaspa-facts.test.ts`. Import it from there.
  */
-export const SCASPA_EMAIL: string | null = null;
