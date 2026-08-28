@@ -179,33 +179,55 @@ describe('what a language choice does and does not reach', () => {
     ).toBeInTheDocument();
   });
 
-  it('leaves the navigation in the handoff’s own words', () => {
+  it('keeps the handoff’s own words in English', () => {
     /*
-     * The sidebar's labels are the handoff's shipping strings — "Vessels",
-     * "Tariffs", "Recorded questions" — and the handoff sets the product's
-     * voice in §10, down to the spelling: British and Caribbean, sentence case
-     * throughout. They are not routed through the dictionaries, so a language
-     * choice does not touch them.
+     * The handoff sets the product's voice in §10, down to the spelling:
+     * British and Caribbean, sentence case throughout. English is where that
+     * lives, and it is still the default — so these assertions are unchanged
+     * from when the navigation was English-only.
      *
-     * That is a real limitation and it is recorded rather than papered over:
-     * the chrome that IS translated is `/settings` and the history controls,
-     * and the assistant's answers stay English by rule (CLAUDE.md rule 10 —
-     * every figure must appear verbatim in the retrieved chunk, which no
-     * translation layer can promise).
+     * What changed is the sentence that used to follow them, which said the
+     * labels were "not routed through the dictionaries, so a language choice
+     * does not touch them". They are now, and it does. See the test below.
      */
     renderWithProviders(<Sidebar {...sidebarProps()} />);
     expect(screen.getByRole('link', { name: 'Vessels' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Recorded questions' })).toBeInTheDocument();
   });
 
-  it('keeps the conversation column marked English in the shell', () => {
-    // The answers are English by rule (CLAUDE.md rule 10), so under a Spanish
-    // root they need the attribute or they are read with Spanish phonemes.
+  it('translates the navigation, which it did not used to', () => {
+    setLocale('es');
+    renderWithProviders(<Sidebar {...sidebarProps()} />);
+    expect(screen.getByRole('link', { name: 'Buques' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Preguntas registradas' })).toBeInTheDocument();
+    // The route is not copy and is never translated: a translated href is a 404.
+    expect(screen.getByRole('link', { name: 'Buques' })).toHaveAttribute('href', '/vessels');
+  });
+
+  it('does not pin the main column to English any more', () => {
+    /*
+     * This assertion is inverted from what it was, deliberately.
+     *
+     * It required `<main id="main" lang="en">`, on the grounds that the answers
+     * were English by rule and would otherwise be read with Spanish phonemes
+     * under a Spanish root. That was correct at the time.
+     *
+     * Both halves of the premise have gone. The assistant answers in the
+     * language it was asked in — nothing ever pinned it, and prompt rule 7 now
+     * says so — and rule 10 survived the change (`app/rag/figures.py`). More
+     * immediately: `<main>` is not the conversation. It wraps every operations
+     * screen, and those are translated now, so pinning English here would
+     * mis-pronounce all of the translated chrome on every screen.
+     *
+     * The content inherits `<html lang>`, which is right whenever the reader
+     * asks in the language they set, and no worse when they do not.
+     */
     const source = readFileSync(
       resolve(process.cwd(), 'src/components/shells/FullPageShell.tsx'),
       'utf8'
     );
-    expect(source).toMatch(/<main[^>]*id="main"[^>]*lang="en"/);
+    expect(source).toMatch(/<main id="main"/);
+    expect(source).not.toMatch(/<main[^>]*lang="en"/);
   });
 });
 

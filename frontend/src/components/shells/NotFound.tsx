@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { Icon } from '@/components/ui/Icon';
 import { LogoLockup } from '@/components/brand/LogoLockup';
+import { useStrings } from '@/features/i18n';
 
 /**
  * The 404 — spec board 04, "Admin-gate wrapper".
@@ -29,6 +30,7 @@ import { LogoLockup } from '@/components/brand/LogoLockup';
  * in search that returns it. The only way to an admin address is to type it.
  */
 export function NotFound() {
+  const t = useStrings();
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <header className="flex h-13 shrink-0 items-center gap-3 border-b border-border px-6">
@@ -39,10 +41,8 @@ export function NotFound() {
           the button is the last thing on the page and needs room under it, or
           it sits on the fold on a short viewport. */}
       <main className="flex flex-1 flex-col items-center gap-5 px-6 pt-14 pb-16 text-center">
-        <h1 className="text-h1 font-semibold text-ink">Page not found</h1>
-        <p className="max-w-90 text-body text-ink-muted">
-          We could not find that page. Check the address, or go back and ask the assistant.
-        </p>
+        <h1 className="text-h1 font-semibold text-ink">{t.errors.notFoundTitle}</h1>
+        <p className="max-w-90 text-body text-ink-muted">{t.errors.notFoundBody}</p>
         <Link
           to="/"
           // 40px, and the touch minimum below the 640px threshold — the same
@@ -50,7 +50,7 @@ export function NotFound() {
           className="inline-flex h-11 items-center gap-2 rounded-button bg-brand-500 px-4.5 text-body font-medium text-ink-inverse hover:bg-brand-600 active:bg-brand-700 sm:h-10"
         >
           <Icon name="arrow-left" size={16} />
-          Back to the assistant
+          {t.errors.backToAssistant}
         </Link>
       </main>
     </div>

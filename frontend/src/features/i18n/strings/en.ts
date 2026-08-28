@@ -74,9 +74,20 @@ export const en = {
       heading: 'Language',
       lead: "The language of this app's buttons, menus and labels.",
       legend: 'Interface language',
-      scopeTitle: 'Answers stay in English',
+      /*
+       * This pair used to read "Answers stay in English", and it was true when
+       * it was written. It is not any more: the assistant replies in whatever
+       * language the question was asked in, and rule 10 now holds across
+       * languages — `app/rag/figures.py`.
+       *
+       * The distinction the copy has to carry is subtle and matters: this
+       * control sets the **interface** language, and the answer follows the
+       * **question**. Someone who sets Spanish here and then types in English
+       * gets an English answer, and should not be surprised by that.
+       */
+      scopeTitle: 'Answers follow your question, not this setting',
       scopeBody:
-        "SCASPA's verified information is published in English, and every figure in an answer is quoted exactly as it was published. Translating it would break that guarantee, so the assistant replies in English whichever language you choose here. Staff on the phone can help in other languages.",
+        "This changes the app's own buttons, menus and labels. The assistant replies in whatever language you write to it in — ask in Spanish and the answer comes back in Spanish, whichever language is chosen here. SCASPA's verified information is published in English, and every figure is quoted exactly as published, so amounts and times keep the form the source gave them. Staff on the phone can help in other languages.",
       saved: 'Language saved on this device.',
       storedNote: 'Stored on this device only. Nothing about your choice is sent to SCASPA.',
     },
@@ -165,6 +176,83 @@ export const en = {
       orgBody: 'The organisation, its four facilities, and how to reach each of them.',
       orgAction: 'About SCASPA',
     },
+  },
+
+  /*
+   * Navigation.
+   *
+   * The group labels and item labels only. The `href`s and icons stay in
+   * `Sidebar.tsx`, because a route is not a string a translator should be able
+   * to change — a mistranslated `/tariffs` is a 404, and it would be found by a
+   * user rather than by the build.
+   *
+   * "Pilot" is the product's name and is not translated, for the same reason
+   * "Port Zante" is not: it is what the thing is called.
+   */
+  nav: {
+    groups: {
+      askPilot: 'Ask Pilot',
+      operations: 'Operations',
+      help: 'Help',
+      tools: 'Tools',
+    },
+    items: {
+      chat: 'Chat',
+      vessels: 'Vessels',
+      flights: 'Flights',
+      tariffs: 'Tariffs',
+      cargo: 'Cargo',
+      contactScaspa: 'Contact SCASPA',
+      console: 'Console',
+    },
+  },
+
+  /* The frame every screen sits in: skip link, rails, drawer, sheet. */
+  shell: {
+    skipToConversation: 'Skip to the conversation',
+    openNavigation: 'Open navigation',
+    closeNavigation: 'Close navigation',
+    navigation: 'Navigation',
+    sections: 'Sections',
+    showSources: 'Show sources',
+    sources: 'Sources',
+    telephoneAuthority: 'Telephone the Authority',
+    aboutScaspa: 'About SCASPA',
+    accessibility: 'Accessibility',
+    /* The organisation's name is never translated; only "home" is a label. */
+    homeLink: 'SCASPA — St. Christopher Air and Sea Ports Authority, home',
+    search: 'Search',
+    searchLabel: "Search the navigation and this session's questions",
+    recordedQuestions: 'Recorded questions',
+    demonstrationProfile: 'Demonstration profile',
+    /*
+     * "Online" means the interface, not the server — `Sidebar.tsx` explains why
+     * the dot cannot claim more than that. Translations must not promise a
+     * connection either: "Conectado" and "En ligne" say the app is running, and
+     * neither reads as "the service is reachable".
+     */
+    online: 'Online',
+  },
+
+  sources: {
+    lead: 'Every factual claim shows where it came from and the date it was verified.',
+    emptyTitle: 'Nothing to show yet',
+    emptyBody:
+      'Citations appear here once an answer arrives. Each one links to the SCASPA page it came from.',
+    snapshotNote:
+      'Information is a snapshot, not a live feed. A date shown here is when that fact was last checked — not confirmation that it is still true today.',
+  },
+
+  errors: {
+    notFoundTitle: 'Page not found',
+    notFoundBody:
+      'We could not find that page. Check the address, or go back and ask the assistant.',
+    backToAssistant: 'Back to the assistant',
+    routeErrorTitle: 'Something went wrong on this page',
+    routeErrorBody: 'That is our fault, not yours. Starting a new conversation usually clears it.',
+    startNewConversation: 'Start a new conversation',
+    reloadPage: 'Reload the page',
+    reachDirectly: 'Or reach SCASPA directly',
   },
 };
 

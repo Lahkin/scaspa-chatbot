@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { cn } from '@/lib/cn';
 import { Icon } from '@/components/ui/Icon';
 import logoUrl from '@/assets/scaspa-logo.png';
+import { useStrings } from '@/features/i18n';
 
 /**
  * The Authority's header — seal, name, navigation, language, accessibility.
@@ -48,6 +49,7 @@ const NAV = [
 ] as const;
 
 export function ScaspaInstitutionalHeader() {
+  const t = useStrings();
   return (
     <nav
       aria-label="Main"
@@ -56,7 +58,7 @@ export function ScaspaInstitutionalHeader() {
       <Link
         to="/"
         className="flex min-h-touch shrink-0 items-center gap-2.5 rounded-sm"
-        aria-label="SCASPA — St. Christopher Air and Sea Ports Authority, home"
+        aria-label={t.shell.homeLink}
       >
         <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-neutral-0">
           <img src={logoUrl} alt="" width={32} height={32} className="size-8" />
@@ -116,7 +118,7 @@ export function ScaspaInstitutionalHeader() {
         <Link
           to="/settings"
           hash="accessibility"
-          aria-label="Accessibility"
+          aria-label={t.shell.accessibility}
           className="inline-flex size-touch-min items-center justify-center rounded-full border border-border text-ink-muted hover:text-ink"
         >
           <Icon name="user" size={18} aria-hidden="true" />

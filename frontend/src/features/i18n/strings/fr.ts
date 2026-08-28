@@ -71,10 +71,10 @@ export const fr: Strings = {
       heading: 'Langue',
       lead: 'La langue des boutons, des menus et des libellés de cette application.',
       legend: 'Langue de l’interface',
-      scopeTitle: 'Les réponses restent en anglais',
+      scopeTitle: 'Les réponses suivent votre question, pas ce réglage',
       scopeBody:
-        'Les informations vérifiées de SCASPA sont publiées en anglais, et chaque chiffre d’une réponse est cité exactement tel qu’il a été publié. Les traduire romprait cette garantie' +
-        `${NB}: l’assistant répond donc en anglais quelle que soit la langue choisie ici. Le personnel peut vous aider par téléphone dans d’autres langues.`,
+        'Ce réglage change les boutons, les menus et les libellés de l’application. L’assistant répond dans la langue dans laquelle vous lui écrivez' +
+        `${NB}: posez la question en français et la réponse arrive en français, quelle que soit la langue choisie ici. Les informations vérifiées de SCASPA sont publiées en anglais et chaque chiffre est cité exactement tel qu’il a été publié, de sorte que les montants et les horaires gardent la forme que la source leur a donnée. Le personnel peut vous aider par téléphone dans d’autres langues.`,
       saved: 'Langue enregistrée sur cet appareil.',
       storedNote:
         'Enregistrée sur cet appareil uniquement. Rien concernant votre choix n’est transmis à SCASPA.',
@@ -171,5 +171,65 @@ export const fr: Strings = {
       orgBody: 'L’organisation, ses quatre installations et comment joindre chacune d’elles.',
       orgAction: 'À propos de SCASPA',
     },
+  },
+
+  nav: {
+    groups: {
+      askPilot: 'Interroger Pilot',
+      operations: 'Opérations',
+      help: 'Aide',
+      tools: 'Outils',
+    },
+    items: {
+      chat: 'Chat',
+      vessels: 'Navires',
+      flights: 'Vols',
+      tariffs: 'Tarifs',
+      cargo: 'Fret',
+      contactScaspa: 'Contacter SCASPA',
+      console: 'Console',
+    },
+  },
+
+  shell: {
+    skipToConversation: 'Aller à la conversation',
+    openNavigation: 'Ouvrir la navigation',
+    closeNavigation: 'Fermer la navigation',
+    navigation: 'Navigation',
+    sections: 'Sections',
+    showSources: 'Afficher les sources',
+    sources: 'Sources',
+    telephoneAuthority: "Téléphoner à l'Autorité",
+    aboutScaspa: 'À propos de SCASPA',
+    accessibility: 'Accessibilité',
+    homeLink: 'SCASPA — St. Christopher Air and Sea Ports Authority, accueil',
+    search: 'Rechercher',
+    searchLabel: 'Rechercher dans la navigation et les questions de cette session',
+    recordedQuestions: 'Questions enregistrées',
+    demonstrationProfile: 'Profil de démonstration',
+    /* Indique que l'application fonctionne, pas que le serveur répond. */
+    online: 'En ligne',
+  },
+
+  sources: {
+    lead: 'Chaque information indique son origine et la date à laquelle elle a été vérifiée.',
+    emptyTitle: 'Rien à afficher pour le moment',
+    emptyBody:
+      "Les sources apparaissent ici dès qu'une réponse arrive. Chacune renvoie à la page SCASPA dont elle provient.",
+    snapshotNote:
+      "L'information est un instantané, pas un flux en direct. La date indiquée ici est celle de la dernière vérification, et non la confirmation que le fait est toujours exact aujourd'hui.",
+  },
+
+  errors: {
+    notFoundTitle: 'Page introuvable',
+    notFoundBody:
+      "Nous n'avons pas trouvé cette page. Vérifiez l'adresse, ou revenez en arrière et interrogez l'assistant.",
+    backToAssistant: "Revenir à l'assistant",
+    routeErrorTitle: 'Un problème est survenu sur cette page',
+    routeErrorBody:
+      "L'erreur vient de nous, pas de vous. Démarrer une nouvelle conversation suffit généralement.",
+    startNewConversation: 'Démarrer une nouvelle conversation',
+    reloadPage: 'Recharger la page',
+    reachDirectly: 'Ou contactez directement SCASPA',
   },
 };

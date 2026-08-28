@@ -4,22 +4,30 @@
  * ## What a language choice here does, and what it deliberately does not do
  *
  * It translates **this application's own chrome** — navigation, buttons, the
- * settings page. It does **not** translate the assistant's answers, and it must
- * never look as though it might, for a reason that is a project rule rather than
- * a missing feature:
+ * operations screens, the settings page. It does **not** decide what language
+ * the assistant answers in, and the distinction is the thing `/settings` has to
+ * explain in words: **this control sets the interface; the answer follows the
+ * question.** Set Spanish here, type English, and the answer comes back English.
  *
- * - The knowledge base is English. `CLAUDE.md` rule 10 requires every money and
- *   time value in an answer to appear *verbatim* in a retrieved chunk, and rule 4
- *   forbids a citation the backend has not verified against that row. A
- *   translation layer between the chunk and the reader breaks both — "XCD 44.00"
- *   surviving translation is luck, not a guarantee.
- * - `voice/stt.py` pins `LANGUAGE_HINT = "en"`, so dictation is English too.
+ * ## What changed, and why the old reasoning is not the reasoning any more
  *
- * So the selector is honest about its scope, `/settings` says so in words next to
- * the control, and the conversation column carries an explicit `lang="en"` — see
- * `FullPageShell`. Without that attribute a screen reader set to Spanish reads an
- * English answer with Spanish phonemes, which is worse than not translating the
- * chrome at all.
+ * This used to say the answers were English *by rule*, because `CLAUDE.md`
+ * rule 10 requires every money and time value to appear verbatim in a retrieved
+ * chunk and a translation layer could not promise that.
+ *
+ * The premise was sound and the conclusion has moved. Nothing in
+ * `app/agent/prompts.py` ever pinned the answer's language, so the model always
+ * mirrored the question's — the rule was documentation of an intention, not of
+ * behaviour. What was actually missing was the enforcement: rule 10 was checked
+ * with English-shaped patterns, so a French answer's figures were not checked at
+ * all. `app/rag/figures.py` fixed that, and prompt rule 7 now states the
+ * behaviour instead of leaving it emergent.
+ *
+ * So the guarantee holds in every language, and the honest scope note is about
+ * *which input* chooses the language rather than about a restriction.
+ *
+ * `voice/stt.py` still pins `LANGUAGE_HINT = "en"`, so **dictation** is English
+ * only. That one is unchanged and is a real limit.
  *
  * ## Why these three
  *

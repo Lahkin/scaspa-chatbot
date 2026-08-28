@@ -5,6 +5,7 @@ import { HumanHelpCard } from '@/components/chat/HumanHelpCard';
 import { DataSourceCard } from '@/components/ops/DataSourceCard';
 import { ProvenanceBadge } from '@/components/ops/ProvenanceBadge';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { useStrings, type Strings } from '@/features/i18n';
 import type { DataSource, OperatorProfile } from '@/lib/types';
 
 /**
@@ -102,33 +103,45 @@ interface NavGroup {
  * Admin has no route in this build and therefore no entry — and, per §2.8,
  * nothing in the search returns it either.
  */
-const NAV_GROUPS: readonly NavGroup[] = [
-  {
-    label: 'Ask Pilot',
-    items: [{ label: 'Chat', href: '/chat', icon: 'sparkle' }],
-  },
-  {
-    label: 'Operations',
-    // The brief's order: Vessels, Flights, Tariffs, Cargo. Not alphabetical and
-    // not the order they were built in — it runs from the surfaces with live
-    // published data to the one that has none, which is also roughly the order
-    // a reader is likely to want them.
-    items: [
-      { label: 'Vessels', href: '/vessels', icon: 'ship' },
-      { label: 'Flights', href: '/flights', icon: 'plane' },
-      { label: 'Tariffs', href: '/tariffs', icon: 'receipt' },
-      { label: 'Cargo', href: '/cargo', icon: 'anchor' },
-    ],
-  },
-  {
-    label: 'Help',
-    items: [{ label: 'Contact SCASPA', href: '/support', icon: 'headset' }],
-  },
-  {
-    label: 'Tools',
-    items: [{ label: 'Console', href: '/ops', icon: 'chart' }],
-  },
-];
+/*
+ * Built from the active dictionary rather than declared as a constant, because
+ * the labels are the one part of this list a reader sees. The `href`s and icons
+ * stay here and are never translated: a route is not copy, and a mistranslated
+ * `/tariffs` is a 404 found by a user rather than by the build.
+ *
+ * The search below filters on `label`, so it filters on the *translated* label —
+ * which is what a reader typing "Buques" needs, and is why this is derived per
+ * locale rather than matched against a fixed English list.
+ */
+function navGroups(t: Strings): readonly NavGroup[] {
+  return [
+    {
+      label: t.nav.groups.askPilot,
+      items: [{ label: t.nav.items.chat, href: '/chat', icon: 'sparkle' }],
+    },
+    {
+      label: t.nav.groups.operations,
+      // The brief's order: Vessels, Flights, Tariffs, Cargo. Not alphabetical and
+      // not the order they were built in — it runs from the surfaces with live
+      // published data to the one that has none, which is also roughly the order
+      // a reader is likely to want them.
+      items: [
+        { label: t.nav.items.vessels, href: '/vessels', icon: 'ship' },
+        { label: t.nav.items.flights, href: '/flights', icon: 'plane' },
+        { label: t.nav.items.tariffs, href: '/tariffs', icon: 'receipt' },
+        { label: t.nav.items.cargo, href: '/cargo', icon: 'anchor' },
+      ],
+    },
+    {
+      label: t.nav.groups.help,
+      items: [{ label: t.nav.items.contactScaspa, href: '/support', icon: 'headset' }],
+    },
+    {
+      label: t.nav.groups.tools,
+      items: [{ label: t.nav.items.console, href: '/ops', icon: 'chart' }],
+    },
+  ];
+}
 
 interface SidebarProps {
   /** Re-ask a recorded question. It sends; it does not restore anything. */
@@ -174,6 +187,7 @@ export function Sidebar({
   onNavigate,
   onToggleCollapsed,
 }: SidebarProps) {
+  const t = useStrings();
   const navId = useId();
   const searchId = useId();
   const [query, setQuery] = useState('');
@@ -190,13 +204,15 @@ export function Sidebar({
    */
   const groups = useMemo(
     () =>
-      NAV_GROUPS.map((group) => ({
-        ...group,
-        items: term
-          ? group.items.filter((item) => item.label.toLowerCase().includes(term))
-          : group.items,
-      })).filter((group) => group.items.length > 0),
-    [term]
+      navGroups(t)
+        .map((group) => ({
+          ...group,
+          items: term
+            ? group.items.filter((item) => item.label.toLowerCase().includes(term))
+            : group.items,
+        }))
+        .filter((group) => group.items.length > 0),
+    [term, t]
   );
 
   const questions = term
@@ -251,13 +267,13 @@ export function Sidebar({
       */}
       <p className="flex shrink-0 items-center gap-2 px-0.5 pb-4 text-label text-ink-muted">
         <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-positive" />
-        Online
+        {t.shell.online}
       </p>
 
       {/* 2 ── search ────────────────────────────────────────────────────────── */}
       <div className="shrink-0">
         <label htmlFor={searchId} className="sr-only">
-          Search the navigation and this session&rsquo;s questions
+          {t.shell.searchLabel}
         </label>
         <div className="flex h-9 items-center gap-2 rounded-input border border-border bg-surface-3 px-2.5">
           <Icon name="search" size={16} className="text-ink-muted" />
@@ -266,14 +282,14 @@ export function Sidebar({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search"
+            placeholder={t.shell.search}
             className="min-w-0 flex-1 bg-transparent text-label text-ink outline-none"
           />
         </div>
       </div>
 
       {/* 3 ── the destinations ──────────────────────────────────────────────── */}
-      <nav id={navId} aria-label="Sections" className="shrink-0">
+      <nav id={navId} aria-label={t.shell.sections} className="shrink-0">
         {groups.map((group) => (
           <div key={group.label}>
             <h2 className="px-2 pt-5 pb-2 text-micro font-semibold tracking-eyebrow text-ink-muted uppercase">
@@ -335,7 +351,7 @@ export function Sidebar({
         */}
         {questions.length > 0 ? (
           <h2 className="shrink-0 px-2 pt-5 pb-2 text-micro font-semibold tracking-eyebrow text-ink-muted uppercase">
-            Recorded questions
+            {t.shell.recordedQuestions}
           </h2>
         ) : null}
         {/*
@@ -402,6 +418,7 @@ export function Sidebar({
  * sign-out, no avatar image and no name that belongs to anybody.
  */
 function DemoProfileRow({ profile }: { profile: OperatorProfile }) {
+  const t = useStrings();
   return (
     <div className="mt-3 flex shrink-0 items-center gap-2.5 border-t border-border pt-3">
       <span
@@ -415,7 +432,7 @@ function DemoProfileRow({ profile }: { profile: OperatorProfile }) {
           {profile.display_name}
         </span>
         <span className="block truncate text-micro font-medium text-ink-muted">
-          Demonstration profile
+          {t.shell.demonstrationProfile}
         </span>
       </span>
       <ProvenanceBadge kind="demo" short />

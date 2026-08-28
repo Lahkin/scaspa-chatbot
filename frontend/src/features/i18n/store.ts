@@ -24,10 +24,12 @@ import { clearPrefs, readPrefs, writePrefs } from './prefs';
  * Spanish interface read aloud in an English accent, which is close to unusable
  * and is invisible to anyone testing with their eyes.
  *
- * The flip side is the reason `FullPageShell` marks the conversation column
- * `lang="en"` explicitly: the answers stay English, so under a Spanish root they
- * would be mispronounced in the other direction. Both attributes are needed, and
- * neither is optional.
+ * `FullPageShell` used to mark `<main>` as `lang="en"` for the opposite reason —
+ * the answers were English and would be mispronounced under a Spanish root. That
+ * attribute is gone: the assistant answers in the language it was asked in, and
+ * `<main>` wraps the operations screens too, so pinning English there would
+ * mispronounce all of the translated chrome on every screen. This attribute is
+ * now the only one, and it is the right one.
  */
 
 function initial(): LocaleCode {
