@@ -1106,6 +1106,46 @@ the port.
 
 Applies published rates to the quantities you send and totals them.
 
+### The request
+
+Every field is optional except in the sense that sending none of them prices
+nothing. `category` selects which of §5.10's two forms ran, and the fields the
+other form collects are ignored rather than rejected.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `category` | `"vessel_dues" \| "cargo"` | Default `"vessel_dues"`. **Narrower than `TariffRow.category`** — see below |
+| `vessel_type` | `string \| null` | `vessel_dues` only. `"commercial"` or `"cruise"`, matched case-insensitively after trimming |
+| `length_ft` | `number \| null` | `vessel_dues` only. 0–2000 |
+| `stay_days` | `integer \| null` | `vessel_dues` only. 0–365 |
+| `container_size` | `"20ft" \| "40ft" \| null` | `cargo` only. Anything other than `"40ft"` prices as 20 ft |
+| `units` | `integer \| null` | `cargo` only. 0–10,000 |
+| `storage_days` | `integer \| null` | `cargo` only. 0–365 |
+| `currency` | `string` | `"XCD"` only; anything else is a **422** |
+
+**`category` accepts two values, not the schedule's six.** `TariffRow.category`
+divides the published schedule into six groups and `GET /api/tariffs?category=`
+filters on all of them. This endpoint prices two. Sending `storage`,
+`passenger`, `security` or `aviation` is a **422** naming the two that work —
+they are valid on the filter, so "unknown" alone would send you hunting for a
+typo you did not make.
+
+It used to be a 200 with no line items, a `0.00` total and an empty `unpriced`:
+a quote in which nothing said the category could not be priced. If you are
+holding an older client, that is what changed.
+
+**`vessel_type` picks between two published dockage rates** — `DCK-FT` for a
+commercial vessel, `DCK-CR` for a cruise vessel — so the total genuinely moves
+with it. **Absent or unrecognised prices as commercial**, which is the
+schedule's own rate for a vessel it does not single out rather than a guess or a
+refusal. Note the consequence: `"Cruise vessel"` is not `"cruise"` and is priced
+as commercial. Read `line_items[].code` to see which rate was applied.
+
+**A zero quantity omits the line rather than pricing it at zero.** `units: 0`
+returns no cargo lines at all; `length_ft` or `stay_days` of 0 omits dockage
+while still returning pilotage and harbour dues, which are charged per entry and
+per call rather than per foot or per day.
+
 > ### The total is derived, and it must never appear without its disclaimer
 >
 > Every `rate` in `line_items` is a published SCASPA figure, quoted exactly.

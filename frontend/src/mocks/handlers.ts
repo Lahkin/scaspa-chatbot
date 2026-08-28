@@ -797,55 +797,104 @@ export const handlers = [
   // The arithmetic is real, against the mock rates above, because a quote whose
   // lines do not add up to its total is precisely the bug this screen must never
   // ship — and a mock that returned a hardcoded total could not catch it.
+  //
+  // ── IT PRICED CODES THAT NO LONGER EXISTED ─────────────────────────────────
+  //
+  // This handler looked up `SMP-010`, `SMP-011`, `SMP-012` and `SMP-013` long
+  // after the schedule was rewritten to the design's convention. `rateOf` ends
+  // in `?? 0`, so every line came back at **rate 0, amount 0** and the card
+  // totalled **XCD 0.00** — which board 18 names exactly: *"'XCD 0.00' would
+  // read as free."* Under mocks the calculator said the charge was nothing.
+  //
+  // Nothing failed. The one test that drives this form asserted the heading,
+  // the subtotal row and the disclaimer — the card's structure — and never a
+  // figure, so zeros satisfied it. It does assert a figure now.
+  //
+  // The lookup is by the same codes `app/ops/tariffs.py` uses, taken from the
+  // same table the table handler serves, so a code renamed in one place breaks
+  // this loudly rather than silently zeroing it.
   http.post(`${base}/api/tariffs/quote`, async ({ request }) => {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-    const units = Number(body['units'] ?? 0);
-    const storageDays = Number(body['storage_days'] ?? 0);
-    const size = body['container_size'] === '40ft' ? 'SMP-011' : 'SMP-010';
+    const category = body['category'] === 'cargo' ? 'cargo' : 'vessel_dues';
 
-    const rateOf = (code: string) => MOCK_TARIFFS.find((t) => t.code === code)?.amount ?? 0;
     const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
+    // Invariant units take no plural: "220 ft", never "220 fts". Mirrors
+    // `_plural` and `_INVARIANT_UNITS` in `app/ops/tariffs.py`.
+    const plural = (count: number, singular: string) =>
+      singular === 'ft' ? `${count} ${singular}` : `${count} ${singular}${count === 1 ? '' : 's'}`;
+
+    // Rows come from MOCK_TARIFFS rather than being restated, so a rate can
+    // never disagree with the table the user just read on the same screen.
+    const line = (code: string, quantity: number, quantityLabel: string) => {
+      const row = MOCK_TARIFFS.find((t) => t.code === code);
+      if (!row) return null;
+      return {
+        code: row.code,
+        label: row.service,
+        basis: row.basis,
+        rate: row.amount,
+        quantity,
+        quantity_label: quantityLabel,
+        amount: round(row.amount * quantity),
+        kb_id: row.kb_id ?? null,
+      };
+    };
+
     const lines = [];
-    if (units > 0) {
-      lines.push({
-        code: size,
-        label: MOCK_TARIFFS.find((t) => t.code === size)?.service ?? '',
-        basis: 'per container',
-        rate: rateOf(size),
-        quantity: units,
-        quantity_label: `${units} container${units === 1 ? '' : 's'}`,
-        amount: round(rateOf(size) * units),
-        kb_id: null,
-      });
-      lines.push({
-        code: 'SMP-012',
-        label: 'Sample container handling',
-        basis: 'per container',
-        rate: rateOf('SMP-012'),
-        quantity: units,
-        quantity_label: `${units} container${units === 1 ? '' : 's'}`,
-        amount: round(rateOf('SMP-012') * units),
-        kb_id: null,
-      });
-      if (storageDays > 0) {
-        lines.push({
-          code: 'SMP-013',
-          label: 'Sample container storage',
-          basis: 'per container per day',
-          rate: rateOf('SMP-013'),
-          quantity: units * storageDays,
-          quantity_label: `${units} container${units === 1 ? '' : 's'} × ${storageDays} day${storageDays === 1 ? '' : 's'}`,
-          amount: round(rateOf('SMP-013') * units * storageDays),
-          kb_id: null,
-        });
+
+    if (category === 'vessel_dues') {
+      const lengthFt = Number(body['length_ft'] ?? 0);
+      const stayDays = Number(body['stay_days'] ?? 0);
+      // The schedule publishes two dockage rates that differ only by vessel
+      // type, and the total genuinely moves between them.
+      //
+      // Narrowed before stringifying, like the ticket handler below: a client
+      // sending `vessel_type: {}` would otherwise be compared as
+      // "[object Object]" and quietly priced as commercial.
+      const vesselType = body['vessel_type'];
+      const dockage =
+        typeof vesselType === 'string' && vesselType.trim().toLowerCase() === 'cruise'
+          ? 'DCK-CR'
+          : 'DCK-FT';
+      if (lengthFt > 0 && stayDays > 0) {
+        lines.push(
+          line(
+            dockage,
+            lengthFt * stayDays,
+            `${plural(lengthFt, 'ft')} × ${plural(stayDays, 'day')}`
+          )
+        );
+      }
+      // Charged per entry and per call, so they survive a zero length or stay.
+      lines.push(line('PIL-E', 1, '1 entry'));
+      lines.push(line('HBR-C', 1, '1 call'));
+    }
+
+    if (category === 'cargo') {
+      const units = Number(body['units'] ?? 0);
+      const storageDays = Number(body['storage_days'] ?? 0);
+      if (units > 0) {
+        const wharfage = body['container_size'] === '40ft' ? 'WHF-40' : 'WHF-20';
+        lines.push(line(wharfage, units, plural(units, 'container')));
+        lines.push(line('HND-C', units, plural(units, 'container')));
+        if (storageDays > 0) {
+          lines.push(
+            line(
+              'STO-D',
+              units * storageDays,
+              `${plural(units, 'container')} × ${plural(storageDays, 'day')}`
+            )
+          );
+        }
       }
     }
 
-    const subtotal = round(lines.reduce((sum, line) => sum + line.amount, 0));
+    const priced = lines.filter((l): l is NonNullable<typeof l> => l !== null);
+    const subtotal = round(priced.reduce((sum, l) => sum + l.amount, 0));
 
     return HttpResponse.json({
-      line_items: lines,
+      line_items: priced,
       // E-8: the field was omitted entirely and survived only because zod
       // defaults it to `[]`. The backend always sends the key, so a mock that
       // does not cannot exercise §5.11's "Total so far" rendering at all —

@@ -157,6 +157,20 @@ def _friendly_validation_message(exc: RequestValidationError) -> str:
             # A client bug rather than a user's mistake, so the sentence is aimed
             # at whoever is integrating. It never reaches a traveller: the UI
             # picks the category, the user never types one.
+            #
+            # Body and query are told apart because the accepted sets differ.
+            # `GET /api/tariffs?category=` takes all six groups the schedule is
+            # divided into; `POST /api/tariffs/quote` takes the two the
+            # calculator can price. An integrator who sent `storage` to the
+            # quote sent a value that is valid on the other endpoint, so
+            # "unknown" alone would send them looking for a typo they did not
+            # make. Naming the two leaks nothing: both are published contract
+            # values.
+            if field and field[0] == "body":
+                return (
+                    "That quote asked for a category the calculator cannot "
+                    "price. Send 'vessel_dues' or 'cargo'."
+                )
             return "That request used an unknown category filter."
         if "message" in field:
             kind = error.get("type", "")

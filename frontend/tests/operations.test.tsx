@@ -1549,6 +1549,22 @@ describe('the tariffs screen', () => {
     expect(screen.getByText('Subtotal')).toBeInTheDocument();
     // Last child, never collapsed, never truncated.
     expect(screen.getByRole('note')).toHaveTextContent(/not an invoice/);
+
+    /*
+     * And a figure that means something.
+     *
+     * This assertion is the point of the test now. Everything above passed
+     * while the mock priced four codes that had been renamed out of the table:
+     * `rateOf` fell through to `?? 0`, every line came back at 0.00 and the
+     * card totalled **XCD 0.00** — board 18's "would read as free" — with the
+     * heading, the subtotal row and the disclaimer all present and correct.
+     *
+     * Structure is not a total. 2 × 20 ft wharfage at 22.22 plus handling at
+     * 33.33 is 111.10, and asserting the arithmetic is what makes this mock
+     * worth having over a hardcoded response.
+     */
+    expect(screen.getByText('XCD 111.10')).toBeInTheDocument();
+    expect(screen.queryByText('XCD 0.00')).toBeNull();
   });
 });
 

@@ -832,12 +832,23 @@ class OperatorProfileResponse(BaseModel):
 # would leave R. L. Bradshaw — one of the four facilities this product is about —
 # with no fees in the table at all.
 #
-# ## This value does two jobs
+# ## This value did two jobs, and they have been split
 #
-# On `TariffRow` it is a chip. On `TariffQuoteRequest` it is the discriminator
-# `build_quote` branches on to decide which calculator ran. They share a type
-# because the sets happen to coincide; if they ever diverge, split them rather
-# than widening this.
+# On `TariffRow` it is a chip: the six groups the published schedule is divided
+# into. It was also the discriminator on `TariffQuoteRequest`, sharing this type
+# on the grounds that the sets coincided, with the instruction: *if they ever
+# diverge, split them rather than widening this.*
+#
+# **They diverged.** `build_quote` branches on exactly two of these six —
+# `vessel_dues` and `cargo`, §5.10's two forms — and prices nothing for the other
+# four. Sharing the type meant `category="storage"` was accepted and returned a
+# 200 carrying zero line items, a `0.00` total and an EMPTY `unpriced` array: a
+# well-formed quote in which nothing anywhere says the category cannot be priced.
+# That is the silent-zero failure `app/ops/tariffs.py` warns about in its own
+# header, minus even the `unpriced` clue that warning assumes.
+#
+# So the split is taken, as instructed. `TariffQuoteCategory` below is what the
+# calculator can price; this type stays what the schedule is divided into.
 TariffCategory = Literal[
     "cargo",
     "vessel_dues",
@@ -846,6 +857,17 @@ TariffCategory = Literal[
     "security",
     "aviation",
 ]
+
+#: What `POST /api/tariffs/quote` can actually price — §5.10's two forms.
+#:
+#: Deliberately narrower than `TariffCategory`. A category the calculator has no
+#: branch for is now a 422 at the boundary naming both accepted values, which is
+#: the same treatment `GET /api/tariffs` already gives an unknown category. An
+#: endpoint that answers "0.00" to a question it cannot price is worse than one
+#: that says it cannot: the zero looks like an answer.
+#:
+#: Widen this only alongside a `build_quote` branch that prices the new value.
+TariffQuoteCategory = Literal["vessel_dues", "cargo"]
 
 
 class TariffRow(BaseModel):
@@ -893,7 +915,11 @@ class TariffQuoteRequest(BaseModel):
     # The discriminator `build_quote` branches on: which of §5.10's two forms the
     # user filled in. `vessel_dues` is the maritime calculator — dockage,
     # pilotage and harbour dues.
-    category: TariffCategory = Field(default="vessel_dues")
+    #
+    # `TariffQuoteCategory`, not `TariffCategory`: only these two can be priced,
+    # and the other four schedule categories are refused here rather than
+    # answered with a zero. See the note on the type.
+    category: TariffQuoteCategory = Field(default="vessel_dues")
     vessel_type: str | None = Field(default=None)
     length_ft: float | None = Field(default=None, ge=0, le=2000)
     stay_days: int | None = Field(default=None, ge=0, le=365)

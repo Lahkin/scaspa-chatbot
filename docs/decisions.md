@@ -4592,3 +4592,85 @@ After refreshing the working tree: 863 frontend tests, typecheck, lint and
 production build all clean; 685 backend tests with ruff clean and 96 files
 already formatted. The index is byte-identical to before this change apart from
 the new file itself.
+
+---
+
+## 0050 — The quote endpoint stops answering "0.00" to questions it cannot price
+
+**Status:** accepted. Splits `TariffCategory`, exactly as that type's own comment
+instructed. Found by verifying board 18 end to end rather than by a failing test.
+
+### Two ways to render a total of nothing
+
+Board 18 was built, shipped and never driven end to end. Doing that found two
+defects that share a shape: **a complete-looking quote whose every figure is
+zero**, with nothing anywhere saying why.
+
+#### 1. Four of six categories were accepted and priced nothing
+
+`TariffQuoteRequest.category` was typed `TariffCategory` — the six groups the
+published schedule is divided into. `build_quote` has arithmetic for two of
+them, `vessel_dues` and `cargo`, which are §5.10's two forms.
+
+So `category="storage"` returned **200** with no line items, a `0.00` total, and
+an empty `unpriced`. That last part is what makes it dangerous: `unpriced` is
+the field that exists to say a charge was dropped, and it was empty, because
+nothing *was* dropped — there was never a branch. `app/ops/tariffs.py` warns in
+its own header about the silent-zero shape; this was that shape with the one
+clue the warning assumes already removed.
+
+The type carried the answer. Its comment read: *"They share a type because the
+sets happen to coincide; if they ever diverge, split them rather than widening
+this."* They had diverged and nobody noticed, because divergence here is not a
+type error — it is an endpoint quietly answering a question it cannot answer.
+
+`TariffQuoteCategory = Literal["vessel_dues", "cargo"]` is the split. The four
+others are a 422 naming both accepted values, which matters because all six are
+valid on `GET /api/tariffs?category=`: an integrator told only "unknown" would
+hunt for a typo they did not make.
+
+#### 2. The mock priced four codes that no longer existed
+
+`src/mocks/handlers.ts` looked up `SMP-010`, `SMP-011`, `SMP-012` and `SMP-013`
+long after T-11 rewrote the schedule to the design's convention. Its `rateOf`
+ends in `?? 0`. So every line came back at **rate 0, amount 0** and the card
+totalled **XCD 0.00** — which board 18 names precisely: *"'XCD 0.00' would read
+as free."* Under mocks, the calculator said the charge was nothing.
+
+The mock's own comment says the arithmetic is real *"because a quote whose lines
+do not add up to its total is precisely the bug this screen must never ship — and
+a mock that returned a hardcoded total could not catch it."* It was right about
+the danger and was defeated by a rename.
+
+### Why nothing failed
+
+The test that drives this form asserted the heading, the subtotal row and the
+disclaimer — the card's **structure** — and never a figure. Zeros satisfy every
+one of those. `62c633b` mirrored the fixtures into `MOCK_TARIFFS` and the table
+handler; the quote handler was not part of "the table" and was missed.
+
+**Structure is not a total.** The test now asserts `XCD 111.10` for 2 × 20 ft
+wharfage plus handling, verified by renaming a code out of the table and
+watching it fail. The handler looks rates up in `MOCK_TARIFFS` by the same codes
+`app/ops/tariffs.py` uses, so the next rename breaks it loudly.
+
+### What was checked and found correct
+
+Worth recording, because the board is otherwise sound and a reader of this entry
+should not conclude otherwise: 30 codes identical across backend and frontend
+with identical amounts; every authored amount repeated-digit per 0032; all eight
+calculator constants resolving to published rows; cargo and vessel-dues
+arithmetic summing exactly to their printed totals; `vessel_type` genuinely
+moving the total between `DCK-FT` and `DCK-CR`; zero-quantity omitting a line
+rather than pricing it at zero; server-side filters, whole-table category chips
+and pagination all behaving as `api-contract.md` describes.
+
+### The consequence that is not a bug
+
+`vessel_type` is matched case-insensitively against `"commercial"` and
+`"cruise"`, and **anything unrecognised prices as commercial** — the schedule's
+own rate for a vessel it does not single out. That is deliberate and tested
+(`dockage("submarine")`). It does mean `"Cruise vessel"` — the *label* the select
+shows — is priced as commercial, which is how this verification pass first went
+wrong. Left as it is, and documented: the request contract had no field table at
+all, which is the actual reason a wrong value was sent.

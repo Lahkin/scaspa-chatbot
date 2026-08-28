@@ -8,6 +8,8 @@ The safety-critical assertions here are not about shapes. They are:
 * the sample data cannot be mistaken for real SCASPA information.
 """
 
+from typing import get_args
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -44,7 +46,7 @@ from app.ops.tariffs import (
     build_quote,
     total_of,
 )
-from app.schemas import DataSource, TariffQuoteRequest
+from app.schemas import DataSource, TariffCategory, TariffQuoteCategory, TariffQuoteRequest
 
 
 def _client(settings: Settings, source) -> TestClient:  # noqa: ANN001
@@ -645,6 +647,51 @@ def test_vessel_type_selects_the_published_dockage_rate(fixture_api: TestClient)
     # vessel it does not single out, rather than a guess or a refusal.
     assert dockage(None)["code"] == DOCKAGE_CODE
     assert dockage("submarine")["code"] == DOCKAGE_CODE
+
+
+def test_a_category_the_calculator_cannot_price_is_refused(fixture_api: TestClient) -> None:
+    """A zero total is not an answer to a question the calculator cannot ask.
+
+    The schedule is divided into six categories and `build_quote` has arithmetic
+    for two. Before the types were split, the other four were accepted and came
+    back as a 200 with no line items, a `0.00` total and — the part that makes
+    it dangerous — an EMPTY `unpriced` array. Nothing in that response says the
+    category cannot be priced, so a client renders a complete-looking quote for
+    nothing at all.
+
+    `app/ops/tariffs.py`'s own header warns about the silent-zero shape; this
+    was that shape without even the `unpriced` clue the warning assumes.
+    """
+    priceable = {"vessel_dues", "cargo"}
+    body = {"length_ft": 100, "stay_days": 2, "container_size": "40ft", "units": 12}
+
+    for category in ("storage", "passenger", "security", "aviation"):
+        assert category not in priceable
+        response = fixture_api.post("/api/tariffs/quote", json={**body, "category": category})
+        assert response.status_code == 422, category
+        error = response.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        # Named, because every one of these is valid on `GET /api/tariffs`. An
+        # integrator told only "unknown" would hunt for a typo they did not make.
+        assert "vessel_dues" in error["message"] and "cargo" in error["message"]
+
+    for category in sorted(priceable):
+        ok = fixture_api.post("/api/tariffs/quote", json={**body, "category": category})
+        assert ok.status_code == 200, category
+        assert ok.json()["line_items"], f"{category} priced nothing"
+
+
+def test_the_two_quote_categories_are_the_ones_build_quote_branches_on() -> None:
+    """The narrowed type and the arithmetic are one change, like the codes.
+
+    `TariffQuoteCategory` exists to stop the endpoint accepting what it cannot
+    price. Widen it without adding a `build_quote` branch and the silent zero is
+    back, wearing a type that says it should not be.
+    """
+    assert set(get_args(TariffQuoteCategory)) == {"vessel_dues", "cargo"}
+    # Every quote category must be a real schedule category too — the narrow set
+    # is a subset of the chips, never a parallel vocabulary.
+    assert set(get_args(TariffQuoteCategory)) <= set(get_args(TariffCategory))
 
 
 def test_the_offered_vessel_types_are_the_ones_the_schedule_prices() -> None:
