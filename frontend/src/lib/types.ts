@@ -858,6 +858,15 @@ export interface OperatorProfileResponse {
 export type TariffCategory =
   'cargo' | 'vessel_dues' | 'storage' | 'passenger' | 'security' | 'aviation';
 
+/**
+ * What `POST /api/tariffs/quote` can price — §5.10's two forms.
+ *
+ * Narrower than `TariffCategory` on purpose. The schedule is divided into six
+ * groups; the calculator has arithmetic for two. Mirrors `TariffQuoteCategory`
+ * in `app/schemas.py`, where the backend refuses the other four.
+ */
+export type TariffQuoteCategory = 'vessel_dues' | 'cargo';
+
 export interface TariffRow {
   code: string;
   service: string;
@@ -890,7 +899,15 @@ export interface TariffTableResponse {
 // ── The fee calculator ───────────────────────────────────────────────────────
 
 export interface TariffQuoteRequest {
-  category: TariffCategory;
+  /**
+   * Only the two the calculator prices, not all six of `TariffCategory`.
+   *
+   * The schedule is divided into six groups; `build_quote` has a branch for two
+   * of them. Sending one of the other four used to return a 200 with no lines
+   * and a `0.00` total — a well-formed quote saying nothing was priceable. It
+   * is a 422 now, and this type is why the compiler catches it first.
+   */
+  category: TariffQuoteCategory;
   vessel_type?: string | null;
   length_ft?: number | null;
   stay_days?: number | null;
