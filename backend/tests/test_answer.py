@@ -320,9 +320,32 @@ def test_invented_fee_is_caught() -> None:
 
 
 def test_reformatted_time_is_caught() -> None:
+    """A time whose **value** changed is caught. Notation alone is not a change.
+
+    This assertion moved, deliberately, and the reason is worth stating.
+
+    It used to require `4:04` to be flagged against a row reading `04:04` — a
+    dropped leading zero, which is the same instant written two ways. That was
+    inconsistent with the principle the grounding layer states in its own
+    comments: *"`12,407,059` and `12407059` are the same number; refusing one
+    because the row spells it the other way would suppress correct answers,
+    which is its own failure"*, and, explicitly, *"Drop a leading zero on a
+    time: `04:04` vs `4:04`"*. That layer only implemented the equivalence in
+    one direction, so the two checks disagreed about the same pair.
+
+    `app.rag.figures` settles it: notation is normalised, value never is. So the
+    leading zero passes, and every rewrite that moves the actual time — a wrong
+    hour, a lost meridiem, a loose rounding — still fails, as asserted below.
+    """
     chunks = [chunk("kb-007", text="Answer: Placeholder departures at 04:04 and 16:16.")]
 
-    assert find_unverified_figures("It leaves at 4:04 [kb-007].", chunks) == ["4:04"]
+    # Same instant, one leading zero apart.
+    assert find_unverified_figures("It leaves at 4:04 [kb-007].", chunks) == []
+
+    # A different instant, however plausibly written.
+    assert find_unverified_figures("It leaves at 4:40 [kb-007].", chunks) == ["4:40"]
+    assert find_unverified_figures("It leaves at 4:04 pm [kb-007].", chunks) == ["4:04 pm"]
+    assert find_unverified_figures("It leaves around 5 am [kb-007].", chunks) == ["5 am"]
 
 
 def test_unverified_figure_marks_the_answer_ungrounded(indexed, fake_embeddings, caplog) -> None:

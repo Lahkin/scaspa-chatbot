@@ -50,6 +50,7 @@ from app.agent.prompts import (
     render_system_prompt,
 )
 from app.config import Settings, get_settings
+from app.rag.figures import LOCALISED_CLOCK, equivalent_forms, parse_clock
 from app.rag.grounding import check_numbers
 from app.rag.retriever import RetrievedChunk
 from app.schemas import CardRequest, ChartSpec
@@ -71,7 +72,26 @@ MONEY_PATTERN = re.compile(
     r"|\b\d[\d,]*(?:\.\d{1,2})?\s?(?:XCD|USD|EC dollars?|dollars?)\b",
     re.IGNORECASE,
 )
-TIME_PATTERN = re.compile(r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s?(?:a\.?m\.?|p\.?m\.?)\b", re.IGNORECASE)
+# The meridiem-bearing form is listed FIRST, and the order is the whole point.
+# Alternation takes the first branch that matches at a position, so with
+# `\b\d{1,2}:\d{2}\b` leading, "5:00 pm" was extracted as "5:00" and the "pm"
+# was left behind — the check then compared "5:00" against a row reading
+# "5:00 am" and found it. A twelve-hour error, the difference between catching a
+# ferry and missing it by half a day, passed silently in English.
+TIME_PATTERN = re.compile(
+    r"\b\d{1,2}(?::\d{2})?\s?(?:a\.?m\.?|p\.?m\.?)\b|\b\d{1,2}:\d{2}\b",
+    re.IGNORECASE,
+)
+
+# Nothing in `app/agent/prompts.py` pins the answer's language, so the model
+# mirrors the question's and answers Spanish and French fluently. The two
+# patterns above do not follow it: `16 h` is `4:00 pm` and matches neither, so a
+# localised time was never extracted, never checked, and reported grounded.
+# `app.rag.figures` carries the measurement that found this.
+#
+# Matches that are not clocks are dropped in `find_unverified_figures`, so a
+# tariff basis reading `per ft per 24h` stays untouched.
+LOCALISED_TIME_PATTERN = LOCALISED_CLOCK
 
 
 class Citation(BaseModel):
@@ -335,9 +355,15 @@ def find_unverified_figures(
     haystack = "\n".join([*(evidence or []), *(chunk.text for chunk in chunks)])
     found: dict[str, None] = {}
 
-    for pattern in (MONEY_PATTERN, TIME_PATTERN):
+    for pattern in (MONEY_PATTERN, TIME_PATTERN, LOCALISED_TIME_PATTERN):
         for match in pattern.finditer(text):
             value = match.group(0).strip()
+            # `24h` in a tariff basis is not four o'clock. Anything the localised
+            # pattern catches that does not parse as a clock is not a figure and
+            # is dropped rather than flagged: widening the net must not start
+            # reporting correct English answers as unverified.
+            if pattern is LOCALISED_TIME_PATTERN and parse_clock(value) is None:
+                continue
             if not _appears_verbatim(value, haystack):
                 found.setdefault(value, None)
 
@@ -352,9 +378,17 @@ def _appears_verbatim(value: str, haystack: str) -> bool:
     Both are exactly the rounding and reformatting rule 10 exists to catch, and
     both would have passed. The lookarounds require the value not to be a
     fragment of a longer number.
+
+    Every written form of the **same** figure counts as verbatim: `16 h` where
+    the row says `4:00 pm`, `44,44` where it says `44.44`. Notation is
+    normalised; value never is. `XCD 44` against `XCD 44.44` still fails, which
+    is the rounding this exists to catch. See `app.rag.figures`.
     """
-    pattern = re.compile(rf"(?<![\d.]){re.escape(value)}(?![\d.]?\d)")
-    return bool(pattern.search(haystack))
+    for form in equivalent_forms(value):
+        pattern = re.compile(rf"(?<![\d.,]){re.escape(form)}(?![\d.,]?\d)", re.IGNORECASE)
+        if pattern.search(haystack):
+            return True
+    return False
 
 
 # The `label` and `snippet` on a citation come from the chunk's own text rather
