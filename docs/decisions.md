@@ -2681,6 +2681,13 @@ deliberately because each is a repository-wide call rather than a bug fix:
   fire, and the test dies at the outer one first. The number needs to be a pair,
   not a single value repeated.
 
+**Both were later done, and both had consequences worth recording.** The
+timeout pair was corrected (`testTimeout` 20s against a 5s `asyncUtilTimeout`)
+after the single-value ceiling was found to be silently capping *other* tests'
+waits too. The `.gitattributes` is 0049 — deferring it turned out to have a
+cost this entry could not have foreseen: a `format:check` nobody could read got
+replaced in practice by a narrowed glob, and the glob's blind spot broke `main`.
+
 ## 0034 — Two themes, one palette, and the brand that stopped being purple
 
 **Status:** accepted. Foundations for the Pilot identity (stage 1 of 5).
@@ -4499,3 +4506,89 @@ somebody to the wrong dashboard is the first mistake available.
 
 The key in `backend/.env` (gitignored), and a voice id chosen from the account.
 Nothing else.
+
+---
+
+## 0049 — `.gitattributes`, so the formatter says the same thing on every machine
+
+**Status:** accepted. Closes a finding recorded twice and deferred twice —
+`decisions.md` 0033 ("what this does not cover") and `found-during-build.md`
+item 5.
+
+### The gate was too noisy to read, so it stopped being read
+
+Prettier is configured `endOfLine: "lf"`. CI runs `prettier --check .` on Linux,
+where a checkout is LF, and it passes. On Windows `core.autocrlf` is `true`, so
+the same checkout arrives CRLF and Prettier objects to **almost every file in
+the repository** — including files nobody has touched.
+
+Both earlier records identified the cause correctly, named this exact fix, and
+left it, on the reasonable grounds that rewriting the working copy of every file
+is a repository-wide call rather than a bug fix.
+
+What neither anticipated is what happens to a person who has to work with a gate
+that reports 39 false positives. They stop running it, and substitute something
+narrower:
+
+```
+npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}"
+```
+
+That command is quiet and useful and checks **nothing outside those globs**. It
+went unnoticed for as long as every new file happened to be `.ts` or `.tsx`.
+
+### It broke `main`
+
+`frontend/vercel.json`, hand-written for the deployment work, was verified to be
+valid JSON and never checked for *formatted* JSON, because JSON is not in the
+glob. CI runs `prettier --check .`, which does see it. PR #21 merged with
+Frontend CI red and `main` stayed broken until #22.
+
+A workaround for a noisy guard is a guard with a hole in it, and the hole is
+exactly the shape of whatever the workaround excluded.
+
+### What this actually changes
+
+**Nothing in the repository's content**, which was measured rather than assumed
+before writing the file. Of 477 tracked files, 35 are binary and 4 are empty; of
+the 438 text files that remain, **436 are already stored LF** and the 2
+exceptions are excluded below.
+
+That measurement was itself got wrong twice before it was got right, which is
+the argument for `git ls-files --eol` over anything else: `file(1)` misreported
+these blobs, and a `grep` for a carriage return silently matched the letter `r`
+and reported the entire repository as CRLF. `git ls-files --eol` reports the
+index and the working tree as two separate columns, which is the distinction
+this whole entry turns on, and it is the only check used above.
+
+It changes what lands in a working tree on checkout. Windows developers see
+their files rewritten once. `npm run format:check` then passes locally, being
+the same command with the same result as CI, and there is no reason left for
+anybody to narrow a glob again.
+
+### The two exceptions, and a trap in getting there
+
+`data/knowledge/scaspa_kb_2026-07-31.csv` and `evals/history.csv` are the only
+CRLF blobs in the index. Both are spreadsheet exports, and both are marked
+`*.csv -text`: left exactly as they are, in the repository and in the working
+tree. Normalising them would be a content change to data files nobody asked to
+change, and every future export would flip them straight back — a diff that
+appears on its own, which is how people learn to ignore diffs.
+
+The trap: running `git add --renormalize .` after adding the rule staged three
+*different* CSVs — the LF ones. `-text` means "store the working tree bytes
+verbatim", and on a Windows working tree those bytes were CRLF, so renormalising
+would have **introduced** CRLF into the index for files that did not have it.
+Caught by reading `git status` rather than trusting the command, reverted, and
+the working tree refreshed with a checkout instead, which `-text` correctly
+leaves alone.
+
+### Verified
+
+`npm run format:check` — the exact CI command, previously flagging nearly every
+file — reports "All matched files use Prettier code style!".
+
+After refreshing the working tree: 863 frontend tests, typecheck, lint and
+production build all clean; 685 backend tests with ruff clean and 96 files
+already formatted. The index is byte-identical to before this change apart from
+the new file itself.
