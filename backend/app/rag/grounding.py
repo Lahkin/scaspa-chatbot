@@ -34,6 +34,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.agent.prompts import SCASPA_PHONE
+from app.rag.figures import LOCALISED_CLOCK, equivalent_forms, parse_clock
 from app.rag.retriever import RetrievedChunk
 
 logger = logging.getLogger(__name__)
@@ -61,9 +62,16 @@ DATE = re.compile(
 )
 PHONE = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
 
+# The `h` hour separator French and Spanish answers use — `16 h`, `16h30`. It is
+# listed separately from `TIME_OF_DAY` because it is the one pattern here that
+# can match something which is not a figure at all: a tariff basis reads
+# `per ft per 24h`. Matches that do not parse as a clock are discarded in
+# `check_numbers` rather than flagged, so the widened net cannot start replacing
+# correct English answers. See `app.rag.figures`.
 PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("currency", CURRENCY),
     ("time", TIME_OF_DAY),
+    ("time", LOCALISED_CLOCK),
     ("date", DATE),
     ("phone", PHONE),
 )
@@ -125,7 +133,11 @@ def _forms(value: str) -> list[str]:
     failure.
     """
     stripped = value.strip()
-    forms = {stripped}
+    # Same figure, other conventions: `16 h` is `4:00 pm`, `44,44` is `44.44`.
+    # Exact-value only — a rounded or converted figure produces no equivalence
+    # and still fails, which is the whole point of the check.
+    forms = set(equivalent_forms(stripped))
+    forms.add(stripped)
     without_commas = stripped.replace(",", "")
     forms.add(without_commas)
     # Normalise currency spacing: "XCD44.44" vs "XCD 44.44".
@@ -164,6 +176,12 @@ def check_numbers(
         for match in pattern.finditer(scannable):
             value = " ".join(match.group(0).split())
             if value in seen:
+                continue
+            # `24h` in a tariff basis is not four o'clock. Anything the localised
+            # pattern catches that does not parse as a clock is not a figure, and
+            # is dropped without being counted or flagged — a widened net must
+            # not start replacing answers it was never meant to see.
+            if pattern is LOCALISED_CLOCK and parse_clock(value) is None:
                 continue
             seen.add(value)
             result.checked += 1
