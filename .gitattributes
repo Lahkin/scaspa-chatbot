@@ -1,0 +1,57 @@
+# Line endings, so `format:check` gives the same answer on every machine.
+#
+# ── THE PROBLEM THIS SOLVES ─────────────────────────────────────────────────
+#
+# Prettier is configured with `endOfLine: "lf"`, and CI runs `prettier --check .`
+# on Linux, where a checkout is LF and it passes. On Windows, `core.autocrlf` is
+# commonly `true`, so the same checkout arrives as CRLF and prettier objects to
+# **almost every file in the repository**.
+#
+# The local signal is then so noisy it stops being read. This project has the
+# scar: `format:check` was written off as "unusable on Windows" and replaced in
+# practice by narrowed globs — `prettier --check "src/**/*.{ts,tsx}"` — which
+# quietly check nothing outside those globs. That went unnoticed until a
+# hand-written `vercel.json` broke `main`, because JSON was not in the glob.
+#
+# A guard that is too noisy to read is not a guard. This makes the working tree
+# LF everywhere, so `npm run format:check` locally is the same command with the
+# same result as CI, and there is no reason left to narrow anything.
+#
+# ── WHAT THIS DOES AND DOES NOT CHANGE ──────────────────────────────────────
+#
+# Nothing in the repository's content. Measured before writing this, with
+# `git ls-files --eol` rather than by inspection: of 477 tracked files, 35 are
+# binary and 4 are empty; of the 438 text files that remain, 436 are ALREADY
+# stored LF and the 2 exceptions are excluded below. This only changes what
+# lands in a *working tree* on checkout.
+#
+# Windows developers will see files rewritten once, on the next checkout or
+# after `git add --renormalize .`. That is the point, and it happens once.
+
+# Normalise text in the repository, and check it out with LF everywhere —
+# including on Windows, overriding core.autocrlf.
+* text=auto eol=lf
+
+# ── The two exceptions ──────────────────────────────────────────────────────
+#
+# The researchers' knowledge-base export and the eval history are written by a
+# spreadsheet, which produces CRLF. Both are stored that way today.
+#
+# `-text` leaves them exactly as they are, in the repository and in the working
+# tree. Normalising them would be a content change to data files nobody asked
+# to change, and every future export would flip them back — a diff that appears
+# on its own and teaches people to ignore diffs. Python's `csv` module reads
+# either without caring.
+*.csv -text
+
+# Binary, stated explicitly. `text=auto` detects these correctly on its own;
+# saying so removes the chance of a heuristic being wrong about a font or an
+# image and corrupting it with line-ending conversion.
+*.png binary
+*.webp binary
+*.woff2 binary
+*.woff binary
+*.ttf binary
+*.ico binary
+*.mp3 binary
+*.pdf binary

@@ -792,6 +792,19 @@ typecheck, lint and tests.
 Fix is `npx prettier --write .`, deliberately not run here: 39 files of
 whitespace churn would have buried the M1 diff.
 
+**Resolved — but the workaround outlived the finding, and that was the real
+cost.** The whitespace churn predicted here never happened: `git ls-files --eol`
+showed 436 of the 438 tracked text files were *already* stored LF, so the noise
+was purely a Windows **checkout** artefact, not a repository one.
+`.gitattributes` fixes it without touching content (decisions.md 0049).
+
+What this entry did not foresee is that a gate reporting 39 false positives does
+not get run — it gets replaced. It was replaced by
+`prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}"`, which is quiet,
+useful, and blind to every other file type. A hand-written `frontend/vercel.json`
+went in unformatted, CI ran `prettier --check .`, and `main` was red from PR #21
+until #22. `npm run format:check` now passes locally and means what CI means.
+
 ### 6. The payment portal survives in prose on two rows
 
 T-01b removes the _link_ — `source_url` is blanked on all five portal rows, and a

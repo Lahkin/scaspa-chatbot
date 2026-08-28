@@ -1,11 +1,17 @@
 name: Frontend CI
 
 on:
+  # `.gitattributes` is in this list because it decides the line endings of the
+  # checkout this job formats-checks. A change to it can turn `format:check`
+  # red or green without touching a single file under `frontend/`, so a filter
+  # that ignores it hides exactly the failure it most needs to catch.
   pull_request:
-    paths: ['frontend/**', '.github/workflows/frontend.yml']
+    paths:
+      ['frontend/**', '.github/workflows/frontend.yml', '.gitattributes']
   push:
     branches: [main]
-    paths: ['frontend/**', '.github/workflows/frontend.yml']
+    paths:
+      ['frontend/**', '.github/workflows/frontend.yml', '.gitattributes']
 
 defaults:
   run:
