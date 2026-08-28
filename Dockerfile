@@ -79,7 +79,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LOG_JSON=true \
     CHROMA_DIR=/app/index/chroma \
     SCRAPED_DIR=/app/state/scraped \
-    QUESTION_LOG_PATH=/app/state/questions.jsonl
+    QUESTION_LOG_PATH=/app/state/questions.jsonl \
+    OPERATIONAL_DB_PATH=/app/state/operational.sqlite3
 
 # curl exists only for HEALTHCHECK. Nothing else is installed.
 RUN apt-get update \
@@ -97,6 +98,18 @@ COPY --from=builder /build/scripts /app/scripts
 # brings both. /api/health reads it to report kb_version and row count.
 COPY --from=builder /build/index /app/index
 
+# /app/state is the only writable path in the image, and everything that has to
+# survive a request is pointed at it in the ENV block above.
+#
+# OPERATIONAL_DB_PATH was the one missing, and it would have failed silently.
+# Its default is `../data/operational.sqlite3` RELATIVE TO BACKEND_ROOT, which
+# is /app in this image — so it resolved to /data, a directory that does not
+# exist and that uid 10001 cannot create. Watchtower catches its own errors, so
+# the API would have served perfectly while every sweep failed and the cruise
+# schedule stayed empty for ever.
+#
+# Mount a persistent disk here, or the schedule is refetched from scratch on
+# every deploy and the "last checked" record is lost with it. See render.yaml.
 RUN mkdir -p /app/state && chown -R scaspa:scaspa /app/state /app/index
 USER scaspa
 
