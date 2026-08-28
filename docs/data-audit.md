@@ -497,7 +497,11 @@ is what the code already does), or remove it.
    upload? The entire `OPS_DATA_SOURCE` interface exists and waits on this one answer.
 2. **The five per-facility telephone numbers and two addresses** the design draws (F-28) — are they
    correct, and may they be published?
-3. **The public email address** (F-31) — obfuscated on the website and deliberately not guessed.
+3. ~~**The public email address** (F-31) — obfuscated on the website and deliberately not
+   guessed.~~ **Answered without the client, 2026-08-28.** The obfuscation is Cloudflare's
+   `email-decode.min.js`; decoding every `data-cfemail` on the site yields `info@scaspa.com`
+   on four pages and no other address anywhere. Set in `lib/scaspa-facts.ts`. See
+   `docs/found-during-build.md` entry 2.
 4. **The seven department names** (F-29) — are these SCASPA's real desks, or should they be replaced?
    A ticket is routed by free text today.
 5. **The four annual statistics** (F-46) — vessel calls, flights, cruise passengers, cargo tonnes —

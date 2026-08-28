@@ -77,6 +77,24 @@ that cargo status is not published online and routes the reader to the
 telephone, which is the honest thing to do in the meantime — but it is the
 Authority's own page that is currently misleading, and only SCASPA can fix that.
 
+**Re-verified 2026-08-28 in a browser: unchanged, and still a live dead end.**
+`scaspa.com/cargo.html` serves five `<table>` elements, all of them Weebly
+`wsite-multicol-table` layout blocks — none with a `<th>`, only one with more
+than a single row — plus zero `<input>`, `<select>` and `<textarea>`, no
+`<iframe>`, and 1,138 characters of body text. The FAQ still names a "Cargo Info
+table" and a "search field located at the top right" of it, and its "Is the
+information updated regularly" answer is still empty.
+
+**This one cannot be answered from here, and is not ours to answer.** The three
+possibilities carry different fixes and only SCASPA knows which applies: if the
+table was removed, the FAQ text should go with it; if it is behind a login, the
+FAQ should say so and link the login; if it was never deployed, the FAQ is
+describing an intention. Pilot's `/cargo` page already states that cargo status
+is not published online and routes the reader to the telephone, so the product
+is honest either way — but a shipping agent following the Authority's own
+instructions is still sent to a table that is not there.
+
+
 ### 2. The public email address is readable on the site after all
 
 `frontend/src/lib/scaspa-facts.ts` carries a **PENDING CLIENT ITEM** saying the
@@ -92,6 +110,39 @@ for any ordinary visitor with JavaScript on.
 The blocker was "we cannot verify it without guessing", and that no longer
 holds: it is on the page, in the footer, on the Authority's own site. Setting
 `SCASPA_EMAIL` is a one-line change and nothing else has to move.
+
+**Resolved — the address is `info@scaspa.com`, and it is now set.**
+
+Re-verified 2026-08-28, and more strongly than the original finding: rather than
+reading one rendered page, every `data-cfemail` attribute on the site was
+decoded. The homepage, `/contact.html` (twice), `/airport-about.html` and
+`/cargo.html` all decode to that one string, and **the site carries no other
+email address anywhere**. `/contact.html` lists it under "Contact Information"
+beside the switchboard lines, and the footer labels it "email:", so it is the
+general enquiries route rather than a department's.
+
+The obfuscation is confirmed as the cause of the original blocker: the served
+HTML contains a `data-cfemail` attribute, `email-decode.min.js`, and zero plain
+occurrences of the address. Fetching the page never revealed it; a browser with
+JavaScript on always did. The caution was right when written and is now spent.
+
+Two things moved that the entry did not predict:
+
+- **There were two `SCASPA_EMAIL` constants, not one.** The second, in
+  `features/chat/contact.ts`, had no importers and a comment claiming its slot
+  was "rendered and visibly marked as pending" — describing a screen that never
+  existed and contradicting `AboutScaspa`, which omits the row. The dead copy is
+  removed; `lib/scaspa-facts.ts` is the single source, guarded by
+  `tests/scaspa-facts.test.ts`.
+- **An existing test broke, correctly.** `getByRole('link', { name: /scaspa\.com/ })`
+  was unambiguous only while the email row did not exist; `info@scaspa.com`
+  matched it too and `getByRole` throws on two matches. The query is anchored to
+  `/^scaspa\.com/` now.
+
+The constant stays typed `string | null` and the row stays conditional, so
+withdrawing the address if SCASPA asks is one line and the row disappears rather
+than rendering `mailto:null`.
+
 
 **Not done here**, because it touches the Support and About screens rather than
 cargo, and because the researchers may prefer to confirm the address is

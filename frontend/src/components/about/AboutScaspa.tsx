@@ -96,13 +96,14 @@ export function AboutScaspa({
         </ul>
 
         {/*
-          The email row renders only when there is an address. It is pending from
-          the client because scaspa.com obfuscates it, and guessing a plausible
-          `info@` would invent a route that may bounce — someone who emailed it
-          and waited three days is worse off than someone told to phone.
+          The address is published by SCASPA and verified against their own site
+          rather than guessed — see the sourcing note on `SCASPA_EMAIL`.
 
-          Omitted entirely rather than shown as "coming soon": an empty slot is
-          a promise, and this one has no date on it.
+          The guard stays. It is not defensive padding: the constant is typed
+          `string | null` precisely so the address can be withdrawn in one line
+          if SCASPA ever asks, and this row then disappears rather than
+          rendering `mailto:null`. Omitted entirely in that case, never shown as
+          "coming soon" — an empty slot is a promise with no date on it.
         */}
         {SCASPA_EMAIL ? (
           <p className="text-small">

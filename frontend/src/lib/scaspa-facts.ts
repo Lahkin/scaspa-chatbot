@@ -50,19 +50,34 @@ export const SCASPA_POSTAL_ADDRESS = [
 export const SCASPA_WEBSITE = 'https://www.scaspa.com';
 
 /**
- * ⚠️ PENDING CLIENT ITEM — the public email address.
+ * The public email address. **Read off SCASPA's own site, never guessed.**
  *
- * scaspa.com obfuscates it against scrapers, so it cannot be read off the site,
- * and guessing a plausible `info@` would be inventing a contact route that may
- * bounce. Someone who emailed it and waited three days for an answer that was
- * never going to come is worse off than someone who was told to phone.
+ * This was a pending client item for most of the build, on the grounds that
+ * scaspa.com obfuscates the address against scrapers and a plausible-looking
+ * `info@` might bounce — someone who emails a wrong address and waits three
+ * days for an answer that was never coming is worse off than someone who was
+ * told to phone.
  *
- * Left as null on purpose. `AboutScaspa` renders the phone routes and omits the
- * email row entirely while this is null — it does not render an empty slot or a
- * "coming soon". Set the string here when the client supplies it; nothing else
- * needs to change.
+ * That blocker was real and is now gone. The obfuscation is Cloudflare's
+ * `email-decode.min.js`: the served HTML carries a `data-cfemail` attribute and
+ * no plain address, which is why fetching the page never revealed it, and why
+ * the caution above was right at the time. Any ordinary visitor with JavaScript
+ * on sees the decoded address.
+ *
+ * Verified 2026-08-28 by decoding every `data-cfemail` on the site rather than
+ * by reading one rendered page. All four pages that carry an address — the
+ * homepage, `/contact.html` (twice), `/airport-about.html` and `/cargo.html` —
+ * decode to this one string, and the site contains no other address anywhere.
+ * `/contact.html` lists it under "Contact Information" beside the switchboard
+ * lines above, and the site footer labels it "email:", so it is the general
+ * enquiries route rather than a department's.
+ *
+ * The type stays `string | null` and `AboutScaspa` keeps its guard, so setting
+ * this back to null is still a one-line retraction that omits the row cleanly
+ * rather than rendering `mailto:null`. If SCASPA ever asks us not to publish
+ * the address, that is the whole change.
  */
-export const SCASPA_EMAIL: string | null = null;
+export const SCASPA_EMAIL: string | null = 'info@scaspa.com';
 
 /** What the organisation is. No figures, by the rule above. */
 export const SCASPA_IDENTITY = {

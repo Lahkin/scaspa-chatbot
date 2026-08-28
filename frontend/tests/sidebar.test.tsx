@@ -495,18 +495,35 @@ describe('AboutScaspa', () => {
 
   it('links out to scaspa.com safely, and never to the payment portal', () => {
     const { container } = render(<AboutScaspa />);
-    const site = screen.getByRole('link', { name: /scaspa\.com/ });
+    // Anchored. Unanchored, this matched the website link alone until the
+    // published email row arrived, and `info@scaspa.com` then made it
+    // ambiguous — `getByRole` throws on two matches, which is how this was
+    // caught. The website link's accessible name starts with the bare domain;
+    // the address does not.
+    const site = screen.getByRole('link', { name: /^scaspa\.com/ });
     expect(site).toHaveAttribute('href', 'https://www.scaspa.com');
     expect(site).toHaveAttribute('rel', expect.stringContaining('noopener'));
     expect(container.innerHTML).not.toContain('pay.scaspa.com');
   });
 
-  it('omits the email row entirely while the address is pending', () => {
-    // An empty slot is a promise with no date on it.
-    expect(SCASPA_EMAIL).toBeNull();
+  it('gives the published email as a mailto: link', () => {
+    // Verified against SCASPA's own site by decoding every `data-cfemail` on it
+    // — four pages, one address, no other address anywhere. Pinned here because
+    // the failure mode this replaces was inventing a plausible `info@` that
+    // bounces, and a typo'd constant fails in exactly the same silent way.
+    expect(SCASPA_EMAIL).toBe('info@scaspa.com');
+    render(<AboutScaspa />);
+    const link = screen.getByRole('link', { name: 'info@scaspa.com' });
+    expect(link).toHaveAttribute('href', 'mailto:info@scaspa.com');
+  });
+
+  it('never renders a placeholder in place of a contact route', () => {
+    // The row is conditional so the address can be withdrawn in one line. What
+    // must never appear is the middle state: a promise with no date on it, or a
+    // `mailto:null` that looks live and goes nowhere.
     const { container } = render(<AboutScaspa />);
-    expect(container.querySelector('a[href^="mailto:"]')).toBeNull();
-    expect(screen.queryByText(/coming soon|to be confirmed/i)).toBeNull();
+    expect(screen.queryByText(/coming soon|to be confirmed|pending/i)).toBeNull();
+    expect(container.innerHTML).not.toContain('mailto:null');
   });
 
   it('points at the assistant for anything that changes', () => {
