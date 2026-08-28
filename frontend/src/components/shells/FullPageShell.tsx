@@ -13,6 +13,7 @@ import { SCASPA_PHONE_HREF, ScaspaMark } from './ScaspaMark';
 import { HealthBanner } from './HealthBanner';
 import { Sidebar } from './Sidebar';
 import { SidebarDrawer } from './SidebarDrawer';
+import { useStrings } from '@/features/i18n';
 import { SourcePanel } from './SourcePanel';
 
 /**
@@ -103,6 +104,7 @@ export function FullPageShell({ title, children, onAsk }: FullPageShellProps = {
 }
 
 function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
+  const t = useStrings();
   const {
     entries,
     grounding,
@@ -219,7 +221,7 @@ function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:inline-flex focus:min-h-touch focus:items-center focus:rounded-sm focus:bg-blue-600 focus:px-4 focus:text-ink-inverse"
       >
-        Skip to the conversation
+        {t.shell.skipToConversation}
       </a>
 
       <HealthBanner />
@@ -250,7 +252,7 @@ function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
         <span className="lg:hidden">
           <IconButton
             ref={hamburgerRef}
-            label="Open navigation"
+            label={t.shell.openNavigation}
             variant="ghost"
             aria-expanded={drawerOpen}
             aria-controls={drawerId}
@@ -295,7 +297,11 @@ function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
             to reach the same panel is one too many. */}
         {isChat ? (
           <span className="xl:hidden">
-            <IconButton label="Show sources" variant="ghost" onClick={() => setPanelOpen(true)}>
+            <IconButton
+              label={t.shell.showSources}
+              variant="ghost"
+              onClick={() => setPanelOpen(true)}
+            >
               <Icon name="file" size={16} />
             </IconButton>
           </span>
@@ -318,7 +324,7 @@ function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
         */}
         <a
           href={SCASPA_PHONE_HREF}
-          aria-label="Telephone the Authority"
+          aria-label={t.shell.telephoneAuthority}
           className="inline-flex size-11 shrink-0 items-center justify-center rounded-button border border-border text-ink-muted hover:bg-surface-3 hover:text-ink sm:size-8"
         >
           <Icon name="phone" size={16} />
@@ -353,18 +359,32 @@ function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
         </div>
 
         {/*
-          `lang="en"` on the conversation, and it is not redundant.
+          There is deliberately no `lang="en"` here any more, and removing it was
+          a correctness fix rather than a tidy-up.
 
-          The interface language is now selectable, and choosing Spanish sets
-          `<html lang="es">` so a screen reader speaks the chrome with Spanish
-          pronunciation. The assistant's answers stay English by rule — the
-          knowledge base is English and CLAUDE.md rule 10 requires every figure
-          to appear verbatim in the retrieved chunk, which no translation layer
-          can promise. Without this attribute those English answers inherit the
-          root's `es` and get read aloud with Spanish phonemes, which is close to
-          unusable and entirely invisible to anyone testing with their eyes.
+          It was right when written: the chrome was selectable, the assistant's
+          answers were English by rule, and without the attribute those English
+          answers inherited `<html lang="es">` and were read aloud with Spanish
+          phonemes — unusable, and invisible to anyone testing with their eyes.
 
-          See `features/i18n/locales.ts` for the full reasoning.
+          Both halves of that premise have since gone.
+
+          The assistant answers in the language it was asked in (prompt rule 7,
+          and `app/rag/figures.py` for how rule 10 survived the change). And this
+          element is not the conversation — it is `<main>`, wrapping every
+          operations screen too. Once those screens are translated, pinning
+          `en` here would mis-pronounce ALL of the translated chrome, on every
+          screen, which is a bigger version of the bug the attribute was added to
+          prevent.
+
+          So the content inherits the interface locale. That is right whenever
+          the reader asks in the language they set — the common case by far — and
+          no worse than the alternative when they do not.
+
+          **The proper fix needs the wire**: the answer's own language, reported
+          per turn, so the transcript can mark it and everything else can inherit
+          the chrome. Recorded as a contract change rather than guessed at here,
+          because detecting it in the client would be a guess.
         */}
         {/*
           `overflow-y-auto` for an operations screen and NOT for chat.
@@ -374,11 +394,7 @@ function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
           would nest one inside another. A tariff table has no such inner region,
           so without this the rows below the fold are simply unreachable.
         */}
-        <main
-          id="main"
-          lang="en"
-          className={cn('min-w-0 flex-1', isChat ? undefined : 'overflow-y-auto')}
-        >
+        <main id="main" className={cn('min-w-0 flex-1', isChat ? undefined : 'overflow-y-auto')}>
           {children ?? <ChatCore />}
         </main>
 
@@ -463,7 +479,7 @@ function FullPageShellInner({ title, children, onAsk }: FullPageShellProps) {
         it; a navigation event would unmount it and there is no history to get it
         back from. The same content is at `/about-scaspa` for deep links.
       */}
-      <Sheet open={aboutOpen} onClose={() => setAboutOpen(false)} title="About SCASPA">
+      <Sheet open={aboutOpen} onClose={() => setAboutOpen(false)} title={t.shell.aboutScaspa}>
         <AboutScaspa />
       </Sheet>
     </div>

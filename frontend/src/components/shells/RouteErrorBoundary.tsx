@@ -3,6 +3,7 @@ import { Button } from '@/components/ui';
 import { clearConversationId } from '@/features/chat/conversation';
 import { resetDraft } from '@/features/chat/draft';
 import { SCASPA_PHONE_LINES, SCASPA_POSTAL_ADDRESS } from '@/features/chat/contact';
+import { getLocale, stringsFor } from '@/features/i18n';
 
 /**
  * The last line of defence.
@@ -63,6 +64,17 @@ export class RouteErrorBoundary extends Component<Props, State> {
   };
 
   override render(): ReactNode {
+    /*
+     * `stringsFor(getLocale())` and not `useStrings()`.
+     *
+     * This is a class component, because an error boundary has to be — React
+     * offers no hook equivalent of `getDerivedStateFromError`. The non-reactive
+     * lookup exists for exactly this caller. It does not re-render when the
+     * locale changes, which is the correct trade here: the screen it draws is
+     * shown after something has already gone wrong, and the user's next action
+     * is a reload.
+     */
+    const t = stringsFor(getLocale());
     const { error } = this.state;
     if (!error) return this.props.children;
 
@@ -70,22 +82,20 @@ export class RouteErrorBoundary extends Component<Props, State> {
       <div className="flex min-h-dvh items-start justify-center bg-surface p-4 text-ink">
         <div className="mt-8 w-full max-w-measure space-y-4">
           <div className="space-y-2">
-            <h1 className="text-h2 font-semibold">Something went wrong on this page</h1>
-            <p className="text-small text-ink-muted">
-              That is our fault, not yours. Starting a new conversation usually clears it.
-            </p>
+            <h1 className="text-h2 font-semibold">{t.errors.routeErrorTitle}</h1>
+            <p className="text-small text-ink-muted">{t.errors.routeErrorBody}</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button onClick={this.reset}>Start a new conversation</Button>
+            <Button onClick={this.reset}>{t.errors.startNewConversation}</Button>
             <Button variant="secondary" onClick={() => window.location.reload()}>
-              Reload the page
+              {t.errors.reloadPage}
             </Button>
           </div>
 
           {/* The way out that does not depend on any of this working. */}
           <div className="rounded-md border border-border bg-surface-muted p-3">
-            <p className="text-small font-semibold">Or reach SCASPA directly</p>
+            <p className="text-small font-semibold">{t.errors.reachDirectly}</p>
             <ul className="mt-1 flex flex-wrap gap-x-4">
               {SCASPA_PHONE_LINES.map((line) => (
                 <li key={line.href}>

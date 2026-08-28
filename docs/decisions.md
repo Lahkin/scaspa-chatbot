@@ -4674,3 +4674,67 @@ own rate for a vessel it does not single out. That is deliberate and tested
 shows — is priced as commercial, which is how this verification pass first went
 wrong. Left as it is, and documented: the request contract had no field table at
 all, which is the actual reason a wrong value was sent.
+
+---
+
+## 0051 — The chrome speaks the reader's language, and `lang` stops lying
+
+**Status:** accepted. First slice of the chrome translation: the shell and
+navigation, plus the two things this work found were no longer true.
+
+### Two statements the product was making that had stopped being true
+
+Translating the chrome could not start until these were fixed, because both
+would have made the translation actively worse than leaving it English.
+
+**`/settings` said "Answers stay in English".** It no longer does. 0050's
+investigation established that nothing ever pinned the answer's language — the
+model mirrors the question's, and prompt rule 7 now says so. The copy now draws
+the distinction that actually matters and is easy to get wrong: **this control
+sets the interface; the answer follows the question.** Set Spanish, type
+English, get English.
+
+**`<main>` carried `lang="en"`.** Added for a good reason — English answers
+under a Spanish root are read aloud with Spanish phonemes, which is close to
+unusable and invisible to anyone testing with their eyes.
+
+Both halves of that premise are gone, and the second is the one that matters
+here: `<main>` is not the conversation. It wraps **every operations screen**.
+Translate those with the attribute still in place and a screen reader
+mispronounces all of the translated chrome, on every screen — a strictly bigger
+version of the bug the attribute was added to prevent.
+
+So the content inherits `<html lang>`. That is right whenever the reader asks in
+the language they set — the common case — and no worse than the alternative when
+they do not. **The proper fix needs the wire**: the answer's own language,
+reported per turn, so the transcript can mark it while everything else inherits
+the chrome. Recorded as a contract change rather than guessed at in the client,
+because detecting it there would be a guess.
+
+### What is translated, and what is deliberately not
+
+Translated: the navigation, the shell frame, the sources panel, the error and
+not-found screens, on top of the settings page that already was.
+
+**Routes are not copy.** `href` and icon stay in `Sidebar.tsx`; only labels come
+from the dictionary. A mistranslated `/tariffs` is a 404 found by a user rather
+than by the build. The sidebar search filters on the *translated* label, which is
+what a reader typing "Buques" needs.
+
+**Proper nouns stay.** "SCASPA", "Port Zante", "Pilot" are what the things are
+called. A visitor reads those off a sign or a ticket.
+
+**`RouteErrorBoundary` uses `stringsFor(getLocale())`, not the hook** — it is a
+class component because an error boundary has to be. The non-reactive lookup
+exists for that caller, and not re-rendering on a locale change is correct on a
+screen whose next action is a reload.
+
+### Still English
+
+The per-screen copy on vessels, flights, tariffs, cargo and support, the chat
+chrome, and the static pages — roughly 200 strings. The operator console is
+excluded on purpose rather than pending: it is a staff surface, and translating
+an instrumentation panel for local operators buys nothing.
+
+Dictation is still English only — `voice/stt.py` pins `LANGUAGE_HINT = "en"`.
+That is a real limit and unchanged.

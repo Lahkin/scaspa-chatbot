@@ -2,6 +2,7 @@ import { Card } from '@/components/ui';
 import { SourceList } from '@/components/chat/SourceList';
 import type { Grounding } from '@/features/chat/citations';
 import type { CitationEntry } from '@/features/chat/citations';
+import { useStrings } from '@/features/i18n';
 
 /**
  * The sources for the current answer.
@@ -38,27 +39,21 @@ export function SourcePanel({
   onHighlight?: ((id: string | null) => void) | undefined;
   scrollTo?: string | null | undefined;
 }) {
+  const t = useStrings();
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
       {headed ? (
         <div>
-          <h2 className="text-h3 font-semibold">Sources</h2>
-          <p className="mt-1 text-caption text-ink-subtle">
-            Every factual claim shows where it came from and the date it was verified.
-          </p>
+          <h2 className="text-h3 font-semibold">{t.shell.sources}</h2>
+          <p className="mt-1 text-caption text-ink-subtle">{t.sources.lead}</p>
         </div>
       ) : (
-        <p className="text-caption text-ink-subtle">
-          Every factual claim shows where it came from and the date it was verified.
-        </p>
+        <p className="text-caption text-ink-subtle">{t.sources.lead}</p>
       )}
 
       {entries.length === 0 ? (
-        <Card title="Nothing to show yet" tone="muted">
-          <p className="text-small text-ink-muted">
-            Citations appear here once an answer arrives. Each one links to the SCASPA page it came
-            from.
-          </p>
+        <Card title={t.sources.emptyTitle} tone="muted">
+          <p className="text-small text-ink-muted">{t.sources.emptyBody}</p>
         </Card>
       ) : (
         <SourceList
@@ -71,10 +66,7 @@ export function SourcePanel({
       )}
 
       <div className="mt-auto border-t border-border pt-3">
-        <p className="text-caption text-ink-subtle">
-          Information is a snapshot, not a live feed. A date shown here is when that fact was last
-          checked — not confirmation that it is still true today.
-        </p>
+        <p className="text-caption text-ink-subtle">{t.sources.snapshotNote}</p>
       </div>
     </div>
   );

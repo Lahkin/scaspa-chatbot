@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type ReactNode, type RefObject } from '
 import { cn } from '@/lib/cn';
 import { IconButton } from '@/components/ui';
 import { useReducedMotion } from '@/lib/hooks/useReducedMotion';
+import { useStrings } from '@/features/i18n';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -47,6 +48,7 @@ export function SidebarDrawer({
   id: string;
   children: ReactNode;
 }) {
+  const t = useStrings();
   const panelRef = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
 
@@ -107,7 +109,7 @@ export function SidebarDrawer({
     <div className="fixed inset-0 z-50 lg:hidden">
       <button
         type="button"
-        aria-label="Close navigation"
+        aria-label={t.shell.closeNavigation}
         onClick={onClose}
         className="absolute inset-0 h-full w-full cursor-default bg-neutral-900/40"
       />
@@ -117,7 +119,7 @@ export function SidebarDrawer({
         id={id}
         role="dialog"
         aria-modal="true"
-        aria-label="Navigation"
+        aria-label={t.shell.navigation}
         className={cn(
           // `max-w-full` rather than a percentage: 260px already fits a 320px
           // screen, and this only has to stop the drawer forcing a sideways
@@ -127,7 +129,7 @@ export function SidebarDrawer({
         )}
       >
         <div className="flex shrink-0 justify-end bg-surface-muted p-2">
-          <IconButton label="Close navigation" onClick={onClose}>
+          <IconButton label={t.shell.closeNavigation} onClick={onClose}>
             <span aria-hidden="true">✕</span>
           </IconButton>
         </div>
