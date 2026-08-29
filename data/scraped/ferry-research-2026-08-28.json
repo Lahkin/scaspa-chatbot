@@ -1,0 +1,249 @@
+{
+  "schema": "scaspa.research.v1",
+  "title": "St. Kitts – Nevis ferry research",
+  "converted_on": "2026-08-28",
+  "source_files": [
+    "St Kitts Ferry Research -VERIFIED FACTS - Start research.csv",
+    "St. Kitts Ferry Research -Validation Report - Start research.csv",
+    "St. Kitts Nevis Ferry Research.md"
+  ],
+  "note": "Converted from the researcher's spreadsheets. This file is the reviewable record of what was gathered; the rows that entered the knowledge base are in data/knowledge/, and not every fact here became a row. See kb_disposition below for what happened to each and why.",
+  "facts": [
+    {
+      "ref": "F-01",
+      "topic": "SCASPA Terminals",
+      "user_question": "terminal location",
+      "fact": "Basseterre Ferry Terminal is located ~350m west of Port Zante in Basseterre.",
+      "citation": {
+        "title": "Port Overview",
+        "publisher": "Cruise Alert",
+        "url": "https://cruisealert.com/content/port-guide/basseterre-st-kitts",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-02",
+      "topic": "SCASPA Terminals",
+      "user_question": "opening/access info",
+      "fact": "The Basseterre facility opened Dec 6, 2017, features a 75-passenger seating capacity, AC, x-ray machines, and walk-through metal detectors.",
+      "citation": {
+        "title": "New ferry terminal facility to improve commuters' experience",
+        "publisher": "SKNIS",
+        "url": "https://www.sknis.gov.kn/2017/12/07/new-ferry-terminal-facility-to-improve-commuters-experience/",
+        "published": "Dec 7, 2017",
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-03",
+      "topic": "NASPA Terminals",
+      "user_question": "Charlestown terminal",
+      "fact": "The Charlestown pier allows vessels with up to a 3-meter draught to dock alongside and provides 24-hour security.",
+      "citation": {
+        "title": "Charlestown Port",
+        "publisher": "NASPA",
+        "url": "https://www.naspakn.com/charlestownport",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-04",
+      "topic": "NASPA Terminals",
+      "user_question": "NASPA/Nevis facility facts",
+      "fact": "A dual-use plastic/aluminum recycling receptacle was installed on the pier on April 22, 2026.",
+      "citation": {
+        "title": "NSWMA Expands Recycling Efforts",
+        "publisher": "NIA",
+        "url": "https://nia.gov.kn/nswma-expands-recycling-efforts-unveils-new-collection-receptacle-at-charlestown-pier/",
+        "published": "Apr 22, 2026",
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-05",
+      "topic": "Ferry Network",
+      "user_question": "operators",
+      "fact": "The fleet includes M&M Transportation, Wesk Agency, SKN Executive Travel, Passion, Lady B, iConnect, Sea Bridge, and Blu Waves.",
+      "citation": {
+        "title": "Weekday Schedule",
+        "publisher": "NASPA",
+        "url": "https://www.naspakn.com/weekdayschedule",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-06",
+      "topic": "Ferry Network",
+      "user_question": "fares",
+      "fact": "Standard adult passenger fares for most operators (Apple Syder, Mark Twain, Lady B) is $30 ECD.",
+      "citation": {
+        "title": "Ferry Prices",
+        "publisher": "NASPA",
+        "url": "https://www.naspakn.com/ferryprices",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-07",
+      "topic": "Ferry Network",
+      "user_question": "ticket purchase",
+      "fact": "SKN Transit app does not yet process payments; physical tickets must be purchased in cash at the terminal window.",
+      "citation": {
+        "title": "FAQ",
+        "publisher": "SKN Transit",
+        "url": "https://www.skntransit.com/ferry-schedules/",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-08",
+      "topic": "Logistics",
+      "user_question": "boarding lead time",
+      "fact": "Passengers must arrive at the terminal 30 minutes prior to departure for security screening and boarding.",
+      "citation": {
+        "title": "FAQ",
+        "publisher": "SKN Transit",
+        "url": "https://www.skntransit.com/ferry-schedules/",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-09",
+      "topic": "Logistics",
+      "user_question": "cancellations/weather",
+      "fact": "High-speed catamaran schedules are highly subject to weather, sea conditions, and mechanical delays.",
+      "citation": {
+        "title": "FAQ",
+        "publisher": "SKN Transit",
+        "url": "https://www.skntransit.com/ferry-schedules/",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-10",
+      "topic": "Vehicle Network",
+      "user_question": "vehicle ferry",
+      "fact": "Vehicle ferries operate from Major's Bay (St. Kitts) to Cades Bay (Sea Bridge) and Long Point (iConnect).",
+      "citation": {
+        "title": "Nevis Ferry Guide",
+        "publisher": "St. Kitts Car Rental",
+        "url": "https://stkittscarrental.com/nevis-ferry-guide-how-to-get-from-st-kitts-to-nevis/",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-11",
+      "topic": "Contacts",
+      "user_question": "SCASPA",
+      "fact": "SCASPA is reached via P.O. Box 963 Bird Rock, 869-465-8121/2/3, info@scaspa.com.",
+      "citation": {
+        "title": "Contact Us",
+        "publisher": "SCASPA",
+        "url": "https://www.scaspa.com/",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    },
+    {
+      "ref": "F-12",
+      "topic": "Contacts",
+      "user_question": "NASPA",
+      "fact": "NASPA is reached via 869-469-0903, 869-469-2005, charlestown@naspakn.com.",
+      "citation": {
+        "title": "Charlestown Port",
+        "publisher": "NASPA",
+        "url": "https://www.naspakn.com/charlestownport",
+        "published": null,
+        "researcher_verified": "Aug 28, 2026"
+      }
+    }
+  ],
+  "validation_report": [
+    {
+      "url": "https://www.scaspa.com/",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://cruisealert.com/content/port-guide/basseterre-st-kitts",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://www.scaspa.com/vessel-schedules.html",
+      "status": "DOESN'T-CONFIRM",
+      "contains_fact": false,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://www.naspakn.com/charlestownport",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://www.naspakn.com/ferryprices",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://www.naspakn.com/ferryschedule",
+      "status": "DOESN'T-CONFIRM",
+      "contains_fact": false,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://www.skntransit.com/ferry-schedules/",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://www.sknis.gov.kn/2017/12/07/new-ferry-terminal-facility-to-improve-commuters-experience/",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://nia.gov.kn/nswma-expands-recycling-efforts-unveils-new-collection-receptacle-at-charlestown-pier/",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://stkittscarrental.com/nevis-ferry-guide-how-to-get-from-st-kitts-to-nevis/",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://www.naspakn.com/weekdayschedule",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://mystkittstouristinformation.com/taxis-buses-and-ferries-in-st-kitts-and-nevis/",
+      "status": "LIVE",
+      "contains_fact": true,
+      "date_checked": "Aug 28, 2026"
+    },
+    {
+      "url": "https://www.scaspa.com/ferry-schedule.html",
+      "status": "DOESN'T-CONFIRM",
+      "contains_fact": false,
+      "date_checked": "Aug 28, 2026"
+    }
+  ]
+}
