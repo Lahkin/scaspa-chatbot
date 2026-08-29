@@ -8,6 +8,11 @@ exercised.
 under the configuration the repository actually carries, and every operations endpoint was called.
 Fixture contents, schema fields and component wiring were re-read from source.
 
+**Amended later the same day**, after a ferry-research intake changed two things this document
+asserts: the knowledge base grew and was rebuilt, and **an operational feed turned out to exist**
+— see §A state 3, §D and open question 1. The feed was found by following a citation, not by
+looking for one, which is worth noting given this document twice concluded there was none.
+
 ---
 
 ## Why this document was refreshed, and how to read it now
@@ -55,7 +60,7 @@ second is what it is now taken against.
 | Fact | Evidence | Consequence |
 |---|---|---|
 | `OPS_DATA_SOURCE=fixture` | `backend/.env:127`; default is still `"none"` at `backend/app/config.py:284` | **Every operations endpoint is populated.** Called this pass: vessels 11, flights 12, tariffs 30 across 6 categories, positions 4, gates 8, advisories 1, profile present, directory 5 locations / 7 departments — all `source.kind == "fixture"` with 0032's notice attached. Refused at boot when `ENV=prod` (`app/main.py`), which is now load-bearing rather than belt-and-braces |
-| The index holds **115 rows from `scaspa_kb_2026-07-31.csv`**, 4 rejected | `data/index_meta.json`; `GET /api/health` → `kb_rows: 115`, `kb_version: "2026-07-31"`, built `2026-08-26` | The real knowledge base is indexed. The CSV carries **232 rows, of which 116 are `confirmed`** — and rule 8 indexes only those, so 115 of 116 reached the index. `sample_kb.csv` is no longer the source |
+| The index holds **122 rows from `scaspa_kb_2026-08-28.csv`**, **0 rejected** | `data/index_meta.json`; `GET /api/health` → `kb_rows: 122`, `kb_version: "2026-08-28"` | The real knowledge base is indexed. The CSV carries **240 rows, of which 122 are `confirmed`**, and rule 8 indexes only those — so **every confirmed row now reaches the index**. It did not before: the export read `kb_rows_rejected: 4`, and one of the four (`kb-045`, `confirmed`) was a row meant to be live and simply absent, rejected for a `source_type` outside the schema. `sample_kb.csv` is no longer the source |
 | `ADMIN_SECRET` is still blank | `backend/.env`; `app/main.py` | **Unchanged.** `/api/admin/stats` is still not registered, so F-40, F-41, F-47, F-49, F-50 and F-60 all still stand |
 
 Secondary facts, also re-checked: there is **no root `.env`** any more — configuration lives in
@@ -75,8 +80,32 @@ per surface, and only the first is a demo:
    (repeated-digit — `44.44`, `222.22`) are not. Refused at boot when `ENV=prod`, which under
    realistic values is the only thing between sample data and a passenger.
 2. `OPS_DATA_SOURCE=none` — still the production default in code, and still the honest empty state.
-3. A real operational feed — **still does not exist.** No third `OpsSource`, no adapter, no
-   credentials field. Unchanged since 2026-08-03.
+3. A real operational feed — **no `OpsSource` consumes one**, and that part is unchanged since
+   2026-08-03: no third implementation, no adapter, no credentials field.
+
+   **But one exists, and this document said twice that none did.**
+   `scaspa.com/ferry-schedule.html` renders a `ferry-public-widget` into a shadow DOM from
+   `https://ferryscheduleapi.devonwilliams679.workers.dev/`, which returns JSON with a real
+   operational schema: `day, from, to, type, vessel, carrier, status, pier, inaugural, arrived,
+   arrival_time, passengers_in, departed, departure_time, passengers_gen, passengers_exemp,
+   cargo_discharged, start_time, end_time`. Arrivals, departures and passenger counts — close to
+   what `OpsSource` was built to consume.
+
+   Three qualifications, and they matter more than the discovery:
+
+   - **Its data is placeholder.** Six rows on 2026-08-28: vessels `t`, `tt`, `test`; routes
+     `t` → `tt`; piers `ttt`; dated 30 Jan, 2 Feb, 4 Feb. SCASPA's own "Ferry Schedule" page is
+     showing that to the public.
+   - **It is not a SCASPA origin.** An unauthenticated third-party Cloudflare Worker named after
+     an individual. Ownership and write access are unestablished.
+   - **Nothing here is wired to it**, and nothing should be until the first two are answered.
+
+   **Why two passes missed it.** Both read the served HTML, where there are no times, and the
+   researcher's own validation marked the URL `DOESN'T-CONFIRM` for the same reason. A widget
+   that renders client-side is invisible to a fetch — the same shape as the Cloudflare email
+   obfuscation that kept F-31 open for months. **Twice now, this repository has concluded
+   something does not exist because a static read could not see it.**
+   Recorded in `found-during-build.md` entry 0.
 
 **A fourth state now exists that this framing did not have.** Watchtower fetches SCASPA's published
 cruise schedule on a timer and stores it, and `/api/cruise-schedule` and `/api/guide` serve it with
@@ -151,7 +180,7 @@ Cells are the verdict for that facility on that board **as at 2026-08-28**, unde
 |---|---|---|---|---|---|---|---|
 | **Deep Water Harbour** (cargo) | FIXTURE — 5 | N-A | FIXTURE — 23 | LIVE | FIXTURE | FIXTURE | 10 confirmed `cargo` rows (of 25) |
 | **Port Zante** (cruise) | FIXTURE — 3 · **plus the real published schedule** | N-A | FIXTURE — 25 | LIVE | FIXTURE | FIXTURE | 18 confirmed `cruise` rows (of 33) |
-| **Basseterre Ferry Terminal** | FIXTURE — 2 | N-A | FIXTURE — 24 | LIVE | FIXTURE | FIXTURE | **7 confirmed `ferry` rows (of 20) — the thinnest** |
+| **Basseterre Ferry Terminal** | FIXTURE — 2 | N-A | FIXTURE — 24 | LIVE | FIXTURE | FIXTURE | 13 confirmed `ferry` rows (of 28) — **no longer the thinnest** |
 | **RLB International Airport** | N-A | FIXTURE — 12 | FIXTURE — 27 | LIVE | FIXTURE | FIXTURE | 19 confirmed `airport` rows (of 72) |
 
 Tariff counts exceed the per-facility rates because a charge with `facility: null` is port-wide and
@@ -175,14 +204,21 @@ is returned under every facility filter — deliberate, and documented in `api-c
    contact directory. What it still has **no** surface for is **sailing times**. There is no ferry
    schedule endpoint and no published source for one.
 
-   So *"What time is the last ferry?"* — the question the landing page once used as its own headline
-   — still has no real answer, and it is now the clearest remaining gap of the four facilities: the
-   thinnest KB coverage (7 confirmed rows) on the facility asked about most.
+   So *"What time is the last ferry?"* — the question the landing page once used as its own
+   headline — still has no answer this product will give, and `kb-192` says so honestly.
+
+   **Two things changed on 2026-08-28.** A research intake took ferry coverage from 7 confirmed
+   rows to 13, including NASPA's published fares, so this is no longer the thinnest facility.
+   And a ferry schedule feed was found to exist (§A state 3) — serving test data, on a
+   third-party origin. The question is now **"whose feed is that, and when will it carry real
+   sailings?"** rather than whether a schedule exists at all.
 
 3. ~~**Nothing is live.**~~ **CLOSED as written, with a caveat that replaces it.** Every operations
    surface is populated. But populated by *fixtures*: it is sample data wearing 0032's notice and
-   its sample-data hatch, not an operational feed. **No real feed exists** (see §A state 3). The one
-   genuinely real operational surface is the published cruise schedule Watchtower retrieves.
+   its sample-data hatch, not an operational feed. **No feed is connected** — which is not the same
+   as none existing: §A state 3 records a ferry schedule API that exists, serves test data, and is
+   wired to nothing here. The genuinely real operational surface remains the published cruise
+   schedule Watchtower retrieves.
 
 ---
 
@@ -213,7 +249,7 @@ the status cell says what closed it and how that was checked.
 | F-10 | 17 | `TableStates.NoFeedState` | "No vessel feed is connected" panel | WIRED-EMPTY | LIVE-OPS | `source.kind === 'unavailable'` + 0 rows | `source` | EXISTS | Nothing — this is the correct, complete rendering of the current state. Recorded because it is what a client sees today | YES | `frontend/src/routes/vessels.tsx:224-226` | CHANGED — still correct rendering, but no longer what a client sees: the feed is populated |
 | F-11 | 17 | `VesselStatusChip` | `departed`, `unknown` values | WIRED-EMPTY | LIVE-OPS | `VesselArrival.status` | `status` | EXISTS | No fixture row produces either. Built and untested against real data by design (`08-blocked-and-forbidden.md` #6) | YES | `backend/app/ops/fixtures.py:66-99`; `frontend/src/routes/vessels.tsx:49-56` | **CLOSED** — the fixture now produces both. Statuses present: `at_berth, departed, en_route, scheduled, unknown` |
 | F-12 | 17 | `Pagination` | `Showing 1–25 of n` | LIVE | DERIVED | `total`/`limit`/`offset` from `GET /api/vessels` | `total` | EXISTS | Nothing on the backend. **MSW ignores `limit`/`offset`**, so pagination is never exercised in tests or mock demos | YES | `frontend/src/routes/vessels.tsx:245-251`; `frontend/src/mocks/handlers.ts:400-445` | **CLOSED** — MSW honours `limit`/`offset` (`handlers.ts:114-117`), with a comment saying pagination is exercised rather than assumed |
-| F-13 | 17 | `SourceNotice` | `live` source-kind banner + dismiss | BACKEND-MISSING | LIVE-OPS | `DataSource.kind === 'live'` | `kind: 'live'` | MISSING | `live` is in the type and unreachable — there is no `OpsSource` that emits it | NO — needs a feed | `backend/app/ops/source.py:101-165`; `backend/app/schemas.py:340` | OPEN for `live` — nothing emits that kind. **But `published` became reachable**: Watchtower's cruise schedule and `/api/guide` emit it |
+| F-13 | 17 | `SourceNotice` | `live` source-kind banner + dismiss | BACKEND-MISSING | LIVE-OPS | `DataSource.kind === 'live'` | `kind: 'live'` | MISSING | `live` is in the type and unreachable — there is no `OpsSource` that emits it | NO — needs a feed | `backend/app/ops/source.py:101-165`; `backend/app/schemas.py:340` | OPEN for `live` — nothing emits that kind, and the reason has narrowed. It was "there is no feed"; it is now "the one feed found is not connected" (§A state 3), and that feed reports arrivals, departures and passenger counts — the shape `live` was reserved for. **`published` is already reachable**: Watchtower's cruise schedule and `/api/guide` emit it |
 
 ### Board 17 — Flights (`/flights`)
 
@@ -258,7 +294,7 @@ the status cell says what closed it and how that was checked.
 | F-35 | 20 | `MarineAdvisoryPanel` | Notices to mariners | OPS-STUB | LIVE-OPS | `GET /api/ops/advisories` | `port,headline,detail,severity,issued_at` | EXISTS | Only a feed. The empty state is the deliberate not-an-all-clear panel — the one empty state in the product where a wrong sentence has physical consequences | YES — with care | `backend/app/routers/operations.py:189-211`; `backend/app/ops/fixtures.py:405-433` | CHANGED — 1 fixture advisory; the not-an-all-clear empty state is now off the default path |
 | F-36 | 20 | `HealthPanel` | Service state, search, voice | LIVE | DERIVED | `GET /api/health` | `status`, `index.ready` | EXISTS | Nothing. It correctly reports the current index | n/a | `frontend/src/routes/ops.vessels.tsx:96`; `backend/app/routers/health.py:32-86` | OPEN — correct; now reports the real 115-row index |
 | F-37 | 20 | `IndexStatusPanel` | "Chunks" row | BACKEND-MISSING | STATIC-KB | a chunk count on `IndexStatus` | `chunks` | MISSING | Literal `value={null}` → "unknown". `IndexStatus` carries `kb_rows` and `web_docs`; `web_docs` is a different quantity and wiring it printed `Chunks 0`, which §6.12 forbids by name | NEEDS-CONTRACT-CHANGE | `frontend/src/components/ops/IndexStatusPanel.tsx:63`; `backend/app/schemas.py:952-980` | OPEN — `IndexStatusPanel.tsx:77` is still a literal `value={null}` for Chunks |
-| F-38 | 20 | `IndexStatusPanel` | Documents · Built · Version | LIVE | STATIC-KB | `HealthResponse.index` | `kb_rows,index_built_at,kb_version` | EXISTS | Nothing — but it will truthfully report **10 documents from `sample_kb.csv`, version `2026-06-01`** in front of the client | n/a | `data/index_meta.json:2-9` | **CLOSED** — it no longer reports 10 rows of `sample_kb.csv` at version `2026-06-01`. It reports **115 rows, `scaspa_kb_2026-07-31`, built 2026-08-26** |
+| F-38 | 20 | `IndexStatusPanel` | Documents · Built · Version | LIVE | STATIC-KB | `HealthResponse.index` | `kb_rows,index_built_at,kb_version` | EXISTS | Nothing — but it will truthfully report **10 documents from `sample_kb.csv`, version `2026-06-01`** in front of the client | n/a | `data/index_meta.json:2-9` | **CLOSED** — it no longer reports 10 rows of `sample_kb.csv` at version `2026-06-01`. It reports **122 rows, `scaspa_kb_2026-08-28`, 0 rejected** |
 | F-39 | 20 | `OperatorProfileCard` | Demo identity card | MOCK-ONLY | LIVE-OPS | `GET /api/ops/profile` → `profile` | whole object | EXISTS | Null on every source but `fixture`, by design. Under the current config `/profile` renders "There is no account" | YES | `backend/app/ops/source.py:82-88`; `frontend/src/routes/profile.tsx:72-76` | **CLOSED as an empty finding** — `OPS_DATA_SOURCE=fixture`, so `/api/ops/profile` returns a profile |
 | F-40 | 20 | §6.13 admin panels (not built) | Secret gate, models panel, config summary | BACKEND-UNWIRED | DERIVED | `GET /api/admin/stats` (`X-Admin-Secret`) | `env,models,rate_limit*,tracked_clients` | EXISTS | The endpoint returns everything both panels need — **and is not even registered, because `ADMIN_SECRET` is blank.** Not built is a recorded decision, not a gap (`IMPLEMENTATION_PROGRESS.md` §4.10) | NO — security decision | `backend/app/routers/admin.py:48-80`; `backend/app/main.py:243-246` | OPEN — `ADMIN_SECRET` still blank, endpoint still unregistered |
 | F-41 | 20 | `ops/SpendSummary.tsx` | Spend tiles, stacked bar, history | ORPHAN-FIELD | DERIVED | `AdminStats.today` / `.history` | `chat_usd,embedding_usd,voice_usd,total_usd` | EXISTS | The component is built and verified and **has no caller outside a test** — its only data source is the unregistered admin endpoint | NO — see F-40 | `frontend/src/components/ops/SpendSummary.tsx`; import scan: only `tests/boards.test.tsx` | OPEN — `SpendSummary` still imported only by `tests/boards.test.tsx` |
@@ -303,14 +339,21 @@ the status cell says what closed it and how that was checked.
 
 | File | Rows | `confirmed` | Indexed? |
 |---|---|---|---|
-| `scaspa_kb_2026-07-31.csv` | **232** | **116** | **Yes — this is the live index (115 rows)** |
+| `scaspa_kb_2026-08-28.csv` | **240** | **122** | **Yes — this is the live index (122 rows)** |
 | `sample_kb.csv` | — | — | No longer indexed |
 | `sample_charts_kb.csv` | 21 | 0 | No — still unindexed (F-46) |
 
-`index_meta.json` names `scaspa_kb_2026-07-31.csv`, `kb_rows_indexed: 115`, `kb_rows_rejected: 4`,
-`kb_version: 2026-07-31`, built `2026-08-26T23:10:08Z` on `text-embedding-3-large`. `/api/health`
-reports the same. **115 of the 116 `confirmed` rows reached the index**, which is rule 8 working:
-only `confirmed` is indexed, and the 4 rejections are recorded rather than silent.
+`index_meta.json` names `scaspa_kb_2026-08-28.csv`, `kb_rows_indexed: 122`, **`kb_rows_rejected: 0`**,
+`kb_version: 2026-08-28`, on `text-embedding-3-large`. `/api/health` reports the same.
+**Every one of the 122 `confirmed` rows now reaches the index.**
+
+It did not before, and the earlier wording here — *"the 4 rejections are recorded rather than
+silent"* — was too generous. They were recorded as a **count with no names**, which nobody read
+for months. All four failed on one field: `source_type` was `reference` or `directory`, and
+`SourceType` admits only `official-site, official-pdf, client-interview, press, regulator`. One
+of them, `kb-045` ("What is the airport code for St. Kitts?"), was **`confirmed`** — a row marked
+live-ready and absent from the index the whole time, for a one-word typo in a column nobody
+reads. Corrected in the 2026-08-28 export.
 
 `scaspa_web` still holds **0** documents — no scraped page has ever been embedded, and
 `web_docs: 0` agrees. Unchanged.
@@ -323,7 +366,7 @@ contact desk — are no longer what retrieval returns.
 ~~A second, quieter problem: `KB_CSV_PATH` is blank in both `.env` files, so it falls back to
 `../data/knowledge/latest.csv` — a file that does not exist.~~ **Closed.** `KB_CSV_PATH` is still
 blank in `backend/.env`, but the default it falls back to is now
-`../data/knowledge/scaspa_kb_2026-07-31.csv` (`config.py:239`) — the file that is actually there.
+`../data/knowledge/scaspa_kb_2026-08-28.csv` (`config.py`) — the file that is actually there.
 `latest.csv` still does not exist, and nothing points at it any more.
 
 
@@ -342,7 +385,7 @@ from. Re-counted from the CSV on 2026-08-28, and the figures are unchanged from 
 | `marine` | 16 | 17 | Pilotage, tugs, MARSEC, conditions |
 | `general` | 15 | 29 | |
 | `cargo` | 10 | 25 | Thin for the Authority's main cargo business |
-| **`ferry`** | **7** | 20 | **Still the thinnest facility by a wide margin** |
+| `ferry` | 13 | 28 | Was 7 of 20 and the thinnest; the 2026-08-28 intake added NASPA's published fares, operators and Charlestown facts |
 | `access` | 4 | 4 | |
 | `payments` | 4 | 4 | |
 | `jobs` | 1 | 1 | |
@@ -352,8 +395,10 @@ Two structural notes, one of which has since closed.
 **First, half the KB is still discarded, and that is now visible rather than theoretical.** 89 rows
 are `probable` and 27 are `unverified`; only `confirmed` is indexed (rule 8). The airport loses the
 most — 53 of its 72 rows are non-confirmed, which is why the best-covered facility on paper is not
-the best-covered in practice. **This is the largest single lever left on answer coverage**: the 116
+the best-covered in practice. **This is the largest single lever left on answer coverage**: the 118
 non-confirmed rows are already written, and confirming them is research rather than engineering.
+The 2026-08-28 ferry intake is the worked example — six rows went from nothing to `confirmed`
+because someone read the port authority's own pages, and ferry coverage nearly doubled.
 
 ~~**Second, five of its ten categories are not valid retrieval filters.**~~ **CLOSED.**
 `CATEGORIES` now carries all ten — `ferry, cargo, cruise, airport, general, marine, payments,
@@ -488,7 +533,7 @@ divergence is not the same as the mock being right.
 
 | What | Nature |
 |---|---|
-| **Any real operational feed** | No `OpsSource` implementation beyond `none` and `fixture`. This is the single largest gap in the product |
+| **Any real operational feed** | No `OpsSource` implementation beyond `none` and `fixture` — still the single largest gap. **But a ferry schedule feed exists** (§A state 3): real schema, placeholder data, third-party origin. The gap is now integration and ownership rather than absence |
 | **A ferry sailing schedule** | **Narrowed.** The ferry now has an operational surface — movements, tariffs, directory — but no sailing times and no published source for them |
 | ~~**Facility scoping on ops models**~~ | **CLOSED** — `facility` on four models, filterable on three endpoints |
 | ~~`arrivals_today` on `VesselMetrics`~~ | **CLOSED** — the field exists |
@@ -518,7 +563,7 @@ change**, and none should be loaded with `ENV=prod` (the boot guard refuses it).
 
 | # | Fixture | Rows | Shape and realistic values |
 |---|---|---|---|
-| 1 | **Real KB index** — not a mock, the real thing | 116 | Rebuild `scripts/build_index.py` against `scaspa_kb_2026-07-31.csv`. Set `KB_CSV_PATH` explicitly (the default path does not exist). Biggest single win available |
+| 1 | ~~**Real KB index**~~ **DONE** | 122 | Built against `scaspa_kb_2026-08-28.csv`, 0 rejected. The default `KB_CSV_PATH` now points at it, so nothing needs setting explicitly |
 | 2 | Vessel arrivals | 10–12 | Add a `facility` field first (F-08). Container ships and tankers to `Berth 1–4` (Deep Water Harbour); cruise calls to `Pier 1–2` (Port Zante) — Port Zante's two piers are documented in the researched KB (`kb-115`, `kb-116`). Agents: Delisle Walwyn and S.L. Horsford are the real St Kitts shipping agents named in the design exports — **use `Placeholder Shipping Ltd.` instead**. Spread status across all five values so `departed` and `unknown` finally render. Times relative to `now`, as today |
 | 3 | Vessel metrics | 1 | `vessels_at_berth: 4`, `berth_capacity: 6`, `arrivals_next_24h: 7`, `daily_cargo_teu: 1111`. Leave berth occupancy absent — the em dash is the correct rendering and the design says so twice |
 | 4 | Flight schedules | 12–16 | RLB's real carriers are American (`AA`), Delta (`DL`), JetBlue (`B6`), Liat (`LI`), Caribbean (`BW`), Seaborne (`BB`) — the design's own example uses `LI 631 · Antigua`. Routes: Antigua, San Juan, Miami, Charlotte, New York JFK, St Maarten. Gates from the real stand set (`Z1–Z5` today; RLB has 4 gates in the researched KB). Include one delayed flight with both times, one with `gate: null`, one `landed` and one `arrived` |
@@ -564,7 +609,7 @@ unblock, so they are ranked separately — mixing them is how a blocked item get
 
 | Rank | ID | Finding | Vis | Effort | Risk | Why here |
 |---|---|---|---|---|---|---|---|
-| 1 | §D | **Confirm more of the 116 non-confirmed KB rows** | 5 | M | LOW | The largest remaining lever on answer coverage, and it is research rather than engineering: the rows are written. 53 of the airport's 72 are non-confirmed, so the best-covered facility on paper is not the best-covered in practice |
+| 1 | §D | **Confirm more of the 118 non-confirmed KB rows** | 5 | M | LOW | The largest remaining lever on answer coverage, and it is research rather than engineering: the rows are written. 53 of the airport's 72 are non-confirmed, so the best-covered facility on paper is not the best-covered in practice. The 2026-08-28 ferry intake proved the method — read the source, cite it, and coverage moves |
 | 2 | F-30 | Support tickets are logged and discarded | 3 | M | LOW | Invisible in a demo, serious the day it ships: someone sends an enquiry, gets a reference, and no department ever sees it. Re-verified — still a log line and a return |
 | 3 | F-42 | `ChartBlock` has no meta strip | 3 | M | MED | `ChartSpec.source` is still a bare `str`. The one operations payload that does not state its own provenance |
 | 4 | F-03 | "Berth occupancy" is a literal null | 4 | M | MED | Still no field. §5.3 calls rendering `0` here "the single most dangerous default in the product", so the null is correct until a field is specified |
@@ -581,7 +626,7 @@ unblock, so they are ranked separately — mixing them is how a blocked item get
 | F-28 | Five per-facility telephone numbers and two addresses | All five locations share one switchboard number |
 | F-29 | The seven real department names | Tickets route by free text to desks that may not exist |
 | F-22 | The `kb_id` mapping for tariff rows | "No source recorded" on all 30 rows — the most repeated string on the tariffs screen |
-| §A | A real operational feed, and its kind | Every ops surface is fixtures; `kind="live"` is unreachable |
+| §A | **Ownership of the ferry schedule feed**, and when it will carry real sailings | Every ops surface is fixtures; `kind="live"` is unreachable. The feed exists and serves test data from a third-party origin — this is now a question with a concrete subject |
 | — | The real tariff schedule, with effective dates | The board is shaped correctly and priced synthetically |
 
 **Gated behind one decision, not blocked:** F-40, F-41, F-47, F-49, F-50 and F-60 all resolve the
@@ -620,8 +665,17 @@ is what the code already does), or remove it.
 
 ### Open questions for the client
 
-1. **When will there be an operational feed, and of what kind?** AIS, an AODB, a manual spreadsheet
-   upload? The entire `OPS_DATA_SOURCE` interface exists and waits on this one answer.
+1. **Partly answered, and it changes the question.** This asked when there would be an operational
+   feed and of what kind. For the ferry there already is one — the API behind
+   `scaspa.com/ferry-schedule.html` (§A state 3), with arrivals, departures and passenger counts.
+
+   What to ask now: **(a)** does SCASPA own that Cloudflare Worker, and who can write to it?
+   **(b)** when will it carry real sailings instead of `t` / `tt` / `test`? **(c)** is it intended
+   as the Authority's feed, or one contractor's prototype? **(d)** for vessels, flights and cargo,
+   the original question stands unchanged — AIS, an AODB, a spreadsheet upload?
+
+   `OPS_DATA_SOURCE` still waits, but for the ferry it now waits on ownership rather than on
+   existence.
 2. **The five per-facility telephone numbers and two addresses** the design draws (F-28) — are they
    correct, and may they be published?
 3. ~~**The public email address** (F-31) — obfuscated on the website and deliberately not
@@ -637,9 +691,10 @@ is what the code already does), or remove it.
    board and the calculator cannot leave fixture data.
 7. **Should the Basseterre Ferry Terminal have a sailing schedule?** Narrowed since 2026-08-03: it
    now *has* an operations surface — two vessel movements, tariff rows, a directory entry — but no
-   **sailing times**, and no published source for them. With 7 confirmed KB rows it is also the
-   thinnest facility in the index. The question is no longer "should it have a surface" but "is
-   there a schedule we may publish, and where does it come from?" 
+   **sailing times**. Sharpened twice since: the 2026-08-28 intake took ferry coverage to 13
+   confirmed rows so it is no longer the thinnest, and a schedule feed was found to exist. So
+   there **is** a source — it is serving test data from a third-party origin, and question 1
+   above is now the one that matters. 
 8. **Is the admin gate wanted?** (§4.10.) It blocks the spend panel, the models panel, the config
    summary, `tracked_clients` and the three TTS cache captions — five findings on one decision.
 9. ~~**Which environment will the demonstration run in?**~~ **Answered by configuration, 2026-08-28:
