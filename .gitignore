@@ -27,6 +27,10 @@ data/scraped/*
 # The client-facing report IS committed: it is the actionable deliverable from a
 # crawl. The JSONL, the PDFs (16MB) and the dated diffs are build artifacts.
 !data/scraped/flagged_for_client.md
+# Researcher intakes are committed for the same reason: a hand-curated
+# conversion of supplied research is a reviewable record of where a knowledge-base
+# row came from, not something a script can rebuild.
+!data/scraped/*-research-*.json
 # Written by scripts/build_index.py and specific to a local index.
 # Watchtower's structured store. A cache of what SCASPA publishes, rebuilt by
 # running the monitor — the same reasoning as data/chroma above. Committing it

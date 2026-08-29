@@ -236,7 +236,7 @@ class Settings(BaseSettings):
     # resolves a symlink and records the real filename — but nothing in this repo
     # creates one, so a `latest.csv` default meant a fresh checkout resolved to a
     # file that does not exist and indexed nothing, silently.
-    KB_CSV_PATH: Path = Path("../data/knowledge/scaspa_kb_2026-07-31.csv")
+    KB_CSV_PATH: Path = Path("../data/knowledge/scaspa_kb_2026-08-28.csv")
     CHROMA_DIR: Path = Path("../data/chroma")
     # Watchtower's structured store: the operational rows Chroma is the wrong
     # tool for. A file beside the Chroma one — see app/watchtower/store.py.

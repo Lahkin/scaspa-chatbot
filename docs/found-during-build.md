@@ -45,6 +45,74 @@ contract shape, the sourcing and the design deviation it would need.
 
 ---
 
+## From the ferry research intake (2026-08-28)
+
+### 0. SCASPA's ferry schedule page is serving test data to the public
+
+Found while checking a citation, not while looking for it.
+
+`scaspa.com/ferry-schedule.html` returns 200 with the title "Ferry Schedule -
+SCASPA" and **no times in its HTML**. That is not an empty page: it hosts a
+`ferry-public-widget` custom element that renders into a shadow DOM from a live
+JSON API —
+
+    https://ferryscheduleapi.devonwilliams679.workers.dev/
+
+**The API works. The data in it is placeholder.** Six rows, fetched
+2026-08-28:
+
+| field | values returned |
+| --- | --- |
+| `day` | `2026-01-30`, `2026-02-02`, `2026-02-04` |
+| `vessel` | `t`, `tt`, `test` |
+| `carrier` | `t`, `tt`, `test`, `""` |
+| `from` / `to` | `t`, `tt`, `test` |
+| `pier` | `t`, `ttt`, `test` |
+
+So a traveller who follows SCASPA's own navigation to "Ferry Schedule" is shown
+six sailings between `t` and `tt`, dated seven months ago. This is the same
+shape as entry 1 — the Authority's own page sending someone to a dead end —
+except that this one renders content rather than nothing, so it looks like a
+working screen.
+
+**Three things for the client, in order:**
+
+1. **The page is live and wrong now.** Whatever else follows, the widget is in
+   front of the public today.
+2. **An operational feed exists, and `data-audit.md` says one does not.** Its
+   §A state 3 and open question 1 both record that no real feed exists anywhere.
+   That is now wrong for the ferry: there is a defined schema — `day, from, to,
+   type, vessel, carrier, status, pier, inaugural, arrived, arrival_time,
+   passengers_in, departed, departure_time, passengers_gen, passengers_exemp,
+   cargo_discharged, start_time, end_time` — carrying arrivals, departures and
+   passenger counts. That is close to what `OpsSource` was built to consume.
+3. **It is hosted on a personal-looking third-party Cloudflare Worker.** Not a
+   `scaspa.com` origin, unauthenticated, and named after an individual. Who owns
+   it, who can write to it, and what happens when that account lapses are
+   questions the Authority should ask before anything depends on it.
+
+**Pilot is unaffected and correct meanwhile.** `kb-192` answers that departure
+times vary by operator and day rather than quoting a timetable, which is what
+the live assistant says. Nothing was wired to this feed.
+
+### 0b. Four knowledge-base rows were being dropped silently, one of them confirmed
+
+`index_meta.json` has read `kb_rows_rejected: 4` for as long as it has existed
+and nobody asked which four. They are `kb-045`, `kb-072`, `kb-073` and `kb-080`,
+and the cause is one field: `source_type` was `reference` or `directory`, and
+`SourceType` is `Literal["official-site", "official-pdf", "client-interview",
+"press", "regulator"]`.
+
+**`kb-045` is `confirmed`** — "What is the airport code for St. Kitts?" — so a
+row marked live-ready has been absent from the index the whole time, for a
+one-word typo in a column nobody reads. The rejection was reported and never
+read, which is its own finding: a count with no names is a number people learn
+to skip.
+
+Corrected in the 2026-08-28 export. The intake now validates at **0 rejected**.
+
+---
+
 ## From the operations pages (Watchtower, Vessels, Airport, Cargo)
 
 Findings from building `/vessels`, `/flights` and `/cargo` against the real
